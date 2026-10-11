@@ -105,6 +105,10 @@ data class FaceSpec(
 data class BackgroundSpec(
     val color: String = "",
     val colorTo: String = "",
+    /** The fade's direction, CSS degrees: 0 up, 90 right, 180 (the default) down. */
+    val angle: Int = 180,
+    /** A circle out from the middle rather than a line across. */
+    val radial: Boolean = false,
     val image: String = "",
     val contain: Boolean = false,
     val dim: Int = 0,
@@ -141,6 +145,26 @@ data class ElementSpec(
     val live: Boolean get() = template.contains("{{")
 }
 
+/**
+ * Where a fade runs across a `width` x `height` face, as CSS draws it: the
+ * line through the middle at `angle` (0 up, 90 right), long enough that its
+ * ends meet the far corners. Answers x0, y0, x1, y1 from the face's top left.
+ */
+object Fade {
+    fun line(width: Float, height: Float, angle: Int): FloatArray {
+        val radians = Math.toRadians(angle.toDouble())
+        val dx = Math.sin(radians).toFloat()
+        val dy = -Math.cos(radians).toFloat()
+        val half = (Math.abs(width * dx) + Math.abs(height * dy)) / 2f
+        val cx = width / 2f
+        val cy = height / 2f
+        return floatArrayOf(cx - dx * half, cy - dy * half, cx + dx * half, cy + dy * half)
+    }
+
+    /** A round fade's radius: out to the far corners, as CSS's `circle` is. */
+    fun radius(width: Float, height: Float): Float = Math.hypot(width / 2.0, height / 2.0).toFloat().coerceAtLeast(1f)
+}
+
 object FaceReader {
     /** The zones of a widget's own face, in order. */
     fun zones(face: JsonObject?): List<ZoneSpec> =
@@ -156,6 +180,9 @@ object FaceReader {
             background = BackgroundSpec(
                 color = background.text("color"),
                 colorTo = background.text("colorTo"),
+                // 0 is unset on the wire, so straight up arrives as 360.
+                angle = background.number("angle").toInt().let { if (it == 0) 180 else Math.floorMod(it, 360) },
+                radial = background.text("gradient") == "GRADIENT_RADIAL",
                 image = background.text("image"),
                 contain = background.text("fit") == "IMAGE_FIT_CONTAIN",
                 dim = background.number("dim").toInt().coerceIn(0, 90),

@@ -6,17 +6,21 @@ import { Glyph, HoldToConfirm, Key, Label, Notice, Segmented, cn, screen, spring
 
 import { Icon } from "../../../../common/components/Icon/Icon.component.tsx";
 import type { ActionDefinition, ArgumentChoices, SliderOrientation, VariableChoice, WidgetPreview, WireConfig, WireWidget } from "../../../../services/api/api.ts";
-import { editFace, hasFace, setCustomFace } from "../../lib/face.edit.lib.ts";
+import { editFace, hasFace, setCustomFace, setKeyFill } from "../../lib/face.edit.lib.ts";
+import { fillOf } from "../../lib/fill.lib.ts";
 import { FaceEditor } from "../FaceEditor/FaceEditor.component.tsx";
 import { FaceView } from "../FaceView/FaceView.component.tsx";
 import { KeySource } from "../KeySource/KeySource.component.tsx";
 import { IconPicker } from "../IconPicker/IconPicker.component.tsx";
+import { KeyGallery } from "../KeyGallery/KeyGallery.component.tsx";
+import { isBlankKey, suggestedActions } from "../../lib/presets.lib.ts";
 import { LooksEditor } from "../LooksEditor/LooksEditor.component.tsx";
 import { ZonesEditor } from "../ZonesEditor/ZonesEditor.component.tsx";
 import type { LoadChoices } from "../../hooks/useArgumentChoices/useArgumentChoices.hook.ts";
-import { setWidgetColors, stateVariableOf } from "../../lib/editing.lib.ts";
-import { FACE_SWATCHES, INK_SWATCHES, faceColors } from "../../lib/face.lib.ts";
-import { ColorRow } from "../ColorRow/ColorRow.component.tsx";
+import { relightActive, setWidgetColors, stateVariableOf } from "../../lib/editing.lib.ts";
+import { INK_SWATCHES, faceColors } from "../../lib/face.lib.ts";
+import { ColorPicker } from "../FillPicker/ColorPicker.component.tsx";
+import { FillPicker } from "../FillPicker/FillPicker.component.tsx";
 import { HOLD_DOWN, HOLD_UP, SLOT_GESTURES, gestureBlocks, holdsOf, setGestureBlocks, slotCounts, type Slot } from "../../lib/flow.lib.ts";
 import {
   channelKeyOf,
@@ -67,7 +71,7 @@ export interface WidgetInspectorProps {
   onClose: () => void;
 }
 
-type Tab = "does" | "looks" | "slider";
+type Tab = "does" | "looks" | "gallery" | "slider";
 
 const SLOTS: readonly { slot: Slot; label: string; hint: string }[] = [
   { slot: "tap", label: "Tap", hint: "A quick press" },
@@ -83,8 +87,11 @@ const SLOTS: readonly { slot: Slot; label: string; hint: string }[] = [
  */
 export function WidgetInspector(p: WidgetInspectorProps) {
   const slider = isSlider(p.widget);
-  const [tab, setTab] = useState<Tab>(slider ? "slider" : "does");
-  useEffect(() => setTab(slider ? "slider" : "does"), [p.widget.id, slider]);
+  // A key with nothing on it yet opens on the gallery: most start from one.
+  const first = (): Tab => (slider ? "slider" : isBlankKey(p.widget) ? "gallery" : "does");
+  const [tab, setTab] = useState<Tab>(first);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setTab(first()), [p.widget.id, slider]);
 
   return (
     <FlowProvider catalogue={p.catalogue} variables={p.variables} loadChoices={p.loadChoices}>
@@ -95,7 +102,18 @@ export function WidgetInspector(p: WidgetInspectorProps) {
             label="Inspector"
             value={tab}
             onChange={setTab}
-            options={slider ? [{ value: "slider", label: "Slider" }, { value: "looks", label: "Looks" }] : [{ value: "does", label: "Does" }, { value: "looks", label: "Looks" }]}
+            options={
+              slider
+                ? [
+                    { value: "slider", label: "Slider" },
+                    { value: "looks", label: "Looks" },
+                  ]
+                : [
+                    { value: "does", label: "Does" },
+                    { value: "looks", label: "Looks" },
+                    { value: "gallery", label: "Gallery" },
+                  ]
+            }
           />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
@@ -103,6 +121,7 @@ export function WidgetInspector(p: WidgetInspectorProps) {
             <motion.div key={tab} variants={screen} initial="initial" animate="animate" exit="exit">
               {tab === "does" ? <Does widget={p.widget} onEdit={p.onEdit} /> : null}
               {tab === "looks" ? <Looks {...p} /> : null}
+              {tab === "gallery" ? <KeyGallery widget={p.widget} onEdit={p.onEdit} /> : null}
               {tab === "slider" ? <SliderTab widget={p.widget} catalogue={p.catalogue} variables={p.variables} loadChoices={p.loadChoices} onEdit={p.onEdit} /> : null}
             </motion.div>
           </AnimatePresence>
@@ -218,6 +237,7 @@ function Does({ widget, onEdit }: { widget: WireWidget; onEdit: WidgetEdit }) {
   const hold = holdsOf(widget);
   const { catalogue } = useFlow();
   const describeBlock = (block: Parameters<typeof summarize>[0]) => summarize(block, catalogue);
+  const suggestions = suggestedActions(widget, catalogue);
 
   const summary = (target: Slot): string => {
     if (target === "hold") {
@@ -256,6 +276,22 @@ function Does({ widget, onEdit }: { widget: WireWidget; onEdit: WidgetEdit }) {
         })}
       </div>
 
+      {slot === "tap" && counts.tap === 0 && suggestions.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] text-faint">Suggested:</span>
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion.label}
+              type="button"
+              onClick={() => onEdit((config, id) => relightActive(setGestureBlocks(config, id, SLOT_GESTURES.tap, [suggestion.block]), id, catalogue))}
+              className="cursor-pointer rounded-full border border-line bg-plate px-2.5 py-1 text-[11px] text-muted hover:border-signal hover:text-ink"
+            >
+              {suggestion.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {hold && slot !== "hold" ? (
         <Notice tone="warn">
           This key is a hold, so the tablet sends “down” and “up” instead of taps. Giving the tap something to do turns the hold off.
@@ -278,7 +314,7 @@ function Does({ widget, onEdit }: { widget: WireWidget; onEdit: WidgetEdit }) {
               <FlowLane
                 single
                 blocks={gestureBlocks(widget, SLOT_GESTURES[slot])}
-                onChange={(blocks) => onEdit((config, id) => setGestureBlocks(config, id, SLOT_GESTURES[slot], blocks))}
+                onChange={(blocks) => onEdit((config, id) => relightActive(setGestureBlocks(config, id, SLOT_GESTURES[slot], blocks), id, catalogue))}
                 empty="Assign an action"
               />
             </LaneSection>
@@ -329,9 +365,21 @@ function Looks(p: WidgetInspectorProps) {
           { value: "custom", label: "Custom face" },
         ]}
       />
+      <section className="flex flex-col gap-2.5">
+        <Label>Background</Label>
+        <FillPicker
+          label="Fill"
+          value={widget.face ? fillOf(widget.face.background) : fillOf(widget.props?.bgColor ? { color: widget.props.bgColor } : undefined)}
+          modes={KEY_FILL_MODES}
+          variables={variables}
+          onChange={(fill) => onEdit((config, id) => setKeyFill(config, id, fill))}
+          hint={custom ? undefined : "A fade, an image or none gives the key a face of its own."}
+        />
+      </section>
       {custom && widget.face ? (
         <>
           <FaceEditor
+            fill={false}
             face={widget.face}
             onChange={(change) => onEdit((config, id) => editFace(config, id, "", change))}
             variables={variables}
@@ -356,6 +404,8 @@ function Looks(p: WidgetInspectorProps) {
     </div>
   );
 }
+
+const KEY_FILL_MODES = ["default", "solid", "gradient", "image", "transparent"] as const;
 
 /** One label, one icon, two colours: the key as most people want it. */
 function SimpleLooks({ widget, variables, onBinding, onEdit, onIcon, previewState }: WidgetInspectorProps) {
@@ -407,15 +457,9 @@ function SimpleLooks({ widget, variables, onBinding, onEdit, onIcon, previewStat
       </section>
 
       <section className="flex flex-col gap-2.5">
-        <Label>Colours</Label>
-        <ColorRow
-          label="Face"
-          swatches={FACE_SWATCHES}
-          value={widget.props?.bgColor}
-          onChange={(bgColor) => onEdit((config, id) => setWidgetColors(config, id, { bgColor }))}
-        />
-        <ColorRow
-          label="Text"
+        <Label>Text</Label>
+        <ColorPicker
+          label="Colour"
           swatches={INK_SWATCHES}
           value={widget.props?.fgColor}
           onChange={(fgColor) => onEdit((config, id) => setWidgetColors(config, id, { fgColor }))}

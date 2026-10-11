@@ -746,6 +746,8 @@ pub struct Sources {
     /// When each run (source, instance) last started.
     runs: Mutex<HashMap<(String, Option<String>), (Instant, bool)>>,
     status: Mutex<BTreeMap<String, RunStatus>>,
+    /// Each run's status as it lands, for the configurator's live feed.
+    status_changes: tokio::sync::broadcast::Sender<(String, RunStatus)>,
     resolve: Arc<Resolve>,
     /// Secret arguments, by [`secret_key`].
     secrets: RwLock<BTreeMap<String, String>>,
@@ -777,6 +779,7 @@ impl Sources {
             vars,
             runs: Mutex::new(HashMap::new()),
             status: Mutex::new(BTreeMap::new()),
+            status_changes: tokio::sync::broadcast::channel(64).0,
             resolve,
             secrets: RwLock::new(BTreeMap::new()),
         }
@@ -880,6 +883,11 @@ impl Sources {
         self.recipes.read().unwrap_or_else(PoisonError::into_inner).clone()
     }
 
+    /// Hear each run's status as it lands.
+    pub fn subscribe_status(&self) -> tokio::sync::broadcast::Receiver<(String, RunStatus)> {
+        self.status_changes.subscribe()
+    }
+
     pub fn status(&self) -> BTreeMap<String, RunStatus> {
         self.status.lock().unwrap_or_else(PoisonError::into_inner).clone()
     }
@@ -970,14 +978,15 @@ impl Sources {
         }
         let mut status = self.status.lock().unwrap_or_else(PoisonError::into_inner);
         let previous = status.get(&base).map(|s| s.updated).unwrap_or(0);
-        status.insert(
-            base,
-            RunStatus {
-                ok: result.is_ok(),
-                error: result.as_ref().err().cloned(),
-                updated: if result.is_ok() { now_secs } else { previous },
-            },
-        );
+        let run = RunStatus {
+            ok: result.is_ok(),
+            error: result.as_ref().err().cloned(),
+            updated: if result.is_ok() { now_secs } else { previous },
+        };
+        status.insert(base.clone(), run.clone());
+        drop(status);
+        // Nobody listening is normal, not an error.
+        let _ = self.status_changes.send((base, run));
         result
     }
 

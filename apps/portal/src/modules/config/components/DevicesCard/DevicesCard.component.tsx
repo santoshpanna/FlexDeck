@@ -22,7 +22,6 @@ export function DevicesCard({ devices, onRevoke }: DevicesCardProps) {
             {devices.map((device) => (
               <motion.li
                 key={device.id}
-                layout
                 variants={item}
                 initial="initial"
                 animate="animate"

@@ -317,6 +317,21 @@ pub struct ActionDto {
     /// Set when a slider can drive this action. ABI 3.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slider: Option<SliderDto>,
+    /// Set when what this action picks can be seen to be picked: a key that
+    /// runs it lights up while it is. ABI 4.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active: Option<ActiveDto>,
+}
+
+/// When a key running an action shows as active: while `variable` holds the
+/// value of the action's `equals` argument. OBS's `set_scene` is active while
+/// `obs.scene` is the scene it switches to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ActiveDto {
+    pub variable: String,
+    /// One of the action's own arguments.
+    pub equals: String,
 }
 
 /// How a slider drives an action: which argument takes its value, over what
@@ -468,6 +483,24 @@ impl ManifestDto {
             }
             if let Some(slider) = &action.slider {
                 slider.validate(self.abi, action)?;
+            }
+            if let Some(active) = &action.active {
+                if self.abi < 4 {
+                    return Err(AbiError::Invalid(format!("{}.active needs plugin ABI 4", action.action)));
+                }
+                if !action.arguments.iter().any(|a| a.name == active.equals) {
+                    return Err(AbiError::Unknown {
+                        what: "active argument",
+                        value: active.equals.clone(),
+                        expected: &["one of the action's own arguments"],
+                    });
+                }
+                if !active.variable.starts_with(&self.variable_prefix()) {
+                    return Err(AbiError::Namespace {
+                        name: active.variable.clone(),
+                        prefix: self.variable_prefix(),
+                    });
+                }
             }
         }
         for setting in &self.settings {
@@ -1132,6 +1165,7 @@ mod tests {
                 description: "Start recording".into(),
                 arguments: vec![],
                 slider: None,
+                active: None,
             }],
             settings: vec![SettingDto {
                 key: "port".into(),
@@ -1217,6 +1251,7 @@ mod tests {
                 feedback: Some("obs.volume".into()),
                 mute: None,
             }),
+            active: None,
         }
     }
 

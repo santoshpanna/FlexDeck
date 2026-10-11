@@ -21,7 +21,7 @@ import { cn } from "@flexdeck/ui";
 import { Icon } from "../../../../common/components/Icon/Icon.component.tsx";
 import { usePictureUrl } from "../../../../hooks/usePictureUrl/usePictureUrl.hook.ts";
 import type { WidgetPreview, WireWidget } from "../../../../services/api/api.ts";
-import { drawableColor } from "../../lib/face.lib.ts";
+import { backgroundCss, drawableColor } from "../../lib/face.lib.ts";
 
 const SIGNAL = "#ff5a1f";
 const TRACK = "#2a2a2f";
@@ -77,18 +77,15 @@ export function FaceView({ widget, lookId, w, h, unit, radius, preview, lit }: P
   const imageValue = state?.backgroundImage || (isLive(background.image) ? "" : (background.image ?? ""));
   const image = usePictureUrl(imageValue || null);
   const ruleColor = drawableColor(state?.background);
-  const color = ruleColor ?? drawableColor(background.color);
-  const colorTo = drawableColor(background.colorTo);
+  const paint = backgroundCss(background, ruleColor ?? drawableColor(background.color));
 
   const fill: CSSProperties = lit
     ? { background: "linear-gradient(180deg, var(--fd-deck-lit), #1c1310)" }
     : background.transparent && !ruleColor
       ? { background: "transparent", boxShadow: "none" }
-      : color && colorTo
-        ? { background: `linear-gradient(180deg, ${color}, ${colorTo})` }
-        : color
-          ? { background: color }
-          : {};
+      : paint
+        ? { background: paint }
+        : {};
 
   return (
     <div className="absolute inset-0 overflow-hidden" style={{ ...fill, borderRadius: radius }}>

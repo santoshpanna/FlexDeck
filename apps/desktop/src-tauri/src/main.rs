@@ -56,6 +56,7 @@ fn main() {
             commands::set_web_access,
             commands::set_portal,
             commands::revoke_device,
+            commands::open_link,
             plugins::plugin_inspect,
             plugins::plugin_install_file,
             plugins::plugin_install_repo,

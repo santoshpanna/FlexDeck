@@ -76,6 +76,7 @@ fn action(name: &str, description: &str, arguments: Vec<abi::ArgumentDto>) -> ab
         description: description.into(),
         arguments,
         slider: None,
+        active: None,
     }
 }
 

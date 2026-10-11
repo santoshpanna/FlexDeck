@@ -23,6 +23,7 @@ pub mod behavior;
 pub mod executor;
 pub mod faces;
 pub mod http;
+pub mod live;
 pub mod images;
 pub mod loopback;
 pub mod media;

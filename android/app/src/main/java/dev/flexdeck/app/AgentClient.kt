@@ -318,6 +318,21 @@ class AgentClient(
     }
 
     /**
+     * Tell the agent which page is on screen, so the editor and other tablets
+     * follow. [initial] marks the report made on connecting.
+     */
+    fun sendPage(pageId: String, initial: Boolean = false) {
+        val payload = buildJsonObject {
+            putJsonObject("page") {
+                put("pageId", pageId)
+                put("initial", initial)
+            }
+        }.toString()
+        val open = socket ?: return
+        open.send(payload)
+    }
+
+    /**
      * Drop the connection, without reporting it as a dropped connection.
      *
      * The field is detached BEFORE the socket is closed, so the callbacks that

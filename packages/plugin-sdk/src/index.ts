@@ -120,6 +120,12 @@ export interface ActionSpec<Args extends string = string> {
   /** A slider can drive this action. */
   slider?: SliderSpec<Args>;
   /**
+   * What this action picks can be seen to be picked: a key that runs it is lit
+   * while `variable` holds the value of argument `equals`. OBS's `set_scene`
+   * is active while `obs.scene` is its scene.
+   */
+  active?: { variable: string; equals: Args };
+  /**
    * Refuse a value before anything runs: return a reason, or nothing if it is
    * fine. Called when an automation is saved and before every press.
    */
@@ -313,6 +319,11 @@ function validate(definition: PluginDefinition): void {
       check(argument in (action.arguments ?? {}), `${name}.slider: '${argument}' is not one of its arguments`);
       check(min < max && step > 0, `${name}.slider: needs min < max and step > 0`);
     }
+    if (action.active) {
+      const { variable, equals } = action.active;
+      check(equals in (action.arguments ?? {}), `${name}.active: '${equals}' is not one of its arguments`);
+      check(variable.startsWith(prefix), `${name}.active: variable '${variable}' must start with '${prefix}'`);
+    }
   }
 }
 
@@ -349,6 +360,7 @@ function manifestOf(definition: PluginDefinition, abi: number = ABI_VERSION): Ma
       if (mute !== undefined) slider.mute = mute.feedback === undefined ? { action: mute.action } : { ...mute };
       dto.slider = slider;
     }
+    if (abi >= 4 && spec.active) dto.active = { variable: spec.active.variable, equals: spec.active.equals };
     return dto;
   });
   const settings: SettingDto[] = Object.entries(definition.settings ?? {}).map(([key, setting]) => ({

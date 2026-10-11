@@ -1,15 +1,19 @@
 import type { Orientation } from "@flexdeck/grid";
-import { Children, cloneElement, useCallback, useEffect, useState, type ReactElement } from "react";
+import { Children, cloneElement, useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 
 import { useDesktops } from "../../../hooks/useDesktops/useDesktops.hook.ts";
+import { useLive } from "../../../hooks/useLive/useLive.hook.ts";
 import type { AutomationDocument, Run, WireConfig } from "../../../services/api/api.ts";
+import type { LiveMessage } from "../../../services/api/live.ts";
 import { describeError } from "../../../services/api/errors.ts";
 import { useActionCatalogue } from "../hooks/useActionCatalogue/useActionCatalogue.hook.ts";
 import { useArgumentChoices } from "../hooks/useArgumentChoices/useArgumentChoices.hook.ts";
 import { useAgentFacts } from "../hooks/useAgentFacts/useAgentFacts.hook.ts";
 import { hasOwnPortraitGrid } from "../lib/orientation.lib.ts";
+import { lightActiveKeys } from "../lib/editing.lib.ts";
 import { useAutomations } from "../hooks/useAutomations/useAutomations.hook.ts";
 import { useConfigDocument } from "../hooks/useConfigDocument/useConfigDocument.hook.ts";
+import { useDeckPage } from "../hooks/useDeckPage/useDeckPage.hook.ts";
 import { useEditor } from "../hooks/useEditor/useEditor.hook.ts";
 import { useKeyboardEdit } from "../hooks/useKeyboardEdit/useKeyboardEdit.hook.ts";
 import { usePageSelection } from "../hooks/usePageSelection/usePageSelection.hook.ts";
@@ -54,7 +58,7 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
   const facts = useAgentFacts(desktopId);
   const catalogue = useActionCatalogue(desktopId);
   const loadChoices = useArgumentChoices(desktopId);
-  const pairing = usePairing(desktopId);
+  const pairing = usePairing(desktopId, facts.devices, facts.reload);
   const automations = useAutomations(desktopId);
 
   const [error, setError] = useState<string | null>(null);
@@ -154,15 +158,53 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     [act, document.put, refreshDeck],
   );
 
+  // The document moved somewhere else — another browser, a tablet, an undo
+  // elsewhere — or the socket reopened after a gap: read it again. The agent
+  // says so the moment it happens, so two editors never drift apart.
+  const configRev = document.config?.rev;
+  const reloadDocument = document.reload;
+  const hearDeck = useCallback(
+    (message: LiveMessage) => {
+      if (message.kind === "open" || (message.kind === "revision" && message.rev !== Number(configRev ?? -1))) {
+        void reloadDocument();
+      }
+    },
+    [configRev, reloadDocument],
+  );
+  useLive(desktopId, hearDeck);
+
+  // Scene keys made before actions could say when they are active get their
+  // light once the catalogue can tell — once per desktop, so an undo of it
+  // stays undone.
+  const litFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!desktopId || !document.config || catalogue.catalogue.length === 0 || litFor.current === desktopId) return;
+    litFor.current = desktopId;
+    const next = lightActiveKeys(document.config, catalogue.catalogue);
+    if (next !== document.config) write(next);
+  }, [desktopId, document.config, catalogue.catalogue, write]);
+
   const profile = profileOf(document.config);
   const { currentPageId, selectPage } = usePageSelection(profile);
+  // The tablets and the editor show the same page: one turned there is
+  // followed here, one chosen here is sent there.
+  const { choosePage } = useDeckPage({
+    desktopId,
+    pageIds: pagesOf(profile).map((candidate) => candidate.id),
+    selectPage,
+  });
 
   const editor = useEditor({
     config: document.config,
     catalogue: catalogue.catalogue,
     write,
     currentPageId,
-    onPageCreated: selectPage,
+    onPageCreated: choosePage,
+    // A widget just added is the one about to be set up: open it.
+    onWidgetCreated: () => {
+      setPreviewState("idle");
+      setDrawerOpen(true);
+    },
   });
 
   /// The document's own history. Held here rather than in the view because the
@@ -337,7 +379,7 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
 
     pages,
     currentPageId,
-    selectPage,
+    selectPage: choosePage,
     addPage: editor.addPage,
     removePage: editor.removePage,
     renamePage: editor.renamePage,

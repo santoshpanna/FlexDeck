@@ -27,6 +27,7 @@ import {
   resizeWidget,
   setWidgetAction,
   setWidgetIcon,
+  setActiveLight,
   setWidgetBinding,
   stateVariableOf,
   setWidgetLabel,
@@ -108,6 +109,8 @@ export interface EditorOptions {
   currentPageId: string | null;
   /** Called with the new id after a page is created, so the caller can select it. */
   onPageCreated?: (pageId: string) => void;
+  /** Called with the new id after a widget is added or duplicated, so the caller can open it. */
+  onWidgetCreated?: (widgetId: string) => void;
 }
 
 /** How long a refused edit's explanation stays up. */
@@ -125,6 +128,7 @@ export function useEditor({
   write,
   currentPageId,
   onPageCreated,
+  onWidgetCreated,
 }: EditorOptions): EditorValue {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState("");
@@ -146,11 +150,14 @@ export function useEditor({
 
   // Keyed on the selection alone. Re-seeding these whenever the document changes
   // would throw away whatever someone is halfway through typing, because every
-  // save produces a new document.
+  // save produces a new document. Also once more when the selected widget first
+  // appears: a widget selected as it is added is not in the document until the
+  // save comes back.
+  const selectedFound = selected !== null;
   useEffect(() => {
     setLabelDraft(selected?.widget.props?.label ?? "");
     setActionDraft(selected ? (pressActionOf(selected.widget)?.args ?? {}) : {});
-  }, [selectedId]);
+  }, [selectedId, selectedFound]);
 
   // A selection belongs to the page it is on, so switching page — or losing the
   // page it was on — drops it, rather than leaving the sidebar editing a widget
@@ -187,6 +194,24 @@ export function useEditor({
     write(next);
     if (createdPageId) {
       onPageCreated?.(createdPageId);
+    }
+  };
+
+  /// Same refusal contract as `applyEdit`, then selects the widget the edit put
+  /// on `pageId`, so a new widget is the one being edited.
+  const applyWidgetEdit = (next: WireConfig, why: string, pageId: string) => {
+    if (!config) {
+      return;
+    }
+    const before = new Set((findPage(config, pageId)?.widgets ?? []).map((widget) => widget.id));
+    applyEdit(next, why);
+    if (next === config) {
+      return;
+    }
+    const fresh = (findPage(next, pageId)?.widgets ?? []).find((widget) => !before.has(widget.id));
+    if (fresh) {
+      setSelectedId(fresh.id);
+      onWidgetCreated?.(fresh.id);
     }
   };
 
@@ -298,19 +323,26 @@ export function useEditor({
     if (!config || !selectedId) {
       return;
     }
-    applyEdit(duplicateWidget(config, selectedId), "there is no room left on this page");
+    const pageId = findWidget(config, selectedId)?.page.id;
+    const next = duplicateWidget(config, selectedId);
+    if (pageId) {
+      applyWidgetEdit(next, "there is no room left on this page", pageId);
+    } else {
+      applyEdit(next, "there is no room left on this page");
+    }
   };
 
   const addAt = (pageId: string, col: number, row: number) => {
     if (!config) {
       return;
     }
-    applyEdit(
+    applyWidgetEdit(
       addWidgetAt(config, pageId, col, row, {
         type: "WIDGET_TYPE_BUTTON",
         props: { label: "New button" },
       }),
       "something is already in that cell",
+      pageId,
     );
   };
 
@@ -361,7 +393,7 @@ export function useEditor({
       return;
     }
     const pinned = pinPortrait(added, pageId, fresh.id, { col, row, w: 1, h: 1 });
-    applyEdit(pinned === added ? config : pinned, "something is already in that cell");
+    applyWidgetEdit(pinned === added ? config : pinned, "something is already in that cell", pageId);
   };
 
   const unpinPortrait = (widgetId: string) => {
@@ -468,7 +500,7 @@ export function useEditor({
     }
 
     if (!key) {
-      write(setWidgetAction(config, selectedId, null));
+      write(setActiveLight(setWidgetAction(config, selectedId, null), selectedId, null, {}));
       return;
     }
 
@@ -489,13 +521,13 @@ export function useEditor({
       }
     }
 
-    write(
-      setWidgetAction(config, selectedId, {
-        plugin: definition.plugin,
-        action: definition.action,
-        args,
-      }),
-    );
+    // A scene key lights up while its scene is live: the action says how to tell.
+    const next = setWidgetAction(config, selectedId, {
+      plugin: definition.plugin,
+      action: definition.action,
+      args,
+    });
+    write(setActiveLight(next, selectedId, definition, args));
   };
 
   /**

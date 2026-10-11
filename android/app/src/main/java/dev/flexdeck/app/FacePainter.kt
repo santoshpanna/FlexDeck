@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -15,6 +16,7 @@ import dev.flexdeck.client.Clock
 import dev.flexdeck.client.Colors
 import dev.flexdeck.client.ElementLive
 import dev.flexdeck.client.ElementSpec
+import dev.flexdeck.client.Fade
 import dev.flexdeck.client.FaceLayout
 import dev.flexdeck.client.FaceSpec
 import kotlin.math.cos
@@ -64,6 +66,15 @@ internal class FacePainter(
 
     // ---- Backgrounds -------------------------------------------------------
 
+    /** A face's fade from `from` to `to`: a line at its angle, or a circle from the middle. */
+    private fun fade(frame: RectF, spec: BackgroundSpec, from: Int, to: Int): Shader {
+        if (spec.radial) {
+            return RadialGradient(frame.centerX(), frame.centerY(), Fade.radius(frame.width(), frame.height()), from, to, Shader.TileMode.CLAMP)
+        }
+        val (x0, y0, x1, y1) = Fade.line(frame.width(), frame.height(), spec.angle)
+        return LinearGradient(frame.left + x0, frame.top + y0, frame.left + x1, frame.top + y1, from, to, Shader.TileMode.CLAMP)
+    }
+
     /**
      * Fill `frame`: the face's colour or fade, its picture, its graph. Returns
      * whether anything was drawn (a transparent face draws nothing).
@@ -83,7 +94,7 @@ internal class FacePainter(
         val color = parse(ruleColor) ?: parse(spec.color)
         val to = parse(spec.colorTo)
         fill.shader = when {
-            color != null && to != null -> LinearGradient(0f, frame.top, 0f, frame.bottom, color, to, Shader.TileMode.CLAMP)
+            color != null && to != null -> fade(frame, spec, color, to)
             color != null -> null
             else -> machined
         }

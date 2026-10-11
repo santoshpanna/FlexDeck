@@ -127,6 +127,9 @@ fn api_router(agent: Arc<Agent>) -> Router {
         // it shares the path — see `replace_config`.
         .route("/api/config", get(config).put(replace_config))
         .route("/api/devices", get(devices))
+        // The page on screen: read to follow it, written to move every tablet.
+        // The write needs a configurator, inline — see `put_page`.
+        .route("/api/page", get(get_page).put(put_page))
         // The reactive engine lives behind the same authenticated wall as the
         // layout it sits next to. Reads are open to any device (a paired tablet
         // must be able to ask what plugins exist), but writes need admin — see
@@ -154,6 +157,7 @@ fn api_router(agent: Arc<Agent>) -> Router {
         // What a widget being edited would show, from the agent's own
         // templates and live values: the editor never evaluates one itself.
         .route("/api/faces/preview", post(preview_face))
+        .route("/api/live/watch", post(crate::live::watch))
         // Data sources: reading is open, saving and testing need admin (a
         // command source runs a program; a test fetches on the caller's say).
         .route("/api/sources", get(get_sources).put(put_sources))
@@ -178,6 +182,8 @@ fn api_router(agent: Arc<Agent>) -> Router {
         // The socket authenticates in its first frame instead, because a browser
         // cannot set an Authorization header on a WebSocket handshake.
         .route("/ws", get(crate::ws::upgrade))
+        // The configurator's own socket: it checks the token in its first frame.
+        .route("/api/live", get(crate::live::upgrade))
         .merge(admin_only)
         .merge(authenticated)
         .with_state(agent)
@@ -436,6 +442,32 @@ async fn redo(State(agent): State<Arc<Agent>>) -> Result<Json<Value>, ApiError> 
         Ok(rev) => Ok(Json(json!({ "rev": rev }))),
         Err(error) => Err(ApiError::conflict(error.to_string())),
     }
+}
+
+async fn get_page(State(agent): State<Arc<Agent>>) -> Json<Value> {
+    Json(json!({ "pageId": agent.pages().current() }))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PageRequest {
+    page_id: String,
+}
+
+/// Show a page on every tablet. A configurator's, like any other change to
+/// what the deck does: one tablet steering the rest goes over its own socket.
+async fn put_page(
+    State(agent): State<Arc<Agent>>,
+    Extension(authority): Extension<Authority>,
+    Json(request): Json<PageRequest>,
+) -> Result<Json<Value>, ApiError> {
+    require_configurator_inline(&authority)?;
+    use flexdeck_plugin::builtin::deck::PageControl;
+    if !agent.pages().pages().iter().any(|(id, _)| *id == request.page_id) {
+        return Err(ApiError::not_found(format!("no page \"{}\"", request.page_id)));
+    }
+    agent.pages().select(&request.page_id);
+    Ok(Json(json!({ "pageId": request.page_id })))
 }
 
 async fn devices(State(agent): State<Arc<Agent>>) -> Result<Json<Value>, ApiError> {

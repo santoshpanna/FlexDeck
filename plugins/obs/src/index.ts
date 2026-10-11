@@ -331,7 +331,7 @@ const unknownScene = (scene: string): string | undefined =>
 export default definePlugin({
   id: ID,
   name: "OBS Studio",
-  version: "0.3.0",
+  version: "0.4.0",
   description: "Switch scenes, record, stream, and mute inputs in OBS Studio — and show its state on the deck.",
   author: "flexdeck",
   permissions: ["network"],
@@ -362,6 +362,51 @@ export default definePlugin({
     input_mute_changed: { description: "An input was muted or unmuted", fields: ["input", "muted"] },
   },
 
+  // Keys that come with both halves: a look that follows OBS, and a press.
+  presets: [
+    {
+      id: "scene",
+      name: "Scene",
+      description: "Switches OBS to a scene, and lights while that scene is live. Pick the scene under Does.",
+      widget: {
+        props: { label: "Scene", icon: "monitor" },
+        flows: [{ trigger: { gesture: "GESTURE_SHORT_PRESS" }, blocks: [{ block: "doAction", plugin: "obs", action: "set_scene", args: { scene: { text: "" } } }] }],
+      },
+    },
+    {
+      id: "record",
+      name: "Record",
+      description: "Starts or stops recording; red with the time while it records.",
+      widget: {
+        flows: [{ trigger: { gesture: "GESTURE_SHORT_PRESS" }, blocks: [{ block: "doAction", plugin: "obs", action: "toggle_recording", args: {} }] }],
+        face: {
+          layout: "FACE_LAYOUT_VALUE",
+          rules: [{ when: "obs.recording", color: "#7f1d1d" }],
+          elements: [
+            { slot: "SLOT_TOP", template: "{{ if(obs.recording, \"● REC\", \"Record\") }}" },
+            { slot: "SLOT_VALUE", template: "{{ if(obs.recording, obs.record_time, \"—\") }}", text: { font: "FONT_MONO" } },
+          ],
+        },
+      },
+    },
+    {
+      id: "stream",
+      name: "Go live",
+      description: "Starts or ends the stream; red with the time while live.",
+      widget: {
+        flows: [{ trigger: { gesture: "GESTURE_SHORT_PRESS" }, blocks: [{ block: "doAction", plugin: "obs", action: "toggle_streaming", args: {} }] }],
+        face: {
+          layout: "FACE_LAYOUT_VALUE",
+          rules: [{ when: "obs.streaming", color: "#7f1d1d", pulse: true }],
+          elements: [
+            { slot: "SLOT_TOP", template: "{{ if(obs.streaming, \"● LIVE\", \"Go live\") }}" },
+            { slot: "SLOT_VALUE", template: "{{ if(obs.streaming, obs.stream_time, \"—\") }}", text: { font: "FONT_MONO" } },
+          ],
+        },
+      },
+    },
+  ],
+
   actions: {
     set_scene: {
       description: "Switch the live scene",
@@ -373,9 +418,14 @@ export default definePlugin({
           suggest: () => sceneChoices(),
         },
       },
+      active: { variable: "obs.scene", equals: "scene" },
       check: ({ scene }) => unknownScene(scene),
-      run: async ({ scene }) => {
+      run: async ({ scene }, ctx) => {
         await request("SetCurrentProgramScene", { sceneName: scene });
+        // OBS has taken it, but says so only once the transition has played —
+        // a second or more of a deck showing the old scene lit. Its event
+        // still comes, and settles it either way.
+        ctx.vars.set({ "obs.scene": scene });
       },
     },
     set_preview_scene: {

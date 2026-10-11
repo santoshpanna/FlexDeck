@@ -52,6 +52,9 @@ const tauriShell = {
 
   revokeDevice: (deviceId: string) => invoke<void>("revoke_device", { deviceId }),
 
+  /** Open a web page in this computer's browser: the window has none of its own. */
+  openLink: (url: string) => invoke<void>("open_link", { url }),
+
   /** What a package file is, before anything is installed. `bytes` is base64. */
   inspectPlugin: (bytes: string) =>
     invoke<{ package: PackageInfo; sha256: string; size: number; installedVersion: string | null }>("plugin_inspect", {

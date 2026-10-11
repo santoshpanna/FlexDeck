@@ -18,7 +18,7 @@ import {
   type LookSource,
 } from "../../lib/face.edit.lib.ts";
 import { FACE_SWATCHES, INK_SWATCHES } from "../../lib/face.lib.ts";
-import { ColorRow } from "../ColorRow/ColorRow.component.tsx";
+import { ColorPicker } from "../FillPicker/ColorPicker.component.tsx";
 import { FaceEditor } from "../FaceEditor/FaceEditor.component.tsx";
 import { DraftInput, VariableInput, control } from "../Flow/fields.tsx";
 
@@ -138,8 +138,8 @@ export function LooksEditor({
                         <span className="w-14 shrink-0 text-[12px] text-muted">Icon</span>
                         <DraftInput aria-label="Icon" value={look.icon ?? ""} placeholder="the key's own icon" onCommit={(icon) => onEdit((config, id) => updateLook(config, id, look.id, { icon }))} className={cn(control, "h-8 flex-1 font-mono")} />
                       </div>
-                      <ColorRow label="Face" swatches={FACE_SWATCHES} value={look.bgColor} onChange={(bgColor) => onEdit((config, id) => updateLook(config, id, look.id, { bgColor }))} />
-                      <ColorRow label="Text" swatches={INK_SWATCHES} value={look.fgColor} onChange={(fgColor) => onEdit((config, id) => updateLook(config, id, look.id, { fgColor }))} />
+                      <ColorPicker label="Face" swatches={FACE_SWATCHES} value={look.bgColor} onChange={(bgColor) => onEdit((config, id) => updateLook(config, id, look.id, { bgColor }))} />
+                      <ColorPicker label="Text" swatches={INK_SWATCHES} value={look.fgColor} onChange={(fgColor) => onEdit((config, id) => updateLook(config, id, look.id, { fgColor }))} />
                     </>
                   )}
                 </div>

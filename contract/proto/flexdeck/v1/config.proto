@@ -462,6 +462,16 @@ message Background {
   string graph_color = 7;
   // No face at all: the page's background shows through.
   bool transparent = 8;
+  // With `color_to`: the fade's direction in degrees, as CSS has it (0 up,
+  // 90 right). 0/unset: 180, top to bottom — so straight up is written 360.
+  uint32 angle = 9;
+  // With `color_to`: a line across the face, or a circle out from its middle.
+  GradientKind gradient = 10;
+}
+
+enum GradientKind {
+  GRADIENT_LINEAR = 0;
+  GRADIENT_RADIAL = 1;
 }
 
 enum ImageFit {

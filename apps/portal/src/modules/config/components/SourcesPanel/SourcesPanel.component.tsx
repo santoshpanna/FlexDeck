@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Glyph, Key, Label, Notice, Segmented, Switch, cn } from "@flexdeck/ui";
 
 import { useApi } from "../../../../hooks/useApi/useApi.hook.ts";
+import { useLive } from "../../../../hooks/useLive/useLive.hook.ts";
+import type { LiveMessage } from "../../../../services/api/live.ts";
 import type { DataSource, SourceStatus, SourceTest } from "../../../../services/api/api.ts";
 import { packRecipe, recipeIdFor, recipeProblem, type RecipeMeta } from "../../lib/recipe.lib.ts";
 import { STARTERS, describeJson, fieldNameFor, idFor, keptSecret, pathExpression } from "../../lib/sources.lib.ts";
@@ -41,14 +43,24 @@ export function SourcesPanel({ desktopId }: { desktopId: string }) {
 
   useEffect(() => {
     void load();
-    const again = setInterval(() => {
-      void api
-        .sources(desktopId)
-        .then((answer) => setStatus(answer.status ?? {}))
-        .catch(() => {});
-    }, 10_000);
-    return () => clearInterval(again);
-  }, [api, desktopId, load]);
+  }, [load]);
+
+  // Each run's outcome as it lands; after a reconnect, every status again —
+  // only the status, so a draft being typed is left alone.
+  const hear = useCallback(
+    (message: LiveMessage) => {
+      if (message.kind === "source") {
+        setStatus((current) => ({ ...current, [message.source]: message.status }));
+      } else if (message.kind === "open") {
+        void api
+          .sources(desktopId)
+          .then((answer) => setStatus(answer.status ?? {}))
+          .catch(() => {});
+      }
+    },
+    [api, desktopId],
+  );
+  useLive(desktopId, hear);
 
   const dirty = JSON.stringify(saved) !== JSON.stringify(draft);
   const current = draft.find((source) => source.id === selected) ?? null;

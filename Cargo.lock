@@ -1538,6 +1538,7 @@ dependencies = [
  "flexdeck-agent",
  "flexdeck-pairing",
  "flexdeck-server",
+ "open",
  "serde",
  "serde_json",
  "tauri",

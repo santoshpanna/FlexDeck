@@ -22,6 +22,7 @@ pub mod cloud;
 pub mod http;
 pub mod hub;
 pub mod limit;
+pub mod live_socket;
 pub mod offers;
 pub mod portal;
 pub mod store;

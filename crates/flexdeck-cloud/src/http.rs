@@ -69,7 +69,7 @@ async fn health(State(cloud): State<Arc<Cloud>>) -> Json<Value> {
 ///
 /// `X-Forwarded-For` only when the operator said a proxy sets it: believed by
 /// default, it would let any client claim any address and walk past the limits.
-fn client_address(
+pub(crate) fn client_address(
     cloud: &Cloud,
     headers: &HeaderMap,
     connect: Option<&ConnectInfo<SocketAddr>>,
@@ -292,7 +292,7 @@ pub fn content_security_policy(index_html: Option<&str>) -> String {
 
     format!(
         "default-src 'self'; script-src 'self'{hashes}; style-src 'self' 'unsafe-inline'; \
-         img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:*; \
+         img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; \
          object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     )
 }

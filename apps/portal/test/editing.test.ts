@@ -3,11 +3,13 @@ import { test } from "node:test";
 
 import type { GridSpec } from "@flexdeck/grid";
 
-import type { WireConfig, WireWidget } from "../src/services/api/api.ts";
+import type { ActionDefinition, WireConfig, WireWidget } from "../src/services/api/api.ts";
 import { gridSpecOf, profileOf } from "../src/modules/config/lib/config.lib.ts";
 import {
   addWidget,
   findWidget,
+  lightActiveKeys,
+  relightActive,
   firstFreeCell,
   limitsFor,
   moveWidget,
@@ -16,7 +18,9 @@ import {
   pressActionOf,
   removeWidget,
   resizeWidget,
+  setActiveLight,
   setWidgetAction,
+  setWidgetBinding,
   setWidgetLabel,
   spansOf,
 } from "../src/modules/config/lib/editing.lib.ts";
@@ -348,4 +352,55 @@ test("setting an action on a widget that is not there changes nothing", () => {
   const config = configWith([button("a", 0, 0)]);
 
   assert.deepEqual(setWidgetAction(config, "ghost", { plugin: "core", action: "hotkey" }), config);
+});
+
+const setScene: ActionDefinition = {
+  plugin: "obs",
+  action: "set_scene",
+  description: "Switch the live scene",
+  arguments: [{ name: "scene", description: "", example: "Scene" }],
+  active: { variable: "obs.scene", equals: "scene" },
+};
+
+test("a scene key lights while its scene is live, and stops when it no longer switches scenes", () => {
+  const config = configWith([button("a", 0, 0)]);
+  const lit = setActiveLight(config, "a", setScene, { scene: "CS2" });
+  const states = findWidget(lit, "a")?.widget.states;
+  assert.deepEqual(states?.variable, { variable: "obs.scene", cases: [{ value: "CS2", state: "on" }], otherwise: "off" });
+  assert.deepEqual(states?.looks?.map((look) => look.id), ["off", "on"]);
+
+  const moved = setActiveLight(lit, "a", setScene, { scene: "PS5" });
+  assert.equal(findWidget(moved, "a")?.widget.states?.variable?.cases?.[0]?.value, "PS5");
+
+  const plain = { ...setScene, active: undefined };
+  assert.equal(findWidget(setActiveLight(moved, "a", plain, { scene: "PS5" }), "a")?.widget.states, undefined);
+  assert.equal(findWidget(setActiveLight(moved, "a", null, {}), "a")?.widget.states, undefined);
+});
+
+test("a key's own states are never replaced by the active light", () => {
+  const bound = setWidgetBinding(configWith([button("a", 0, 0)]), "a", { stateVariable: "obs.recording", labelTemplate: "" });
+  const after = setActiveLight(bound, "a", setScene, { scene: "CS2" });
+  assert.deepEqual(findWidget(after, "a")?.widget.states, findWidget(bound, "a")?.widget.states);
+  assert.equal(findWidget(setActiveLight(bound, "a", null, {}), "a")?.widget.states?.variable?.variable, "obs.recording");
+});
+
+test("scene keys made before the active light get it; others are left as they are", () => {
+  const scene = button("a", 0, 0);
+  const other = button("b", 1, 0);
+  const config = setWidgetAction(setWidgetAction(configWith([scene, other]), "a", { plugin: "obs", action: "set_scene", args: { scene: "CS2" } }), "b", { plugin: "obs", action: "start_recording", args: {} });
+  const lit = lightActiveKeys(config, [setScene]);
+  assert.equal(findWidget(lit, "a")?.widget.states?.variable?.cases?.[0]?.value, "CS2");
+  assert.equal(findWidget(lit, "b")?.widget.states, undefined);
+  assert.equal(lightActiveKeys(lit, [setScene]), lit, "nothing left to light is no change");
+});
+
+test("changing a scene key's tap by hand moves its light with it", () => {
+  const config = setWidgetAction(configWith([button("a", 0, 0)]), "a", { plugin: "obs", action: "set_scene", args: { scene: "CS2" } });
+  const lit = relightActive(config, "a", [setScene]);
+  assert.equal(findWidget(lit, "a")?.widget.states?.variable?.cases?.[0]?.value, "CS2");
+  const moved = relightActive(setWidgetAction(lit, "a", { plugin: "obs", action: "set_scene", args: { scene: "PS5" } }), "a", [setScene]);
+  assert.equal(findWidget(moved, "a")?.widget.states?.variable?.cases?.[0]?.value, "PS5");
+  // Not yet named: no light, and no "on" for an empty scene.
+  const unnamed = relightActive(setWidgetAction(moved, "a", { plugin: "obs", action: "set_scene", args: {} }), "a", [setScene]);
+  assert.equal(findWidget(unnamed, "a")?.widget.states, undefined);
 });

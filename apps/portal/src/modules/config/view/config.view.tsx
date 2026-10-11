@@ -33,7 +33,6 @@ import { GridPreview } from "../components/GridPreview/GridPreview.component.tsx
 import { useFacePreviews } from "../hooks/useFacePreviews/useFacePreviews.hook.ts";
 import { PageBackgroundEditor } from "../components/PageBackgroundEditor/PageBackgroundEditor.component.tsx";
 import { SourcesPanel } from "../components/SourcesPanel/SourcesPanel.component.tsx";
-import { Gallery } from "../components/Gallery/Gallery.component.tsx";
 import { LocaleCard } from "../components/LocaleCard/LocaleCard.component.tsx";
 import { setPageBackground, setScreenCare } from "../lib/face.edit.lib.ts";
 import { ScreenCareCard } from "../components/ScreenCareCard/ScreenCareCard.component.tsx";
@@ -447,7 +446,6 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
                                 onRemove={removePage}
                               />
                             </section>
-                            <Gallery onEdit={editPage} empty={(page?.widgets ?? []).length === 0} />
                             <PageBackgroundEditor page={page} variables={variables} onChange={(background) => editPage((c, id) => setPageBackground(c, id, background))} />
                             <ScreenCareCard care={profile?.screen} onChange={(care) => editPage((c, id) => setScreenCare(c, id, care))} />
                             <ShareCard page={page} onEdit={editPage} />
@@ -472,7 +470,7 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
                             <Plate depth="well" pad="md" className="flex flex-col gap-2">
                               <Label className="text-signal">Tip</Label>
                               <p className="m-0 text-[13px] leading-relaxed text-ink-2">
-                                Click a key to give it something to do — a tap, a double tap, a long press or a hold, each its own flow.
+                                Click an empty spot to add a key, then pick a ready-made one from its Gallery — or give it something to do: a tap, a double tap, a long press or a hold.
                               </p>
                             </Plate>
                           </motion.div>
@@ -516,7 +514,13 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
               {tab === "devices" ? (
                 <div className="grid items-start gap-5 lg:grid-cols-2">
                   <div className="flex flex-col gap-5">
-                    <PairingCard pairing={pairing} onBegin={beginPairing} onCancel={cancelPairing} />
+                    <PairingCard
+                      pairing={pairing}
+                      host={status?.host ?? null}
+                      port={status?.port ?? null}
+                      onBegin={beginPairing}
+                      onCancel={cancelPairing}
+                    />
                     <DevicesCard devices={devices} onRevoke={revokeDevice} />
                   </div>
                   <div className="flex flex-col gap-5">

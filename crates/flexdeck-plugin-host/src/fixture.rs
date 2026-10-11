@@ -71,6 +71,7 @@ fn manifest(asked: u32) -> abi::ManifestDto {
         description: format!("The fixture's {name}"),
         arguments,
         slider: None,
+        active: None,
     };
     let abi = std::env::var("FIXTURE_ABI")
         .ok()

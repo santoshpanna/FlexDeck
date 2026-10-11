@@ -220,3 +220,15 @@ pub async fn revoke_device(state: State<'_, ShellState>, device_id: String) -> R
     // loop itself, which re-checks its token — so its dot goes out on its own.
     Ok(())
 }
+
+/// Open a web page in the computer's own browser.
+///
+/// Only http and https: this hands the string to the OS, which would just as
+/// happily run a file or a custom scheme.
+#[tauri::command]
+pub async fn open_link(url: String) -> Result<(), String> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("only web addresses can be opened".to_string());
+    }
+    open::that_detached(&url).map_err(|error| error.to_string())
+}

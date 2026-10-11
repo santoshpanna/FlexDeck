@@ -10,9 +10,8 @@ import type { WidgetPreview, WirePage, WireProfile, WireWidget } from "../../../
 import { FaceView } from "../FaceView/FaceView.component.tsx";
 import { useGridDrag } from "../../hooks/useGridDrag/useGridDrag.hook.ts";
 import { labelOf } from "../../lib/config.lib.ts";
-import { drawableColor, faceColors } from "../../lib/face.lib.ts";
+import { backgroundCss, faceColors } from "../../lib/face.lib.ts";
 import { usePictureUrl } from "../../../../hooks/usePictureUrl/usePictureUrl.hook.ts";
-import { holdsOf, slotCounts } from "../../lib/flow.lib.ts";
 import { emptyCells } from "../../lib/interaction.lib.ts";
 import { layoutFor } from "../../lib/orientation.lib.ts";
 import type { WidgetState } from "../../lib/state.lib.ts";
@@ -62,14 +61,13 @@ function SliderFace({ widget, name, vertical, fontSize }: { widget: WireWidget; 
 function PageBackground({ page }: { page: WirePage | null }) {
   const background = page?.background;
   const url = usePictureUrl(background?.image && !background.image.includes("{{") ? background.image : null);
-  const color = drawableColor(background?.color);
-  const to = drawableColor(background?.colorTo);
-  if (!background || (!color && !url)) return null;
+  const paint = backgroundCss(background);
+  if (!background || (!paint && !url)) return null;
   return (
     <div
       aria-hidden="true"
       className="absolute inset-0"
-      style={{ background: color && to ? `linear-gradient(180deg, ${color}, ${to})` : (color ?? undefined) }}
+      style={{ background: paint ?? undefined }}
     >
       {url ? (
         <img src={url} alt="" className="absolute inset-0 size-full" style={{ objectFit: background.fit === "IMAGE_FIT_CONTAIN" ? "contain" : "cover" }} />
@@ -260,9 +258,10 @@ export function GridPreview({ profile, page, orientation, onOrientation, caption
                 const selected = widget.id === selectedId;
                 const name = labelOf(widget);
                 const probe = selected && previewState && previewState !== "idle" ? previewState : null;
-                const counts = slotCounts(widget);
-                const does = Object.values(counts).some((count) => count > 0);
-                const lit = probe === "on";
+                // Lit while its look is "on" now — the scene key whose scene is
+                // live — unless a look colours it, which then speaks for itself.
+                const active = previews?.[widget.id]?.state?.stateId === "on" && !previews?.[widget.id]?.state?.background;
+                const lit = probe === "on" || (!probe && active);
                 const face = faceColors(widget, lit);
                 // A transparent face shows the page behind it: no key at all.
                 const see = widget.face?.background?.transparent === true && !previews?.[widget.id]?.state?.background;
@@ -305,33 +304,39 @@ export function GridPreview({ profile, page, orientation, onOrientation, caption
                           lit={lit && !widget.face}
                         />
                       )}
-                      {previews?.[widget.id]?.state?.problem ? (
-                        <span
-                          title={previews[widget.id]?.state?.problem}
-                          aria-label={previews[widget.id]?.state?.problem}
-                          className="absolute rounded-full bg-[#fbbf24]"
-                          style={{ left: 10 * unit, top: 10 * unit, width: 7 * unit, height: 7 * unit }}
-                        />
-                      ) : null}
-                      {previews?.[widget.id]?.error ? (
-                        <span
-                          title={previews[widget.id]?.error}
-                          className="absolute rounded-[4px] bg-[#7f1d1d] font-mono text-white"
-                          style={{ left: 8 * unit, top: 8 * unit, fontSize: 9 * unit, padding: `${1 * unit}px ${4 * unit}px`, letterSpacing: "0.14em" }}
-                        >
-                          FIX
+                      {/* The top-left corner holds every marker, in one row so they never
+                          sit on each other or on the label along the bottom. */}
+                      {previews?.[widget.id]?.state?.problem || previews?.[widget.id]?.error || (orientation === "portrait" && assumed.has(widget.id)) ? (
+                        <span className="absolute flex items-center" style={{ left: 8 * unit, top: 8 * unit, gap: 4 * unit }}>
+                          {previews?.[widget.id]?.state?.problem ? (
+                            <span
+                              title={previews[widget.id]?.state?.problem}
+                              aria-label={previews[widget.id]?.state?.problem}
+                              className="rounded-full bg-[#fbbf24]"
+                              style={{ width: 7 * unit, height: 7 * unit, margin: 2 * unit }}
+                            />
+                          ) : null}
+                          {previews?.[widget.id]?.error ? (
+                            <span
+                              title={previews[widget.id]?.error}
+                              className="rounded-[4px] bg-[#7f1d1d] font-mono text-white"
+                              style={{ fontSize: 9 * unit, padding: `${1 * unit}px ${4 * unit}px`, letterSpacing: "0.14em" }}
+                            >
+                              FIX
+                            </span>
+                          ) : null}
+                          {orientation === "portrait" && assumed.has(widget.id) ? (
+                            <span
+                              title="Placed for you from landscape. Drag it to choose its place."
+                              className="rounded-[4px] border border-dashed border-[var(--fd-deck-muted)] font-mono text-[var(--fd-deck-muted)]"
+                              style={{ fontSize: 9 * unit, padding: `${1 * unit}px ${4 * unit}px`, letterSpacing: "0.14em" }}
+                            >
+                              AUTO
+                            </span>
+                          ) : null}
                         </span>
                       ) : null}
-                      {orientation === "portrait" && assumed.has(widget.id) ? (
-                        <span
-                          title="Placed for you from landscape. Drag it to choose its place."
-                          className="absolute rounded-[4px] border border-dashed border-[var(--fd-deck-muted)] font-mono text-[var(--fd-deck-muted)]"
-                          style={{ left: 8 * unit, bottom: 8 * unit, fontSize: 9 * unit, padding: `${1 * unit}px ${4 * unit}px`, letterSpacing: "0.14em" }}
-                        >
-                          AUTO
-                        </span>
-                      ) : null}
-                      {does || holdsOf(widget) ? (
+                      {lit ? (
                         <span
                           aria-hidden="true"
                           className="absolute rounded-full"
@@ -340,8 +345,8 @@ export function GridPreview({ profile, page, orientation, onOrientation, caption
                             right: 10 * unit,
                             width: 7 * unit,
                             height: 7 * unit,
-                            background: lit ? "#ff5a1f" : "#4ade80",
-                            boxShadow: `0 0 ${8 * unit}px ${lit ? "#ff5a1f" : "rgb(74 222 128 / 0.7)"}`,
+                            background: "#4ade80",
+                            boxShadow: `0 0 ${8 * unit}px rgb(74 222 128 / 0.7)`,
                           }}
                         />
                       ) : null}

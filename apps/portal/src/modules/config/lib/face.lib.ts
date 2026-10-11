@@ -1,3 +1,5 @@
+import type { Background } from "@flexdeck/face";
+
 import type { WireWidget } from "../../../services/api/api.ts";
 
 /**
@@ -31,6 +33,22 @@ const HEX = /^#[0-9a-f]{6}$/i;
 export function drawableColor(value: string | undefined): string | null {
   const trimmed = value?.trim() ?? "";
   return HEX.test(trimmed) ? trimmed.toLowerCase() : null;
+}
+
+/**
+ * A fade as CSS, the way the tablet paints it: `angle` in CSS degrees (unset
+ * is 180, top to bottom; 360 is up), or a circle out from the middle.
+ */
+export function gradientCss(from: string, to: string, background: Pick<Background, "angle" | "gradient">): string {
+  if (background.gradient === "GRADIENT_RADIAL") return `radial-gradient(circle at center, ${from}, ${to})`;
+  return `linear-gradient(${(background.angle || 180) % 360}deg, ${from}, ${to})`;
+}
+
+/** A background's colour or fade as a CSS `background`, or `null` when it has neither. */
+export function backgroundCss(background: Background | undefined, color = drawableColor(background?.color)): string | null {
+  const to = drawableColor(background?.colorTo);
+  if (color && to && background) return gradientCss(color, to, background);
+  return color;
 }
 
 export interface FaceColors {

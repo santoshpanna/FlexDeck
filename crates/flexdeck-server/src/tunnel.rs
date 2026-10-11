@@ -470,6 +470,9 @@ async fn pump(
     });
 
     let mut changes = agent.subscribe();
+    // Looks, pages and devices, for a configurator watching through the
+    // cloud. Always heard, so nothing piles up; sent only while one watches.
+    let mut live = crate::live::Feed::new(&agent, false);
 
     // The browser pairing code the cloud should route here. Offered once now —
     // a code opened while the tunnel was down still needs routing — and again
@@ -549,6 +552,17 @@ async fn pump(
                     }
 
                     Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+
+            messages = live.next(&agent) => {
+                let Some(messages) = messages else { break };
+                if agent.remote_watch().is_watched() {
+                    for message in messages {
+                        let _ = outgoing.send(TunnelFrame {
+                            kind: Some(tunnel_frame::Kind::Push(TunnelPush { message: Some(message) })),
+                        });
+                    }
                 }
             }
 

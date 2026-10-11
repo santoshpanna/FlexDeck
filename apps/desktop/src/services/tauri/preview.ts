@@ -171,6 +171,7 @@ export function previewShell(): Shell {
       return status();
     },
     setPortal: async () => (await wait(), status()),
+    openLink: async (url) => void window.open(url, "_blank", "noopener"),
     revokeDevice: async (deviceId) => {
       await wait();
       devices = devices.filter((device) => device.id !== deviceId);

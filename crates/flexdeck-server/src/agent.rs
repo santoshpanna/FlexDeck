@@ -182,6 +182,10 @@ pub struct Agent {
     approvals: Approvals,
     presence: Arc<Presence>,
     changes: broadcast::Sender<u64>,
+    /// Told when a device is paired or revoked. Connections are [`Presence`]'s.
+    devices_changed: broadcast::Sender<()>,
+    /// Whether a configurator is watching through the cloud. See [`crate::live`].
+    remote_watch: crate::live::RemoteWatch,
     /// The executor lives on a dedicated thread; the agent talks to it
     /// through this handle. Holding it in a `Mutex` (the old shape) is what
     /// made a widget press deadlock when it triggered an automation that
@@ -268,6 +272,8 @@ impl Agent {
             approvals: Approvals::default(),
             presence: Arc::new(Presence::new()),
             changes,
+            devices_changed: broadcast::channel(CHANGE_BUFFER).0,
+            remote_watch: crate::live::RemoteWatch::default(),
             executor,
             executor_is_live: AtomicBool::new(false),
             variables,
@@ -444,7 +450,24 @@ impl Agent {
     }
 
     pub fn revoke_device(&self, id: &str) -> Result<bool, AgentError> {
-        Ok(self.store().revoke_device(id)?)
+        let revoked = self.store().revoke_device(id)?;
+        self.devices_moved();
+        Ok(revoked)
+    }
+
+    /// Hear about devices being paired or revoked.
+    pub fn subscribe_devices(&self) -> broadcast::Receiver<()> {
+        self.devices_changed.subscribe()
+    }
+
+    /// Whether a configurator is watching through the cloud.
+    pub fn remote_watch(&self) -> &crate::live::RemoteWatch {
+        &self.remote_watch
+    }
+
+    /// No listeners is normal, not an error.
+    fn devices_moved(&self) {
+        let _ = self.devices_changed.send(());
     }
 
     /// Record a device that has just paired.
@@ -453,6 +476,7 @@ impl Agent {
     /// credential that would work on the wire.
     pub fn add_device(&self, id: &str, name: &str, token_hash: &str) -> Result<(), AgentError> {
         self.store().add_device(id, name, token_hash)?;
+        self.devices_moved();
         Ok(())
     }
 
@@ -471,6 +495,7 @@ impl Agent {
         );
         self.store()
             .add_device_of_kind(&id, name, &flexdeck_pairing::hash_token(&token), kind)?;
+        self.devices_moved();
         let device = self
             .authenticate(&token)?
             .expect("a credential just stored authenticates");

@@ -136,6 +136,7 @@ export function ShellController({ children }: ShellControllerProps) {
     readouts: status ? readouts(status) : [],
     next: status ? nextStep(status) : null,
     address: status ? status.host : "",
+    port: status ? status.port : null,
     devices: status?.devices ?? [],
     plugins,
     installed,
@@ -171,6 +172,7 @@ export function ShellController({ children }: ShellControllerProps) {
     onRevoke: (deviceId: string) => void act(() => shell.revokeDevice(deviceId)),
     onToggleWebAccess: (enabled: boolean) => void act(() => shell.setWebAccess(enabled)),
     onSetPortal: (url: string) => void act(() => shell.setPortal(url)),
+    onOpenLink: (url: string) => void act(() => shell.openLink(url)),
     onChooseFile: (file: File) =>
       void act(async () => {
         const bytes = await base64(file);

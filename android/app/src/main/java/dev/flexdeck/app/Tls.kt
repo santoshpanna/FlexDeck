@@ -46,6 +46,11 @@ object Tls {
         preferences.edit().remove(KEY_FINGERPRINT).apply()
     }
 
+    /** Put back a pin set aside with [pinnedFingerprint], when a switch to another PC is abandoned. */
+    fun restore(preferences: SharedPreferences, fingerprint: String) {
+        preferences.edit().putString(KEY_FINGERPRINT, fingerprint).apply()
+    }
+
     private class PinnedTrustManager(private val preferences: SharedPreferences) : X509TrustManager {
 
         override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {

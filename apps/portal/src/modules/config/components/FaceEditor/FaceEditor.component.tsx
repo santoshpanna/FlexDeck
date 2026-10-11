@@ -16,9 +16,11 @@ import {
   updateElement,
 } from "../../lib/face.edit.lib.ts";
 import { FACE_SWATCHES, INK_SWATCHES } from "../../lib/face.lib.ts";
-import { ColorRow } from "../ColorRow/ColorRow.component.tsx";
+import { fillOf, toBackground } from "../../lib/fill.lib.ts";
+import { ColorPicker } from "../FillPicker/ColorPicker.component.tsx";
+import { FillPicker } from "../FillPicker/FillPicker.component.tsx";
 import { IconPicker } from "../IconPicker/IconPicker.component.tsx";
-import { PicturePicker } from "../PicturePicker/PicturePicker.component.tsx";
+
 import { DraftInput, ValueInput, VariableInput, control } from "../Flow/fields.tsx";
 
 type FaceChange = (change: (face: Face) => Face) => void;
@@ -71,12 +73,15 @@ export function FaceEditor({
   variables,
   error,
   canvas,
+  fill = true,
 }: {
   face: Face;
   onChange: FaceChange;
   variables: readonly VariableChoice[];
   error?: string;
   canvas?: FaceCanvasSource;
+  /** Whether it offers the background's fill: off where the key's fill is chosen above it. */
+  fill?: boolean;
 }) {
   const layout = face.layout ?? "FACE_LAYOUT_ICON_LABEL";
   const elements = face.elements ?? [];
@@ -177,7 +182,7 @@ export function FaceEditor({
         </div>
       </section>
 
-      <BackgroundEditor background={face.background ?? {}} onChange={(background) => onChange((f) => setBackground(f, background))} variables={variables} />
+      <BackgroundEditor background={face.background ?? {}} onChange={(background) => onChange((f) => setBackground(f, background))} variables={variables} fill={fill} />
 
       <section className="flex flex-col gap-2.5">
         <Label>Background rules</Label>
@@ -365,7 +370,7 @@ function ElementCard({
             </>
           ) : null}
 
-          <ColorRow
+          <ColorPicker
             label="Colour"
             swatches={kind === "ELEMENT_KIND_TEXT" || kind === "ELEMENT_KIND_ICON" || kind === "ELEMENT_KIND_CLOCK" || kind === "ELEMENT_KIND_TIMER" ? INK_SWATCHES : FACE_SWATCHES.concat(INK_SWATCHES)}
             value={element.color}
@@ -482,31 +487,18 @@ function ClockRows({ element, onChange }: { element: FaceElement; onChange: (cha
   );
 }
 
-function BackgroundEditor({ background, onChange, variables }: { background: Background; onChange: (background: Background) => void; variables: readonly VariableChoice[] }) {
+const FACE_MODES = ["default", "solid", "gradient", "image", "transparent"] as const;
+
+function BackgroundEditor({ background, onChange, variables, fill }: { background: Background; onChange: (background: Background) => void; variables: readonly VariableChoice[]; fill: boolean }) {
   const set = (change: Partial<Background>) => onChange({ ...background, ...change });
   return (
     <section className="flex flex-col gap-2.5">
-      <div className="flex items-center justify-between">
-        <Label>Background</Label>
-        <label className="flex items-center gap-1.5 text-[12px] text-muted" title="Show the page's background through this key">
-          See-through <Switch size="sm" label="See-through" checked={background.transparent ?? false} onChange={(transparent) => set({ transparent })} />
-        </label>
-      </div>
+      <Label>{fill ? "Background" : "Behind it"}</Label>
+      {fill ? <FillPicker label="Fill" value={fillOf(background)} modes={FACE_MODES} variables={variables} onChange={(next) => onChange(toBackground(next, background) ?? {})} /> : null}
       {!background.transparent ? (
         <>
-          <ColorRow label="Colour" swatches={FACE_SWATCHES} value={background.color} onChange={(color) => set({ color })} />
-          {background.color ? <ColorRow label="Fade to" swatches={FACE_SWATCHES} value={background.colorTo} onChange={(colorTo) => set({ colorTo })} /> : null}
-          <PicturePicker value={background.image} onPick={(image) => set({ image })} />
-          <ValueInput label="Picture" value={background.image ?? ""} variables={variables} kinds={["text"]} placeholder="or follow a value: {{media.current.art}}" onCommit={(image) => set({ image: image.trim() })} />
-          {background.image ? (
-            <Row label="Fit">
-              <Segmented size="sm" label="Picture fit" value={background.fit ?? "IMAGE_FIT_COVER"} onChange={(fit) => set({ fit: fit === "IMAGE_FIT_COVER" ? undefined : fit })} options={[{ value: "IMAGE_FIT_COVER", label: "Fill" }, { value: "IMAGE_FIT_CONTAIN", label: "Whole" }]} />
-              <span className="ml-auto text-[12px] text-muted">Darken</span>
-              <input aria-label="Darken" type="range" min={0} max={90} step={5} value={background.dim ?? 0} onChange={(event) => set({ dim: Number(event.target.value) })} className="w-24 accent-[var(--color-signal)]" />
-            </Row>
-          ) : null}
           <VariableInput label="Graph behind" value={background.graph ?? ""} kinds={["number"]} variables={variables} onCommit={(graph) => set({ graph })} />
-          {background.graph ? <ColorRow label="Graph" swatches={INK_SWATCHES.concat(FACE_SWATCHES)} value={background.graphColor} onChange={(graphColor) => set({ graphColor })} /> : null}
+          {background.graph ? <ColorPicker label="Graph" swatches={INK_SWATCHES.concat(FACE_SWATCHES)} value={background.graphColor} onChange={(graphColor) => set({ graphColor })} /> : null}
         </>
       ) : null}
     </section>
@@ -543,7 +535,7 @@ function RulesEditor({
               <Glyph name="close" size={12} />
             </IconButton>
           </div>
-          <ColorRow label="Use" swatches={swatches} value={rule.color} onChange={(color) => update(index, { color })} />
+          <ColorPicker label="Use" swatches={swatches} value={rule.color} onChange={(color) => update(index, { color })} />
           <label className="flex items-center gap-1.5 self-end text-[12px] text-muted">
             Pulse <Switch size="sm" label="Pulse" checked={rule.pulse ?? false} onChange={(pulse) => update(index, { pulse })} />
           </label>

@@ -1345,4 +1345,15 @@ mod tests {
         assert_eq!(render("no braces", &vars), "no braces");
         assert_eq!(render("{{ unclosed", &vars), "{{ unclosed");
     }
+
+    #[test]
+    fn a_fade_with_a_direction_or_a_round_shape_can_be_saved() {
+        for background in [
+            json!({"color": "#111111", "colorTo": "#222222", "angle": 135}),
+            json!({"color": "#111111", "colorTo": "#222222", "gradient": "GRADIENT_RADIAL"}),
+        ] {
+            let widget = json!({"id": "w", "face": {"layout": "FACE_LAYOUT_VALUE", "background": background}});
+            assert_eq!(check_widget(&widget), Ok(()), "{widget}");
+        }
+    }
 }

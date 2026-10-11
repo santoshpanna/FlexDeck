@@ -155,6 +155,12 @@ class DeckView(context: Context) : View(context) {
     private var pageIndex = 0
     private var pageId: String? = null
 
+    /** The page on screen, by id; `null` before a deck arrives. */
+    val currentPageId: String? get() = pageId
+
+    /** The person turned to a page here — not one the agent asked for. */
+    var onPageShown: ((pageId: String) -> Unit)? = null
+
     /** How far the page is slid sideways, in screen pixels: follows a swipe, then springs home. */
     private val slide = Spring(0f, stiffness = 320f, damping = 36f)
 
@@ -198,6 +204,12 @@ class DeckView(context: Context) : View(context) {
     private var velocity: VelocityTracker? = null
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    /** The page bar's name and position. */
+    private val pagePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.MONOSPACE
+        letterSpacing = 0.12f
+        textSize = 11f * resources.displayMetrics.density
+    }
 
     /** Live state of bound widgets, from the agent. See `DeckSession.liveWidgets`. */
     private var live: Map<String, LiveWidget> = emptyMap()
@@ -691,12 +703,13 @@ class DeckView(context: Context) : View(context) {
                 canvas.drawCircle(frame.left + 12f * unit, frame.top + 12f * unit, 3.5f * unit, ledPaint)
             }
 
-            // A light in the corner: orange while lit, green when it has something to do.
-            if (spec == null && (lit || widget.gestures.isNotEmpty())) {
+            // A light in the corner while the key is active — its scene is the live
+            // one, its toggle is on. Every key does something, so that says nothing.
+            if (spec == null && lit) {
                 val led = 3.5f * unit
                 val x = frame.right - 12f * unit
                 val y = frame.top + 12f * unit
-                val color = if (lit) SIGNAL else OK
+                val color = OK
                 ledGlow.color = color
                 ledGlow.alpha = 70
                 canvas.drawCircle(x, y, led * 2.2f, ledGlow)
@@ -746,7 +759,11 @@ class DeckView(context: Context) : View(context) {
         invalidate()
     }
 
-    /** Show a page a step asked for: by id, or so many pages on (wrapping). */
+    /**
+     * Show a page the agent asked for: by id, or so many pages on (wrapping).
+     * Not reported back — the agent already knows, and an echo would set two
+     * tablets bouncing each other between pages.
+     */
     fun showPage(pageId: String, step: Int) {
         val deck = deck ?: return
         val count = deck.pages.size
@@ -755,7 +772,7 @@ class DeckView(context: Context) : View(context) {
         } else {
             Math.floorMod(pageIndex + step, count)
         }
-        turnTo(target, 0f)
+        turnTo(target, 0f, report = false)
     }
 
     /** The height of the page bar: none for a deck with one page. */
@@ -790,6 +807,24 @@ class DeckView(context: Context) : View(context) {
                 canvas.drawCircle(x, y, r, dotPaint)
             }
         }
+
+        // Which page, in words and in place: the name to the left of the dots,
+        // "2 / 5" to the right. A name that would reach the dots is cut short.
+        val gutter = 16f * density
+        val baseline = y + pagePaint.textSize * 0.35f
+        val dotsLeft = dotX(0, count) - r * 3f - gutter
+        val name = deck?.pages?.get(pageIndex)?.name.orEmpty().ifBlank { "Page ${pageIndex + 1}" }.uppercase()
+        pagePaint.textAlign = Paint.Align.LEFT
+        pagePaint.color = INK
+        val room = dotsLeft - gutter
+        if (room > 0f) {
+            val fits = pagePaint.breakText(name, true, room, null)
+            val shown = if (fits < name.length) name.take((fits - 1).coerceAtLeast(0)) + "…" else name
+            canvas.drawText(shown, gutter, baseline, pagePaint)
+        }
+        pagePaint.textAlign = Paint.Align.RIGHT
+        pagePaint.color = MUTED_INK
+        canvas.drawText("${pageIndex + 1} / $count", width - gutter, baseline, pagePaint)
     }
 
     /** The page whose dot is nearest screen `x`. */
@@ -803,7 +838,7 @@ class DeckView(context: Context) : View(context) {
      * Go to page `target`, the new page sliding in from the side it lies on.
      * `from` is where the old page was showing, so a swipe hands over smoothly.
      */
-    private fun turnTo(target: Int, from: Float) {
+    private fun turnTo(target: Int, from: Float, report: Boolean = true) {
         val deck = deck ?: return
         if (target == pageIndex) {
             slide.snap(from)
@@ -815,6 +850,7 @@ class DeckView(context: Context) : View(context) {
             pageId = deck.pages[target].id
             show(deck)
             slide.snap(from + direction * width)
+            if (report) onPageShown?.invoke(deck.pages[target].id)
         }
         slide.target = 0f
         wake()

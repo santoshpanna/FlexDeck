@@ -1,16 +1,9 @@
-import { useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 
+import { useLive } from "../../../../hooks/useLive/useLive.hook.ts";
 import { ApiContext } from "../../../../providers/ApiProvider/ApiProvider.provider.tsx";
 import type { WidgetPreview, WireWidget } from "../../../../services/api/api.ts";
-
-/** How often live values are asked for again while the page shows. */
-const REFRESH_MS = 2_000;
-
-/** Whether anything on a widget follows a live value, so it is worth asking again. */
-function follows(widget: WireWidget): boolean {
-  const text = JSON.stringify([widget.props, widget.face, widget.states]);
-  return text.includes("{{") || text.includes('"rules"') || text.includes('"graph"');
-}
+import type { LiveMessage } from "../../../../services/api/live.ts";
 
 /**
  * What each widget on a page shows now, as the agent works it out — so the
@@ -18,14 +11,17 @@ function follows(widget: WireWidget): boolean {
  * template that does not parse says why.
  *
  * Asked once when the widgets change (a moment after, so typing is not a
- * request per key), then again every couple of seconds while any of them
- * follows a live value and the window is in front.
+ * request per key) and whenever the live socket (re)opens. After that, every
+ * look the agent pushes — a scene going live, a timer ticking — lands the
+ * moment it changes, exactly as it does on the tablet. Nothing is polled.
  */
 export function useFacePreviews(desktopId: string | null, widgets: readonly WireWidget[]): Record<string, WidgetPreview> {
   // Read without the throwing hook: a view drawn outside the providers simply
   // has no previews.
   const api = useContext(ApiContext);
   const [previews, setPreviews] = useState<Record<string, WidgetPreview>>({});
+  // Bumped by a (re)opened socket: what was read before it may be stale.
+  const [opened, setOpened] = useState(0);
   const key = JSON.stringify(widgets);
 
   useEffect(() => {
@@ -34,24 +30,34 @@ export function useFacePreviews(desktopId: string | null, widgets: readonly Wire
       return;
     }
     let live = true;
-    const ask = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    const first = setTimeout(() => {
       api
         .facePreviews(desktopId, [...widgets])
         .then((answer) => live && setPreviews(answer))
         // An agent that predates previews, or a dropped call: draw from the config.
         .catch(() => live && setPreviews({}));
-    };
-    const first = setTimeout(ask, 250);
-    const again = widgets.some(follows) ? setInterval(ask, REFRESH_MS) : null;
+    }, 250);
     return () => {
       live = false;
       clearTimeout(first);
-      if (again) clearInterval(again);
     };
     // `key` stands for `widgets`: a new array with the same widgets is no change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, desktopId, key]);
+  }, [api, desktopId, key, opened]);
+
+  const hear = useCallback((message: LiveMessage) => {
+    if (message.kind === "open") {
+      setOpened((count) => count + 1);
+      return;
+    }
+    if (message.kind !== "state") return;
+    setPreviews((current) => {
+      // Only keys this page shows; the agent pushes every live key's look.
+      if (!(message.widgetId in current)) return current;
+      return { ...current, [message.widgetId]: { ...current[message.widgetId], state: message.state } };
+    });
+  }, []);
+  useLive(desktopId, hear);
 
   return previews;
 }

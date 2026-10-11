@@ -53,6 +53,7 @@ export type TextAlign = "TEXT_ALIGN_AUTO" | "TEXT_ALIGN_START" | "TEXT_ALIGN_CEN
 export type Font = "FONT_SANS" | "FONT_MONO" | "FONT_SERIF";
 export type GraphStyle = "GRAPH_STYLE_AREA" | "GRAPH_STYLE_LINE" | "GRAPH_STYLE_BARS";
 export type ImageFit = "IMAGE_FIT_COVER" | "IMAGE_FIT_CONTAIN";
+export type GradientKind = "GRADIENT_LINEAR" | "GRADIENT_RADIAL";
 
 export interface Rule {
   when?: string;
@@ -89,6 +90,9 @@ export interface FaceElement {
 export interface Background {
   color?: string;
   colorTo?: string;
+  /** With `colorTo`: the fade's direction in degrees, as CSS has it. Unset: 180, top to bottom. */
+  angle?: number;
+  gradient?: GradientKind;
   image?: string;
   fit?: ImageFit;
   dim?: number;

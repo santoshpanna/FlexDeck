@@ -1,6 +1,6 @@
-import type { WireConfig, WireFlow, WireWidget } from "../../../services/api/api.ts";
+import type { Block, Gesture, WireConfig, WireFlow, WireWidget } from "../../../services/api/api.ts";
 import { gridSpecOf, profileOf } from "./config.lib.ts";
-import { findPage, firstFreeCell, nextWidgetId, spansOf, withPage } from "./editing.lib.ts";
+import { findPage, findWidget, firstFreeCell, nextWidgetId, resizeWidget, spansOf, withPage, withWidget } from "./editing.lib.ts";
 import { CONFIG_SCHEMA } from "../../../services/api/api.ts";
 
 /**
@@ -491,42 +491,112 @@ export function placePreset(config: WireConfig, pageId: string, preset: Preset):
   return null;
 }
 
-/** Whole pages to start from: a few presets, placed in order. */
-export const STARTER_LAYOUTS: readonly { id: string; name: string; description: string; presets: readonly string[] }[] = [
-  {
-    id: "dashboard",
-    name: "Desk dashboard",
-    description: "The time, the weather, and how the machine is doing.",
-    presets: ["clock", "weather", "cpu-gauge", "memory", "gpu", "network", "disk"],
-  },
-  {
-    id: "media",
-    name: "Media",
-    description: "What is playing, and the keys to control it.",
-    presets: ["now-playing", "media-previous", "media-play_pause", "media-next", "mic"],
-  },
-  {
-    id: "focus",
-    name: "Focus",
-    description: "A clock, your next meeting, a counter and the mic.",
-    presets: ["pomodoro", "analog", "calendar", "counter", "mic", "world-clock"],
-  },
+
+// ---- A preset's halves, and its look on a key you already have ----------------
+
+/** What a preset brings: a face that follows live values, and the gestures it answers. */
+export function presetHalves(preset: Preset): { live: boolean; gestures: Gesture[] } {
+  const { face, props, states, flows } = preset.widget;
+  const live =
+    (face?.elements ?? []).some((element) => element.template?.includes("{{") || element.kind === "ELEMENT_KIND_CLOCK" || element.kind === "ELEMENT_KIND_TIMER") ||
+    Boolean(face?.background?.graph || face?.background?.image?.includes("{{") || face?.rules?.length) ||
+    Boolean(props?.labelTemplate || states?.variable);
+  const gestures = [...new Set((flows ?? []).map((flow) => flow.trigger?.gesture ?? "GESTURE_SHORT_PRESS"))];
+  return { live, gestures };
+}
+
+/**
+ * Whether a preset has a look that can go on another key: a face without its
+ * own strip of buttons (those belong to its flows), or just an icon. A look
+ * made of states would replace the key's own — its scene light — so not those.
+ */
+export function isLookPreset(preset: Preset): boolean {
+  const { face, props, states } = preset.widget;
+  if (states) return false;
+  if (face) return !face.zones?.length;
+  return Boolean(props?.icon);
+}
+
+/**
+ * Give a key a preset's look, keeping everything it does: its flows, its
+ * states (the scene light), its label, its hold. A face brings the data it
+ * reads (`this.*`) with it; a strip of buttons the key already had stays, as
+ * its flows still answer to it. A slider has no face to give.
+ */
+export function applyPresetLook(config: WireConfig, widgetId: string, preset: Preset): WireConfig {
+  const target = findWidget(config, widgetId)?.widget;
+  if (!isLookPreset(preset) || !target || target.type === "WIDGET_TYPE_SLIDER") return config;
+  const next = withWidget(config, widgetId, (widget) => {
+    const { face, props, sources } = preset.widget;
+    if (!face) {
+      return { ...widget, props: { ...(widget.props ?? {}), icon: props!.icon! } };
+    }
+    const look: WireWidget = { ...widget, face: structuredClone(face) };
+    if (widget.face?.zones?.length) look.face = { ...look.face, zones: widget.face.zones };
+    if (sources?.length) look.sources = structuredClone(sources);
+    return look;
+  });
+  if (next === config) return config;
+  return (next.schema ?? 0) >= CONFIG_SCHEMA ? next : { ...next, schema: CONFIG_SCHEMA };
+}
+
+/** Whether the key can grow to the preset's own size where it stands. */
+export function presetFits(config: WireConfig, widgetId: string, preset: Preset): boolean {
+  const widget = findWidget(config, widgetId)?.widget;
+  if (!widget || ((widget.w ?? 1) === preset.w && (widget.h ?? 1) === preset.h)) return false;
+  return resizeWidget(config, widgetId, preset.w, preset.h) !== config;
+}
+
+// ---- What a key that shows something might do when pressed --------------------
+
+type DoAction = Extract<Block, { block: "doAction" }>;
+
+const SUGGESTIONS: readonly { reads: readonly string[]; label: string; plugin: string; action: string; args: Record<string, string> }[] = [
+  { reads: ["system.cpu", "sensors.memory", "sensors.gpu"], label: "Open Task Manager", plugin: "launcher", action: "open_app", args: { app: "taskmgr" } },
+  { reads: ["sensors.network", "sensors.disk"], label: "Open Resource Monitor", plugin: "launcher", action: "open_app", args: { app: "resmon" } },
+  { reads: ["sensors.battery"], label: "Open battery settings", plugin: "launcher", action: "open_app", args: { app: "ms-settings:batterysaver" } },
+  { reads: ["media.current"], label: "Play / pause", plugin: "media", action: "play_pause", args: {} },
+  { reads: ["time."], label: "Open Clock", plugin: "launcher", action: "open_app", args: { app: "ms-clock:" } },
 ];
 
-/** Place every preset of a layout on a page, as many as fit. */
-export function placeLayout(config: WireConfig, pageId: string, layoutId: string): { config: WireConfig; placed: number; needs: Preset["needs"][] } {
-  const layout = STARTER_LAYOUTS.find((candidate) => candidate.id === layoutId);
-  let current = config;
-  let placed = 0;
-  const needs: Preset["needs"][] = [];
-  for (const presetId of layout?.presets ?? []) {
-    const preset = PRESETS.find((candidate) => candidate.id === presetId);
-    if (!preset) continue;
-    const result = placePreset(current, pageId, preset);
-    if (!result) break;
-    current = result.config;
-    placed += 1;
-    if (preset.needs) needs.push(preset.needs);
-  }
-  return { config: current, placed, needs };
+/**
+ * A press worth suggesting for a key, from the values its face shows: a CPU
+ * gauge opens Task Manager. Only what this desktop can do is offered.
+ */
+export function suggestedActions(widget: WireWidget, catalogue: readonly { plugin: string; action: string }[]): { label: string; block: DoAction }[] {
+  const shows = JSON.stringify({ face: widget.face, props: widget.props, states: widget.states?.variable });
+  return SUGGESTIONS.filter((s) => s.reads.some((prefix) => shows.includes(prefix)) && catalogue.some((entry) => entry.plugin === s.plugin && entry.action === s.action)).map((s) => ({
+    label: s.label,
+    block: { block: "doAction", plugin: s.plugin, action: s.action, args: Object.fromEntries(Object.entries(s.args).map(([k, v]) => [k, { text: v }])) },
+  }));
+}
+
+/** A key with nothing on it yet: no press, no face, no states, no name of its own. */
+export function isBlankKey(widget: WireWidget): boolean {
+  const label = widget.props?.label ?? "";
+  return !widget.flows?.length && !widget.face && !widget.states && !widget.sources?.length && (label === "" || label === "New button") && !widget.props?.icon;
+}
+
+/**
+ * Make a key the preset, all of it — its look and what it does — where the
+ * key stands, keeping a name someone gave it. It grows to the preset's size
+ * when there is room.
+ */
+export function applyWholePreset(config: WireConfig, widgetId: string, preset: Preset): WireConfig {
+  const target = findWidget(config, widgetId)?.widget;
+  if (!target || target.type === "WIDGET_TYPE_SLIDER") return config;
+  const named = target.props?.label && target.props.label !== "New button" ? target.props.label : undefined;
+  let next = withWidget(config, widgetId, (widget) => {
+    const { face, flows, states, sources, props } = structuredClone(preset.widget);
+    const made: WireWidget = { id: widget.id, type: widget.type ?? "WIDGET_TYPE_BUTTON", col: widget.col, row: widget.row, w: widget.w, h: widget.h };
+    if (widget.portrait) made.portrait = widget.portrait;
+    made.props = { ...(props ?? {}), label: named ?? props?.label ?? preset.name };
+    if (face) made.face = face;
+    if (flows?.length) made.flows = flows;
+    if (states) made.states = states;
+    if (sources?.length) made.sources = sources;
+    return made;
+  });
+  if (presetFits(next, widgetId, preset)) next = resizeWidget(next, widgetId, preset.w, preset.h);
+  return (next.schema ?? 0) >= CONFIG_SCHEMA ? next : { ...next, schema: CONFIG_SCHEMA };
 }

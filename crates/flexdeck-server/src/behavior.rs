@@ -500,7 +500,10 @@ impl Behavior {
     }
 
     fn push_widget_states(&self, wanted: impl Fn(&WidgetPlan) -> bool) {
-        if self.inner.widget_states.receiver_count() == 0 {
+        // Nobody looking — no tablet, no configurator, no watch through the
+        // cloud — is nothing to work out. Not the subscriber count: the tunnel
+        // listens all along, so a watch that starts misses nothing.
+        if self.inner.viewers.load(Ordering::SeqCst) == 0 || self.inner.widget_states.receiver_count() == 0 {
             return;
         }
         for plan in self.widget_plans().iter().filter(|plan| wanted(plan)) {

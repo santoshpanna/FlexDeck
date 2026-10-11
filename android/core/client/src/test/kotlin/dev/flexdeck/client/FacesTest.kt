@@ -138,4 +138,25 @@ class FacesTest {
         assertTrue(spec.elements[2].analog)
         assertEquals("Asia/Tokyo", spec.elements[2].zone)
     }
+
+    @Test
+    fun `a fade reads its angle and shape, unset being top to bottom`() {
+        fun read(background: String) = FaceReader.read(Json.parseToJsonElement("""{"background":$background}""").jsonObject).background
+        assertEquals(180, read("""{"color":"#111111","colorTo":"#222222"}""").angle)
+        assertEquals(135, read("""{"color":"#111111","colorTo":"#222222","angle":135}""").angle)
+        assertEquals(0, read("""{"color":"#111111","colorTo":"#222222","angle":360}""").angle, "straight up is written 360")
+        assertTrue(read("""{"color":"#111111","colorTo":"#222222","gradient":"GRADIENT_RADIAL"}""").radial)
+    }
+
+    @Test
+    fun `a fade runs corner to corner the way CSS draws it`() {
+        fun near(expected: FloatArray, actual: FloatArray) =
+            expected.zip(actual).forEach { (e, a) -> assertTrue(abs(e - a) < 0.01f, "${expected.toList()} vs ${actual.toList()}") }
+        near(floatArrayOf(50f, 0f, 50f, 40f), Fade.line(100f, 40f, 180))
+        near(floatArrayOf(50f, 40f, 50f, 0f), Fade.line(100f, 40f, 0))
+        near(floatArrayOf(0f, 20f, 100f, 20f), Fade.line(100f, 40f, 90))
+        // 45° on a square: bottom left to top right.
+        near(floatArrayOf(0f, 100f, 100f, 0f), Fade.line(100f, 100f, 45))
+        assertTrue(abs(Fade.radius(60f, 80f) - 50f) < 0.01f)
+    }
 }

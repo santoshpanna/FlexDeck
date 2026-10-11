@@ -48,6 +48,14 @@ export interface ActionDto {
   arguments: ArgumentDto[];
   /** ABI 3: a slider can drive this action. */
   slider?: SliderDto;
+  /** ABI 4: a key running it is lit while `variable` equals the `equals` argument. */
+  active?: ActiveDto;
+}
+
+/** ABI 4: when a key running an action shows as active. */
+export interface ActiveDto {
+  variable: string;
+  equals: string;
 }
 
 /** ABI 3: which argument a slider writes, its range, and the variable it follows. */

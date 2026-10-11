@@ -252,7 +252,11 @@ async fn await_hello(socket: &mut WebSocket) -> Result<ClientHello, String> {
 
                 return match message.kind {
                     Some(client_message::Kind::Hello(hello)) => Ok(hello),
-                    Some(client_message::Kind::Press(_) | client_message::Kind::Value(_)) => {
+                    Some(
+                        client_message::Kind::Press(_)
+                        | client_message::Kind::Value(_)
+                        | client_message::Kind::Page(_),
+                    ) => {
                         Err("the first frame must be a hello, not a press".to_string())
                     }
                     None => Err("the first frame carried no message".to_string()),
@@ -321,6 +325,7 @@ async fn connection(agent: Arc<Agent>, mut socket: WebSocket) {
     let mut widget_states = agent.behavior().subscribe_widget_states();
     let mut series = agent.behavior().subscribe_series();
     let mut pages = agent.pages().subscribe();
+    let _seat = agent.pages().seat();
     let _viewer = agent.behavior().viewer();
     let Some((initial, initial_rev)) = prepare_catch_up(&agent, None) else {
         return refuse(&mut socket, "no_config", "the agent has no configuration").await;
@@ -339,6 +344,15 @@ async fn connection(agent: Arc<Agent>, mut socket: WebSocket) {
     }
     if !send_series(&agent, &mut sender).await {
         return;
+    }
+    // The page everyone else is on, so a tablet joins there.
+    if let Some(page_id) = agent.pages().current() {
+        let message = ServerMessage {
+            kind: Some(server_message::Kind::Page(flexdeck_protocol::PageEvent { page_id, step: 0 })),
+        };
+        if !send_message(&mut sender, &message).await {
+            return;
+        }
     }
 
     let mut client_rev = initial_rev;
@@ -452,6 +466,10 @@ async fn connection(agent: Arc<Agent>, mut socket: WebSocket) {
                         last_seen = Instant::now();
 
                         let decoded = decode_frame(text.as_str());
+                        if let Some(client_message::Kind::Page(shown)) = &decoded {
+                            agent.pages().report(&shown.page_id, shown.initial);
+                            continue;
+                        }
                         if let Some(client_message::Kind::Value(value)) = &decoded {
                             // Never awaited: the slider's worker runs it, and
                             // this socket goes straight back to listening.
@@ -684,6 +702,18 @@ mod tests {
         };
         assert_eq!(press.widget_id, "mute");
         assert_eq!(press.gesture, flexdeck_protocol::Gesture::LongPress as i32);
+    }
+
+    #[test]
+    fn a_page_frame_decodes() {
+        // As `AgentClient.sendPage` writes it.
+        let decoded = decode_frame(r#"{"page":{"pageId":"stream","initial":true}}"#);
+
+        let Some(client_message::Kind::Page(shown)) = decoded else {
+            panic!("expected a page");
+        };
+        assert_eq!(shown.page_id, "stream");
+        assert!(shown.initial);
     }
 
     #[test]

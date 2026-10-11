@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Digits, Glyph, Key, Label, Led, Notice, Plate, Segmented, screen } from "@flexdeck/ui";
+import { Digits, Endpoint, Glyph, Key, Label, Led, Notice, Plate, Segmented, screen } from "@flexdeck/ui";
 import { AsciiScene, globe, pulse, scan, typing } from "@flexdeck/ui/ascii";
 
 import { useNow } from "../../hooks/useNow.hook.ts";
@@ -129,7 +129,8 @@ function TabletPairing({ p, go }: { p: ShellViewProps; go: (tab: Tab) => void })
         <AsciiScene draw={drawPulse} fps={24} size={8} tone="text-faint" className="self-center" />
         <h2 className="m-0 text-2xl leading-tight font-semibold">Add a tablet</h2>
         <p className="m-0 text-[13px] leading-relaxed text-ink-2">
-          {p.pairing ? "That code expired. " : ""}Show a code here, then type it into FlexDeck on the tablet. It works once.
+          {p.pairing ? "That code expired. " : ""}Show a code here, then on the tablet open FlexDeck and enter the
+          address, port and code it shows. It works once.
         </p>
         <Key tone="signal" size="lg" disabled={p.busy} onClick={p.onNewPin}>
           Show a code <Glyph name="arrowRight" />
@@ -141,7 +142,9 @@ function TabletPairing({ p, go }: { p: ShellViewProps; go: (tab: Tab) => void })
   return (
     <div className="flex flex-col gap-3.5">
       <Plate depth="raised" pad="lg" className="flex flex-col items-center gap-4">
-        <Label>Type this on the tablet</Label>
+        <Label className="self-start">1 · Enter on the tablet</Label>
+        <Endpoint host={p.address} port={p.port} />
+        <Label className="self-start">2 · Then type this code</Label>
         <Digits value={p.pairing.pin} />
         <div className="flex w-full flex-col gap-2">
           <ExpiryBar seconds={left.seconds} lifetime={PIN_LIFETIME} />
@@ -163,9 +166,7 @@ function TabletPairing({ p, go }: { p: ShellViewProps; go: (tab: Tab) => void })
         </div>
       </Plate>
       <p className="m-0 px-0.5 text-[13px] leading-relaxed text-muted">
-        On the tablet, open FlexDeck and enter{" "}
-        <span className="font-mono text-ink">{p.address || "this computer’s address"}</span>, then this code. A new
-        code replaces this one.
+        The tablet must be on the same Wi-Fi as this computer. A new code replaces this one.
       </p>
     </div>
   );

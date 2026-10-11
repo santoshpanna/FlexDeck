@@ -45,11 +45,22 @@ message ValueEvent {
   int64 ts = 5; // unix milliseconds
 }
 
+// The page a tablet now shows. Sent when the person turns the page there, not
+// when the agent asked for it (that page is already known), so tablets never
+// echo each other.
+message PageShown {
+  string page_id = 1;
+  // Sent on connect: taken only while the agent knows no page yet, so a tablet
+  // that reconnects does not pull everyone back to where it was.
+  bool initial = 2;
+}
+
 message ClientMessage {
   oneof kind {
     ClientHello hello = 1;
     PressEvent press = 2;
     ValueEvent value = 3;
+    PageShown page = 4;
   }
 }
 
@@ -132,6 +143,20 @@ message ConfigPatch {
   string patch = 2;
 }
 
+// The paired devices, or which of them are connected, changed: read them
+// again. Sent to configurators only — a tablet has no device list to show.
+message DevicesEvent {}
+
+// How a data source's last run went: one run of `source` (a source id, or
+// `id.@widget` for a key's own run). Sent to configurators only.
+message SourceStatusEvent {
+  string source = 1;
+  bool ok = 2;
+  string error = 3;
+  // When it last worked, in seconds since 1970; 0 if it never has.
+  int64 updated = 4;
+}
+
 message ErrorEvent {
   string code = 1;
   string message = 2;
@@ -145,5 +170,7 @@ message ServerMessage {
     ErrorEvent error = 4;
     SeriesEvent series = 5;
     PageEvent page = 6;
+    DevicesEvent devices = 7;
+    SourceStatusEvent source = 8;
   }
 }

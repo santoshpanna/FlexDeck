@@ -38,6 +38,8 @@ export interface ShellViewProps {
   next: NextStep | null;
   /** The address a tablet types to find this computer. */
   address: string;
+  /** The port that goes with it. */
+  port: number | null;
   devices: DeviceRow[];
   plugins: PluginGroup[];
   installed: InstalledPlugin[];
@@ -64,6 +66,8 @@ export interface ShellViewProps {
   onRevoke: (deviceId: string) => void;
   onToggleWebAccess: (enabled: boolean) => void;
   onSetPortal: (url: string) => void;
+  /** Open a web page in this computer's browser. */
+  onOpenLink: (url: string) => void;
   onChooseFile: (file: File) => void;
   onPick: (entry: CatalogEntry) => void;
   onRefresh: () => void;
@@ -91,6 +95,7 @@ const DEFAULTS: ShellViewProps = {
   readouts: [],
   next: null,
   address: "",
+  port: null,
   devices: [],
   plugins: [],
   installed: [],
@@ -117,6 +122,7 @@ const DEFAULTS: ShellViewProps = {
   onRevoke: noop,
   onToggleWebAccess: noop,
   onSetPortal: noop,
+  onOpenLink: noop,
   onChooseFile: noop,
   onPick: noop,
   onRefresh: noop,

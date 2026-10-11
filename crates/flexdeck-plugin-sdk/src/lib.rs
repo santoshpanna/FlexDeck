@@ -574,6 +574,7 @@ mod tests {
                 description: String::new(),
                 arguments: vec![],
                 slider: None,
+                active: None,
             });
             manifest
         }

@@ -9,6 +9,8 @@ import { randomBytes } from "node:crypto";
 import { authResponse, type Connect, type SocketLike } from "../src/obs-client.ts";
 
 export interface FakeObsOptions {
+  /** How long a scene transition takes: OBS announces the change only after it. */
+  transitionMs?: number;
   password?: string;
   scenes?: string[];
   inputs?: Record<string, boolean>; // name -> muted
@@ -67,7 +69,9 @@ export class FakeObs {
         const scene = String(data.sceneName);
         if (!this.scenes.includes(scene)) throw new Error(`No source was found by the name of \`${scene}\`.`);
         this.scene = scene;
-        this.event("CurrentProgramSceneChanged", { sceneName: scene });
+        const announce = () => this.event("CurrentProgramSceneChanged", { sceneName: scene });
+        if (this.options.transitionMs) setTimeout(announce, this.options.transitionMs);
+        else announce();
         return {};
       }
       case "GetRecordStatus":

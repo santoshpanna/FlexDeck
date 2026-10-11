@@ -164,6 +164,7 @@ pub fn action_to_dto(spec: &ActionSpec) -> abi::ActionDto {
                 feedback: Some(mute.feedback.to_string()),
             }),
         }),
+        active: None,
     }
 }
 

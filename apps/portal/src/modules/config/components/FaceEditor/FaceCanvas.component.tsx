@@ -81,9 +81,15 @@ export function FaceCanvas({
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <div className="relative" style={{ width: w * scale, height: h * scale }}>
-        <div className="absolute top-0 left-0 rounded-[18px] bg-plate" style={{ width: w, height: h, transform: `scale(${scale})`, transformOrigin: "0 0" }}>
+      {/* The key's own edge and middle, so a piece can be put by eye. */}
+      <div className="relative" style={{ width: w * scale, height: h * scale, borderRadius: 18 * scale, boxShadow: "0 0 0 1px var(--color-line-strong), 0 0 0 5px var(--color-well)" }}>
+        <div
+          className="absolute top-0 left-0 overflow-visible rounded-[18px] bg-linear-to-b from-[var(--fd-deck-key-top)] to-[var(--fd-deck-key-bottom)] text-[var(--fd-deck-ink)]"
+          style={{ width: w, height: h, transform: `scale(${scale})`, transformOrigin: "0 0" }}
+        >
           <FaceView widget={widget} lookId={lookId} w={w} h={h} unit={1} radius={18} preview={preview} />
+          <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-1/2 border-l border-dashed border-white/10" />
+          <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 border-t border-dashed border-white/10" style={{ top: faceH / 2 }} />
           {elements.map((element, index) => {
             const rect = moving?.index === index ? placeBox(moving.box, w, faceH) : rects[index]!;
             const on = selected === index;

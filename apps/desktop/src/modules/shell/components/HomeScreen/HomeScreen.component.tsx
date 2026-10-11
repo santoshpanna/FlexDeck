@@ -24,17 +24,21 @@ export function HomeScreen({ p, go }: { p: ShellViewProps; go: (tab: Tab) => voi
   return (
     <motion.div variants={list} initial="initial" animate="animate" className="flex flex-col gap-3.5">
       <motion.div variants={item}>
-        <Plate depth="raised" className="grid grid-cols-3 gap-2.5">
+        {/* Three indicator modules, like lamps set into a panel: what each one
+            watches in the corner, its light beside it, the reading below. */}
+        <div className="grid grid-cols-3 gap-2">
           {(p.readouts.length > 0 ? p.readouts : PLACEHOLDER).map((readout) => (
-            <div key={readout.label} className="flex flex-col gap-2">
-              <Label>{readout.label}</Label>
-              <span className="flex items-center gap-2 font-mono text-xs tracking-[0.1em] uppercase">
+            <Plate key={readout.label} depth="well" pad="none" className="flex min-w-0 flex-col gap-2.5 px-3 pt-2.5 pb-3">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="truncate">{readout.label}</Label>
                 <Led state={readout.led} />
+              </div>
+              <span className="truncate font-mono text-[15px] leading-none font-semibold tracking-[0.04em] text-ink uppercase">
                 {readout.value}
               </span>
-            </div>
+            </Plate>
           ))}
-        </Plate>
+        </div>
       </motion.div>
 
       <motion.div variants={item}>
@@ -147,7 +151,7 @@ function NextStepPlate({ p, go }: { p: ShellViewProps; go: (tab: Tab) => void })
     body = next.editor
       ? "Open the editor in a browser on this computer. The tablet updates as you go."
       : "Set the portal address under Setup to get a link to the editor.";
-    action = next.editor ? <EditorLink url={next.editor} /> : (
+    action = next.editor ? <EditorLink url={next.editor} onOpen={p.onOpenLink} /> : (
       <Key size="md" onClick={() => go("setup")}>
         Open Setup
       </Key>
@@ -184,16 +188,22 @@ function NextStepPlate({ p, go }: { p: ShellViewProps; go: (tab: Tab) => void })
   );
 }
 
-/** The editor's address, and a key that copies it — the window opens no browser itself. */
-function EditorLink({ url }: { url: string }) {
+/**
+ * Open the editor in this computer's browser, or copy its link to paste
+ * elsewhere. The address itself stays out of sight: nobody types it.
+ */
+function EditorLink({ url, onOpen }: { url: string; onOpen: (url: string) => void }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   return (
-    <div className="flex flex-col gap-2">
-      <span className="truncate rounded-lg border border-line bg-body px-2.5 py-1.5 font-mono text-[11px] text-ink-2">{url}</span>
+    <div className="flex gap-2">
+      <Key tone="signal" size="md" className="flex-1" onClick={() => onOpen(url)}>
+        <Glyph name="globe" /> Open editor
+      </Key>
       <Key
-        tone="signal"
         size="md"
+        aria-label={copied ? "Link copied" : "Copy editor link"}
+        title={copied ? "Copied" : "Copy link"}
         onClick={() => {
           void navigator.clipboard.writeText(url).then(() => {
             setCopied(true);
@@ -203,7 +213,6 @@ function EditorLink({ url }: { url: string }) {
         }}
       >
         <Glyph name={copied ? "check" : "copy"} />
-        {copied ? "Copied" : "Copy editor link"}
       </Key>
     </div>
   );

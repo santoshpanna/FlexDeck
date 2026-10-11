@@ -22,6 +22,7 @@
 
 import type { Background, Face } from "@flexdeck/face";
 import { LOCAL_AGENT, type Connection } from "../connections/connections.lib.ts";
+import { LiveFeed, type LiveListener } from "./live.ts";
 
 export interface Status {
   rev: number | null;
@@ -457,6 +458,8 @@ export interface ActionDefinition {
   arguments: ActionArgument[];
   /** Set when a slider can drive this action. */
   slider?: SliderTarget;
+  /** A key running it is lit while `variable` equals the `equals` argument. */
+  active?: { variable: string; equals: string };
 }
 
 /**
@@ -697,6 +700,11 @@ export class ApiError extends Error {
   }
 }
 
+/** Whether two routes reach the same desktop the same way, with the same token. */
+function sameRoute(a: Connection, b: Connection): boolean {
+  return a.via === b.via && a.token === b.token && a.fingerprint === b.fingerprint;
+}
+
 export class Api {
   // `#` fields rather than constructor parameter properties: Node's
   // type-stripping runtime refuses the latter outright, so the tests could not
@@ -714,6 +722,8 @@ export class Api {
   #images = new Map<string, Promise<string | null>>();
   /** Icon packs already fetched, by desktop and pack. */
   #packs = new Map<string, Promise<IconPack | null>>();
+  /** One live socket per desktop, open while anything listens. */
+  #live = new Map<string, LiveFeed>();
 
   /**
    * @param base   origin to prefix cloud requests with. Empty means "this
@@ -728,6 +738,46 @@ export class Api {
   /** Which connection to use for each desktop. */
   setRoutes(routes: Map<string, Connection>): void {
     this.#routes = routes;
+    // A route that changed — a new token, local instead of the cloud — is a
+    // different socket; listeners move to it.
+    for (const [desktopId, feed] of [...this.#live]) {
+      const route = routes.get(desktopId);
+      if (route && sameRoute(route, feed.route)) continue;
+      feed.close();
+      this.#live.delete(desktopId);
+      if (!route) continue;
+      const moved = this.#feed(desktopId, route);
+      for (const listener of feed.listeners()) moved.listen(listener);
+    }
+  }
+
+  /**
+   * Hear what happens on a desktop as it happens: looks, pages, devices, the
+   * configuration moving. One socket per desktop, however many listen, closed
+   * when the last stops. Returns the way to stop.
+   */
+  live(desktopId: string, listener: LiveListener): () => void {
+    const route = this.#routes.get(desktopId);
+    if (!route) return () => {};
+    (this.#live.get(desktopId) ?? this.#feed(desktopId, route)).listen(listener);
+    // Through whichever socket is current: a route change moves listeners.
+    return () => {
+      const feed = this.#live.get(desktopId);
+      if (!feed) return;
+      feed.unlisten(listener);
+      if (!feed.listening) {
+        feed.close();
+        this.#live.delete(desktopId);
+      }
+    };
+  }
+
+  #feed(desktopId: string, route: Connection): LiveFeed {
+    const feed = new LiveFeed(route, this.#base, this.#local, () => {
+      if (route.via === "local") this.#onLocalRefused?.(desktopId);
+    });
+    this.#live.set(desktopId, feed);
+    return feed;
   }
 
   /**
@@ -967,6 +1017,7 @@ export class Api {
           description: action.description,
           arguments: action.arguments,
           ...(action.slider ? { slider: action.slider } : {}),
+          ...(action.active ? { active: action.active } : {}),
         });
       }
     }
@@ -1204,6 +1255,16 @@ export class Api {
   /// what makes undo work without the portal keeping a stack of its own.
   putConfig(desktopId: string, config: WireConfig): Promise<{ rev: number }> {
     return this.relay(desktopId, "PUT", "/api/config", config);
+  }
+
+  /// The page the tablets are showing, or `null` before any is known.
+  page(desktopId: string): Promise<{ pageId: string | null }> {
+    return this.relay(desktopId, "GET", "/api/page");
+  }
+
+  /// Turn every tablet to `pageId`.
+  showPage(desktopId: string, pageId: string): Promise<{ pageId: string }> {
+    return this.relay(desktopId, "PUT", "/api/page", { pageId });
   }
 
   undo(desktopId: string): Promise<{ rev: number }> {

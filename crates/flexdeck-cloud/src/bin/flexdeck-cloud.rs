@@ -101,6 +101,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     // One port for everything, behind one set of protective headers.
     let app = portal::router(&args.portal_dir)
         .merge(flexdeck_cloud::http::router(Arc::clone(&cloud)))
+        .merge(flexdeck_cloud::live_socket::router(Arc::clone(&cloud)))
         .merge(tunnel_socket::router(cloud));
     let app = flexdeck_cloud::http::with_security_headers(app, index_html.as_deref());
 

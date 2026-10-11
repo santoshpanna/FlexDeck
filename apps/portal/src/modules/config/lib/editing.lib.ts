@@ -267,7 +267,11 @@ export function stateVariableOf(widget: WireWidget): string {
   const states = widget.states;
   const looks = states?.looks ?? [];
   const simple =
-    looks.length === 2 && looks[0]?.id === "off" && looks[1]?.id === "on" && (states?.variable?.cases?.length ?? 0) === 1;
+    looks.length === 2 &&
+    looks[0]?.id === "off" &&
+    looks[1]?.id === "on" &&
+    (states?.variable?.cases?.length ?? 0) === 1 &&
+    states?.variable?.cases?.[0]?.value === "true";
   return simple ? (states?.variable?.variable ?? "") : "";
 }
 
@@ -444,6 +448,91 @@ export function setWidgetAction(
     else delete next.flows;
     return next;
   });
+}
+
+/** The looks a key lit while its action is active has: off, then the deck's own glow. */
+const ACTIVE_STATES: WireStates["looks"] = [{ id: "off" }, { id: "on" }];
+
+/** Whether these are the looks `setActiveLight` wrote: plain off/on, matched to one value. */
+function isActiveStates(states: WireStates | undefined): boolean {
+  const looks = states?.looks ?? [];
+  return (
+    looks.length === 2 &&
+    looks[0]?.id === "off" &&
+    looks[1]?.id === "on" &&
+    !looks[1]?.bgColor &&
+    (states?.variable?.cases?.length ?? 0) === 1 &&
+    states?.variable?.cases?.[0]?.value !== "true"
+  );
+}
+
+/**
+ * Light a key while what its press picks is the one picked — the scene key
+ * while that scene is live — when the action says how to tell (`active`).
+ * States someone set up themselves are left alone; the ones this wrote follow
+ * the action, and go when it no longer says.
+ */
+export function setActiveLight(
+  config: WireConfig,
+  widgetId: string,
+  definition: ActionDefinition | null,
+  args: Record<string, string>,
+): WireConfig {
+  return withWidget(config, widgetId, (widget) => {
+    const ours = !widget.states || isActiveStates(widget.states);
+    const value = definition?.active ? (args[definition.active.equals] ?? "").trim() : "";
+    // A value still waiting on a placeholder never equals what the variable holds.
+    if (definition?.active && value && !value.includes("{{")) {
+      if (!ours) return widget;
+      return {
+        ...widget,
+        states: {
+          looks: ACTIVE_STATES,
+          variable: { variable: definition.active.variable, cases: [{ value, state: "on" }], otherwise: "off" },
+        },
+      };
+    }
+    if (!widget.states || !isActiveStates(widget.states)) return widget;
+    const next = { ...widget };
+    delete next.states;
+    return next;
+  });
+}
+
+/**
+ * Bring a key's light in line with what its press now does — after its tap
+ * was changed by hand: a new scene lights for that scene, a press that can no
+ * longer tell loses the light this wrote. Looks set up by hand stay.
+ */
+export function relightActive(config: WireConfig, widgetId: string, catalogue: readonly ActionDefinition[]): WireConfig {
+  const widget = findWidget(config, widgetId)?.widget;
+  if (!widget) return config;
+  const action = pressActionOf(widget);
+  const definition = action ? (catalogue.find((entry) => entry.plugin === action.plugin && entry.action === action.action) ?? null) : null;
+  return setActiveLight(config, widgetId, definition, action?.args ?? {});
+}
+
+/**
+ * Give every key whose press can be seen to be active — a scene key made
+ * before actions said how to tell — the light `setActiveLight` gives a new
+ * one. Keys with states of their own are left alone. The SAME config when
+ * nothing needed it, so a caller can tell there is nothing to save.
+ */
+export function lightActiveKeys(config: WireConfig, catalogue: readonly ActionDefinition[]): WireConfig {
+  let next = config;
+  for (const profile of config.profiles ?? []) {
+    for (const page of profile.pages ?? []) {
+      for (const widget of page.widgets ?? []) {
+        if (widget.states || !widget.id) continue;
+        const action = pressActionOf(widget);
+        const definition = catalogue.find((entry) => entry.plugin === action?.plugin && entry.action === action?.action);
+        if (!action || !definition?.active) continue;
+        const lit = setActiveLight(next, widget.id, definition, action.args ?? {});
+        if (findWidget(lit, widget.id)?.widget.states) next = lit;
+      }
+    }
+  }
+  return next;
 }
 
 /**

@@ -71,6 +71,17 @@ test("switching scene changes OBS, and the change comes back as an event", async
   assert.deepEqual(host.events().at(-1), { event: "scene_changed", payload: { scene: "Live" } });
 });
 
+test("a scene the deck switches to shows at once, not after OBS's transition", async () => {
+  const obs = new FakeObs({ transitionMs: 2000 });
+  const host = await connected(obs);
+
+  await host.invoke("set_scene", { scene: "Live" });
+
+  // OBS has not announced it yet — its transition is still playing.
+  assert.equal(host.variable("obs.scene"), "Live");
+  assert.notDeepEqual(host.events().at(-1), { event: "scene_changed", payload: { scene: "Live" } });
+});
+
 test("a scene OBS does not have is refused before anything is sent", async () => {
   const obs = new FakeObs();
   const host = await connected(obs);

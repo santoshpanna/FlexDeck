@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import dev.flexdeck.client.Backoff
 import dev.flexdeck.client.DeckReader
@@ -208,13 +209,14 @@ class MainActivity : Activity(), AgentClient.Listener {
      * so the user is told *why* the deck stopped instead of being returned to a
      * form they thought they had finished with, with no explanation.
      */
-    private fun showPairing(reason: String? = null) {
+    private fun showPairing(reason: String? = null, back: (() -> Unit)? = null) {
         // The deck is gone from the screen, so drop the references: `onStart`
         // uses `deckView` to decide whether there is anything to connect for.
         deckView = null
         strip = null
+        panel = null
 
-        val screen = PairingScreen(this, host(), port(), reason) { agentHost, agentPort, pin, name, done ->
+        val screen = PairingScreen(this, host(), port(), reason, back) { agentHost, agentPort, pin, name, done ->
             client.pair(agentHost, agentPort, pin, name) { result ->
                 runOnUiThread {
                     result
@@ -235,7 +237,13 @@ class MainActivity : Activity(), AgentClient.Listener {
                         }
                         // The agent says *why* — wrong PIN, expired window, too
                         // many attempts — and that is worth showing verbatim.
-                        .onFailure { failure -> done(failure.message ?: "Pairing failed.") }
+                        .onFailure { failure ->
+                            // A certificate learned from a PC that then said no
+                            // vouches for nothing, and kept it would refuse the
+                            // next PC tried from this same form.
+                            Tls.forget(preferences)
+                            done(failure.message ?: "Pairing failed.")
+                        }
                 }
             }
         }
@@ -271,7 +279,10 @@ class MainActivity : Activity(), AgentClient.Listener {
         // longer in force.
         terminal = false
 
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        // A frame around the deck, so the connection panel can lie over it.
+        val root = FrameLayout(this).apply { addView(column) }
+        deckRoot = root
 
         val view = DeckView(this)
         view.onPress = { id ->
@@ -285,6 +296,9 @@ class MainActivity : Activity(), AgentClient.Listener {
         }
         view.onSlide = { id, value, drag, lifted ->
             client.sendValue(id, value, drag, lifted)
+        }
+        view.onPageShown = { pageId ->
+            client.sendPage(pageId)
         }
         view.setIcons(bundledIcons)
         view.onNeedImage = { sha ->
@@ -303,10 +317,11 @@ class MainActivity : Activity(), AgentClient.Listener {
 
         val status = StatusStrip(this)
         status.show(StatusStrip.Light.WAITING, "Connecting", host())
+        status.onDetailTap = { togglePanel() }
         strip = status
 
-        root.addView(status)
-        root.addView(
+        column.addView(status)
+        column.addView(
             view,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
@@ -318,6 +333,60 @@ class MainActivity : Activity(), AgentClient.Listener {
 
         // Connecting is `onStart`'s job, so there is exactly one place that
         // decides when a socket should exist.
+    }
+
+    // -- the connection panel ------------------------------------------------
+
+    private var deckRoot: FrameLayout? = null
+    private var panel: ConnectionPanel? = null
+
+    private fun togglePanel() {
+        panel?.let { it.close(); return }
+        val root = deckRoot ?: return
+        val open = ConnectionPanel(this, host(), port(), connected, onSwitch = { switchPc() }, onDisconnect = { disconnect() })
+        open.onClosed = { if (panel === open) panel = null }
+        panel = open
+        root.addView(open, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+    }
+
+    /** Off the deck and onto the pairing form: no socket, no retries, no wake lock. */
+    private fun leaveDeck() {
+        main.removeCallbacksAndMessages(null)
+        reconnectPending = false
+        connected = false
+        client.close()
+        applyScreenOn(false)
+    }
+
+    /**
+     * Pair with another PC. The current pairing is left alone until a new one
+     * succeeds, so backing out returns to this deck as it was.
+     */
+    private fun switchPc() {
+        leaveDeck()
+        // One certificate is pinned at a time, so another PC's would be refused
+        // as "changed". Set this one's aside while pairing, and put it back if
+        // the switch is abandoned.
+        val pin = Tls.pinnedFingerprint(preferences)
+        Tls.forget(preferences)
+        showPairing(back = {
+            if (pin != null) Tls.restore(preferences, pin)
+            showDeck()
+            backoff.reset()
+            if (visible) connect()
+        })
+    }
+
+    /**
+     * Forget this PC on the tablet: the token and the pinned certificate, as a
+     * refusal drops them. The address stays, so the pairing form can offer it
+     * back as the last PC.
+     */
+    private fun disconnect() {
+        leaveDeck()
+        Tls.forget(preferences)
+        prefs().edit().remove(KEY_TOKEN).apply()
+        showPairing()
     }
 
     private fun connect() {
@@ -342,6 +411,10 @@ class MainActivity : Activity(), AgentClient.Listener {
                 is ServerMessage.Welcome, is ServerMessage.Patch -> {
                     backoff.reset()
                     deckView?.show(DeckReader.read(session.config))
+                    // Where this tablet is, for an agent that knows no page yet.
+                    if (message is ServerMessage.Welcome) {
+                        deckView?.currentPageId?.let { client.sendPage(it, initial = true) }
+                    }
                     screenCare.run()
                     deckView?.setConnected(true)
                     showOnline()

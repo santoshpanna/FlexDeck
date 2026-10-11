@@ -1,7 +1,8 @@
 import { derive, faceFor, type Background, type Face, type FaceElement, type FaceLayout, type Zone } from "@flexdeck/face";
 
 import { CONFIG_SCHEMA, type ScreenCare, type CaseOp, type WireCase, type WireConfig, type WireLook, type WireWidget } from "../../../services/api/api.ts";
-import { withPage, withWidget } from "./editing.lib.ts";
+import { findWidget, setWidgetColors, withPage, withWidget } from "./editing.lib.ts";
+import { toBackground, type Fill } from "./fill.lib.ts";
 
 /**
  * Editing faces, looks and page backgrounds.
@@ -63,6 +64,21 @@ export function editFace(config: WireConfig, widgetId: string, lookId: string, c
       },
     };
   });
+}
+
+/**
+ * Fill a key's face. A simple key keeps a plain colour in its props; a fade
+ * or a picture needs a face, so it is given one first — drawn from its props,
+ * so nothing else on the key changes.
+ */
+export function setKeyFill(config: WireConfig, widgetId: string, fill: Fill): WireConfig {
+  const widget = findWidget(config, widgetId)?.widget;
+  if (!widget) return config;
+  if (!widget.face) {
+    if (fill.kind === "solid" || fill.kind === "default") return setWidgetColors(config, widgetId, { bgColor: fill.kind === "solid" ? fill.color : "" });
+    config = setCustomFace(config, widgetId, true);
+  }
+  return editFace(config, widgetId, "", (face) => setBackground(face, toBackground(fill, face.background) ?? {}));
 }
 
 /** Stop a look having its own face: it shows the widget's again, in its colours. */
