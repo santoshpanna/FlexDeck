@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { parseVersion } from "../release/version.ts";
-import { buildChangelog, groupEntries, parseLine, parseMessage, releaseMarkdown, releaseNotes, releaseVersion, toMarkdown } from "./changelog.lib.ts";
+import { buildChangelog, groupEntries, parseLine, parseMessage, releaseMarkdown, releaseNotes, releaseOf, releaseVersion, toMarkdown } from "./changelog.lib.ts";
 
 test("a release's notes are its blurb and its changes", () => {
   const [release] = buildChangelog([{ hash: "a1", date: "2026-10-20", message: "First\nrelease: v0.1.0\nThe deck.\nfeat(android): faders" }]).releases;
@@ -23,6 +23,15 @@ test("a release line marks the commit that cuts a release", () => {
   assert.equal(releaseVersion("First public release\nrelease: v0.1.0\nfeat(desktop): pairing"), "v0.1.0");
   assert.equal(releaseVersion("Ship fills\nfeat(ui): fills"), null);
   assert.equal(releaseVersion("Oops\nrelease: 0.1"), null);
+});
+
+test("a release line's scope picks the apps it ships", () => {
+  assert.deepEqual(releaseOf("Ship\nrelease: v0.1.0"), { version: "v0.1.0", platforms: ["desktop", "android", "server"] });
+  assert.deepEqual(releaseOf("Ship\nrelease(server): v0.1.1"), { version: "v0.1.1", platforms: ["server"] });
+  assert.deepEqual(releaseOf("Ship\nrelease(android): v0.1.1"), { version: "v0.1.1", platforms: ["android"] });
+  assert.deepEqual(releaseOf("Ship\nrelease(Android, desktop): v0.1.2"), { version: "v0.1.2", platforms: ["desktop", "android"] });
+  assert.throws(() => releaseOf("Ship\nrelease(ios): v0.1.3"), /unknown release platform "ios"/);
+  assert.deepEqual(releaseNotes("Ship\nrelease(desktop): v0.1.1\nFaster."), { title: "Ship", blurb: "Faster." });
 });
 
 test("release notes are the subject and the untyped prose, without trailers", () => {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { ASSETS, REPO_URL, detectPlatform, latestRelease } from "../src/common/release/release.lib.ts";
+import { ASSETS, REPO_URL, detectPlatform, latestRelease, type Release } from "../src/common/release/release.lib.ts";
 import { countChanges, filterGroups } from "../src/modules/changelog/lib/changelog.lib.ts";
 import { DOC_ORDER, nextDoc, renderDoc, rewriteHref, searchDocs, slugify } from "../src/modules/docs/lib/docs.lib.ts";
 
@@ -27,7 +27,7 @@ test("the platform guess reads Android before Windows", () => {
 
 test("the latest release is the first one, or none yet", () => {
   assert.equal(latestRelease({ next: [], releases: [] }), null);
-  const release = { version: "v0.1.0", hash: "a", date: "2026-10-20", title: "", blurb: "", groups: [] };
+  const release: Release = { version: "v0.1.0", platforms: ["desktop", "android"], hash: "a", date: "2026-10-20", title: "", blurb: "", groups: [] };
   assert.equal(latestRelease({ next: [], releases: [release] }), release);
 });
 

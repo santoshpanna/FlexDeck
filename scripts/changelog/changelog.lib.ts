@@ -20,6 +20,9 @@
  *   The tablet in your drawer, turned into a control surface for your PC.
  *   feat(desktop): pair with six digits
  *
+ * `release:` ships everything; a scope ships only what it names, e.g.
+ * `release(android): v0.1.1` or `release(desktop, server): v0.1.1`.
+ *
  * The release holds every change since the previous release commit, its own
  * lines included; whatever comes after the newest one is "next". CI tags the
  * release commit afterwards, so tags follow commits and never lead.
@@ -29,6 +32,9 @@
 
 export type Area = "DESKTOP" | "ANDROID" | "EDITOR" | "PLUGINS" | "GENERAL";
 export type Group = "Added" | "Improved" | "Fixed" | "Security";
+/** The apps a release builds and ships. */
+export type Platform = "desktop" | "android" | "server";
+export const PLATFORMS: Platform[] = ["desktop", "android", "server"];
 
 export interface Entry {
   area: Area;
@@ -44,6 +50,7 @@ export interface Commit {
 
 export interface Release {
   version: string;
+  platforms: Platform[];
   /** The release commit, so CI can tag it. */
   hash: string;
   date: string;
@@ -162,17 +169,27 @@ export function groupEntries(lines: ParsedLine[]): Release["groups"] {
   }).filter((group) => group.items.length > 0);
 }
 
-const RELEASE = /^release:\s*(v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\s*$/i;
+const RELEASE = /^release(?:\(([^)]*)\))?:\s*(v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\s*$/i;
 /** `Co-Authored-By: …`, `Signed-off-by: …` — git trailers, never prose. */
 const TRAILER = /^[A-Z][\w-]*-[\w-]+:\s/;
 
-/** The version a commit releases, or null when it is an ordinary commit. */
-export function releaseVersion(message: string): string | null {
+/** The version a commit releases and the apps it ships, or null when it is an ordinary commit. */
+export function releaseOf(message: string): { version: string; platforms: Platform[] } | null {
   for (const line of message.split(/\r?\n/)) {
     const match = RELEASE.exec(line.trim());
-    if (match) return match[1];
+    if (!match) continue;
+    const named = (match[1] ?? "").split(",").map((name) => name.trim().toLowerCase()).filter(Boolean);
+    for (const name of named) {
+      if (!PLATFORMS.includes(name as Platform)) throw new Error(`changelog: unknown release platform "${name}" in "${line.trim()}"`);
+    }
+    return { version: match[2], platforms: named.length ? PLATFORMS.filter((platform) => named.includes(platform)) : PLATFORMS };
   }
   return null;
+}
+
+/** The version a commit releases, or null when it is an ordinary commit. */
+export function releaseVersion(message: string): string | null {
+  return releaseOf(message)?.version ?? null;
 }
 
 /** A release commit's subject and its untyped prose lines. */
@@ -194,11 +211,12 @@ export function buildChangelog(commits: Commit[]): Changelog & { unknownScopes: 
     for (const line of lines) if (line.unknownScope) unknown.add(line.unknownScope);
     pending.push(...lines);
 
-    const version = releaseVersion(commit.message);
-    if (!version) continue;
+    const release = releaseOf(commit.message);
+    if (!release) continue;
+    const { version, platforms } = release;
     if (seen.has(version)) throw new Error(`changelog: ${version} is released twice (again in ${commit.hash.slice(0, 7)})`);
     seen.add(version);
-    releases.push({ version, hash: commit.hash, date: commit.date, ...releaseNotes(commit.message), groups: groupEntries(pending) });
+    releases.push({ version, platforms, hash: commit.hash, date: commit.date, ...releaseNotes(commit.message), groups: groupEntries(pending) });
     pending = [];
   }
 

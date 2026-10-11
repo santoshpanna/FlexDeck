@@ -1,6 +1,7 @@
 name: Android
 
-# The release APK, uploaded as the `android` artifact.
+# The release APKs, uploaded as the `android` artifact: one per CPU family
+# (arm64-v8a, armeabi-v7a, x86_64, x86) and a universal one.
 #
 # Called by the pipeline for a release commit, where it must be signed: Android
 # refuses to install an unsigned APK, so a release without the key fails here
@@ -95,16 +96,21 @@ jobs:
             -PflexdeckVersionName="${{ steps.version.outputs.name }}" \
             -PflexdeckVersionCode="${{ steps.version.outputs.code }}"
 
-      # A fixed name: the download page links to releases/latest/download/<name>.
+      # Fixed names: the download page links to releases/latest/download/<name>,
+      # and its plain `flexdeck-android.apk` is the universal build.
       - name: Collect
         run: |
           mkdir -p out
-          apk=$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)
-          cp "$apk" out/flexdeck-android.apk
+          dir=android/app/build/outputs/apk/release
+          ls -l "$dir"
+          cp "$dir"/app-universal-release*.apk out/flexdeck-android.apk
+          for abi in arm64-v8a armeabi-v7a x86_64 x86; do
+            cp "$dir"/app-$abi-release*.apk "out/flexdeck-android-$abi.apk"
+          done
           ls -l out
 
       - uses: actions/upload-artifact@v4
         with:
           name: android
-          path: out/flexdeck-android.apk
+          path: out/*.apk
           if-no-files-found: error

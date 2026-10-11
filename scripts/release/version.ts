@@ -30,8 +30,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (process.argv.includes("--desktop")) {
     const path = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "desktop", "src-tauri", "tauri.conf.json");
     const config = JSON.parse(readFileSync(path, "utf8"));
-    // NSIS rejects a pre-release suffix in the file version; the installer carries the plain number.
-    config.version = name.replace(/-.*$/, "");
+    // The full name, pre-release included: Tauri derives the numeric Windows file
+    // version (major.minor.patch.0) for NSIS on its own. Only MSI would reject it.
+    config.version = name;
     writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
   }
   console.log(`name=${name}`);

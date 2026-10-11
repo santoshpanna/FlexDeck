@@ -3,13 +3,15 @@ name: Pipeline
 # Everything that happens after a push to main, in order:
 #
 #   changelog ──┬── web       public pages → Vercel                 every push
-#               ├── server    editor + API → Docker Hub → Easypanel    when cloud/portal code changed
-#               ├── desktop ──┐                                      on a release commit
+#               ├── server    editor + API → Docker Hub → Easypanel    when its code changed, or a release names it
+#               ├── desktop ──┐                                      on a release commit naming it
 #               └── android ──┴── publish   GitHub release + notes   on a release commit
 #
 # The changelog runs first and everything else builds from what it produced:
 # the regenerated `releases.json` is what the web pages render, and a commit
-# carrying `release: vX.Y.Z` is what turns on the desktop and Android builds.
+# carrying `release: vX.Y.Z` is what turns on the desktop, Android and server
+# releases; `release(desktop): …`, `release(android): …` or `release(server): …`
+# ships just the ones it names.
 # Each stage is its own workflow file, also runnable by hand.
 on:
   push:
@@ -35,7 +37,10 @@ jobs:
     outputs:
       sha: ${{ steps.commit.outputs.sha }}
       release: ${{ steps.release.outputs.version }}
-      server: ${{ steps.changes.outputs.server }}
+      desktop: ${{ steps.release.outputs.desktop }}
+      android: ${{ steps.release.outputs.android }}
+      server: ${{ steps.release.outputs.server == 'true' || steps.changes.outputs.server == 'true' }}
+      server_release: ${{ steps.release.outputs.server }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,10 +80,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version=$(node -p "require('./apps/portal/src/modules/changelog/releases.json').releases[0]?.version ?? ''")
+          log=./apps/portal/src/modules/changelog/releases.json
+          version=$(node -p "require('$log').releases[0]?.version ?? ''")
           if [ -n "$version" ] && ! gh release view "$version" > /dev/null 2>&1; then
-            echo "Building release $version."
+            platforms=$(node -p "require('$log').releases[0].platforms.join(' ')")
+            echo "Building release $version for: $platforms."
             echo "version=$version" >> "$GITHUB_OUTPUT"
+            for platform in desktop android server; do
+              case " $platforms " in *" $platform "*) echo "$platform=true" >> "$GITHUB_OUTPUT" ;; esac
+            done
           fi
 
       # Restarting the server drops every live editor session, so it only
@@ -106,16 +116,17 @@ jobs:
   server:
     name: Server
     needs: changelog
-    if: needs.changelog.outputs.server == 'true' || needs.changelog.outputs.release != ''
+    if: needs.changelog.outputs.server == 'true'
     uses: ./.github/workflows/server.yml
     with:
       ref: ${{ needs.changelog.outputs.sha }}
+      version: ${{ needs.changelog.outputs.server_release == 'true' && needs.changelog.outputs.release || '' }}
     secrets: inherit
 
   desktop:
     name: Desktop
     needs: changelog
-    if: needs.changelog.outputs.release != ''
+    if: needs.changelog.outputs.desktop == 'true'
     uses: ./.github/workflows/desktop.yml
     with:
       version: ${{ needs.changelog.outputs.release }}
@@ -124,7 +135,7 @@ jobs:
   android:
     name: Android
     needs: changelog
-    if: needs.changelog.outputs.release != ''
+    if: needs.changelog.outputs.android == 'true'
     uses: ./.github/workflows/android.yml
     with:
       version: ${{ needs.changelog.outputs.release }}
@@ -135,11 +146,23 @@ jobs:
   publish:
     name: Publish release
     needs: [changelog, desktop, android]
-    if: needs.changelog.outputs.release != ''
+    # A skipped build is fine (that app is not in this release); a failed one is not.
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.changelog.outputs.release != '' }}
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.changelog.outputs.release }}
       GH_TOKEN: ${{ github.token }}
+      # Every file a release carries. The download page links to some of them
+      # through releases/latest/download/<name>: see apps/portal/src/common/release.
+      FILES: >-
+        flexdeck-windows-x64-setup.exe
+        flexdeck-android.apk
+        flexdeck-linux-x64.AppImage
+        flexdeck-linux-x64.deb
+        flexdeck-android-arm64-v8a.apk
+        flexdeck-android-armeabi-v7a.apk
+        flexdeck-android-x86_64.apk
+        flexdeck-android-x86.apk
     steps:
       - uses: actions/checkout@v4
         with:
@@ -150,25 +173,41 @@ jobs:
         with:
           node-version: "24"
 
+      # Only the apps: the server job's Docker build record is an artifact too,
+      # and it does not download. A single-app release matches just one.
       - uses: actions/download-artifact@v4
         with:
+          pattern: "{desktop-*,android}"
           path: out
           merge-multiple: true
 
-      # The file names are the contract with the download page, which links to
-      # releases/latest/download/<name>: see apps/portal/src/common/release.
+      # An app this release did not build keeps its files from the release
+      # before, so its download links never break.
+      - name: Carry over the other apps
+        run: |
+          mkdir -p out
+          for file in $FILES; do
+            if [ ! -f "out/$file" ]; then
+              if gh release download --pattern "$file" --dir out; then
+                echo "Carried $file over from the previous release."
+              else
+                echo "::warning::$file is not in this release or any before it."
+              fi
+            fi
+          done
+
       - name: Checksums
         working-directory: out
         run: |
           ls -l
-          test -f flexdeck-windows-x64-setup.exe
-          test -f flexdeck-android.apk
-          sha256sum flexdeck-windows-x64-setup.exe flexdeck-android.apk > SHA256SUMS.txt
+          files=$(ls $FILES 2>/dev/null || true)
+          test -n "$files"
+          sha256sum $files > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Create the GitHub release
         run: |
           node scripts/changelog/changelog.ts --notes "$VERSION" > notes.md
           title=$(node scripts/changelog/changelog.ts --notes "$VERSION" --title)
-          gh release create "$VERSION" out/flexdeck-windows-x64-setup.exe out/flexdeck-android.apk out/SHA256SUMS.txt \
+          gh release create "$VERSION" $(cd out && ls $FILES 2>/dev/null | sed 's|^|out/|') out/SHA256SUMS.txt \
             --verify-tag --latest --title "$VERSION — $title" --notes-file notes.md

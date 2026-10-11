@@ -21,6 +21,10 @@ on:
         description: Commit to deploy
         type: string
         required: true
+      version:
+        description: Release version, e.g. v0.2.0; empty for an ordinary deploy
+        type: string
+        default: ""
   workflow_dispatch:
 
 permissions:
@@ -55,9 +59,11 @@ jobs:
         with:
           context: .
           push: true
+          # A release also gets its version as a tag, to roll back to by name.
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ inputs.ref || github.sha }}
+            ${{ inputs.version && format('{0}:{1}', env.IMAGE, inputs.version) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

@@ -50,6 +50,17 @@ android {
     }
   }
 
+  // One APK per CPU family plus a universal one that runs everywhere; the
+  // download page's plain `flexdeck-android.apk` is the universal build.
+  splits {
+    abi {
+      isEnable = true
+      reset()
+      include("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+      isUniversalApk = true
+    }
+  }
+
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17

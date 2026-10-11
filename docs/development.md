@@ -178,11 +178,23 @@ The tablet in your drawer, turned into a control surface for your PC.
 feat(desktop): pair with six digits
 ```
 
-Pushing that builds both apps, tags the commit and publishes the release. If a
-build fails, fix it and run *Pipeline* again by hand: a version that has a tag
-but no GitHub release is built again. Run `pnpm changelog` to preview locally.
-A pre-release suffix such as `release: v0.1.0-rc.1` works for test releases; the
-Windows installer carries the plain number, since NSIS rejects the suffix.
+Pushing that ships everything: it tags the commit, builds the desktop app
+(Windows installer, Linux AppImage and `.deb`) and the Android app (a universal
+APK plus one per CPU family: arm64-v8a, armeabi-v7a, x86_64, x86), deploys the
+server, and publishes the GitHub release. To ship only some of it, scope the
+line: `release(desktop): v0.1.1`, `release(android): v0.1.1`,
+`release(server): v0.1.1`, or several at once like `release(desktop, server): v0.1.1`.
+
+An app a release skips keeps its files from the previous release, so every
+download link on the site keeps working; `flexdeck-android.apk` is always the
+universal build. A server release also tags the Docker image with its version.
+The server still redeploys on any push that changes its code, release or not.
+
+Every build carries the full version, pre-release included: `v0.1.0-rc.1` is
+`0.1.0-rc.1` in the installers and the APK, so use a suffix like that for test
+releases. If a build fails, fix it and run *Pipeline* again by hand: a version
+that has a tag but no GitHub release is built again. Run `pnpm changelog` to
+preview locally.
 
 ### One-time setup
 

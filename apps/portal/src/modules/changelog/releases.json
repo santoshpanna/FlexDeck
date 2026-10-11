@@ -3,6 +3,11 @@
   "releases": [
     {
       "version": "v0.1.0-rc.1",
+      "platforms": [
+        "desktop",
+        "android",
+        "server"
+      ],
       "hash": "2918e1814c3e687c59e83655c780ab749181f183",
       "date": "2026-10-11",
       "title": "Test release candidate",

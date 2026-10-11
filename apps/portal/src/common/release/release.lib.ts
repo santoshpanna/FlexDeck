@@ -37,6 +37,8 @@ export interface ReleaseGroup {
 
 export interface Release {
   version: string;
+  /** What this release shipped; an app it skipped keeps its file from the release before. */
+  platforms: ("desktop" | "android" | "server")[];
   hash: string;
   date: string;
   title: string;
