@@ -19,7 +19,7 @@ symphonia = { version = "0.5.4", default-features = false, features = ["mp3", "w
 # (ureq 2 brings ring) leaves rustls unable to pick one, workspace-wide.
 ureq = { version = "3", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots"] }
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
-sha2 = "0.10"
+sha2 = "0.11"
 hex = "0.4"
 
 [dev-dependencies]

@@ -1520,7 +1520,7 @@ dependencies = [
  "hex",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -1617,7 +1617,7 @@ dependencies = [
  "hex",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "tempfile",
  "thiserror 2.0.21",
 ]
@@ -1630,7 +1630,7 @@ dependencies = [
  "flexdeck-plugin-abi",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
 ]
 
 [[package]]
@@ -1642,7 +1642,7 @@ dependencies = [
  "hex",
  "rustls",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "symphonia",
  "tempfile",
  "ureq",
@@ -1688,7 +1688,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
