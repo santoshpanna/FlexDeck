@@ -2,7 +2,11 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
-## Next
+## v0.1.0-rc.1 — 2026-10-11
+
+**Test release candidate**
+
+A first test build of the desktop and Android apps.
 
 ### Added
 
