@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="flexdeck">
+  <g transform="translate(0 0) scale(2)">
+    <rect width="64" height="64" rx="14.08" fill="#111113" stroke="none" stroke-width="0.5"/>
+    <path fill="#5f5e5a" d="M15,12h4.5v40h-4.5zM15,12h8v4.5h-8zM15,47.5h8v4.5h-8zM44.5,12h4.5v40h-4.5zM41,12h8v4.5h-8zM41,47.5h8v4.5h-8z"/>
+    <path fill="#ff5a1f" d="M28.5,22h4.5v30h-4.5zM28.5,22A8,8 0 0 1 36.5,14L36.5,18.5A3.5,3.5 0 0 0 33,22zM36.5,14h2.5v4.5h-2.5zM25,26h14v4.5h-14z"/>
+  </g>
+</svg>

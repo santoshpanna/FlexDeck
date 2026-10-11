@@ -9,7 +9,7 @@
     "plugin",
     "create"
   ],
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "node": ">=22.18"
   },

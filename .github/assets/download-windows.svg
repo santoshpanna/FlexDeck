@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="232" height="60" viewBox="0 0 232 60" role="img" aria-label="DOWNLOAD FOR Windows">
+  <rect x="0.5" y="0.5" width="231" height="59" rx="14" fill="#ff5a1f" stroke="#ff5a1f"/>
+  <g transform="translate(20 15)"><path fill="#111113" d="M0 4.2l12-1.7v11.6H0zM13.5 2.3L30 0v14.1H13.5zM0 15.9h12v11.6L0 25.8zM13.5 15.9H30V30l-16.5-2.3z"/></g>
+  <text x="66" y="26" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="10" font-weight="600" letter-spacing="1.5" text-anchor="start" fill="#3a1a0c">DOWNLOAD FOR</text>
+  <text x="66" y="45" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="19" font-weight="700" letter-spacing="-0.3" text-anchor="start" fill="#111113">Windows</text>
+</svg>

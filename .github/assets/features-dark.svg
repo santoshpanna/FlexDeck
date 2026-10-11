@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="668" viewBox="0 0 960 668" role="img" aria-label="Features: Four gestures per key, Keys that react, Faders that feel physical, Automations without code, An open plugin system, Any grid, any tablet, Your Wi-Fi only, No accounts, ever">
+  <defs>
+    <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="1" fill="#ffffff12"/></pattern>
+    <linearGradient id="keyshine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.06"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="litglow" cx="0.5" cy="0.5" r="0.7">
+      <stop offset="0" stop-color="#ff5a1f" stop-opacity="0.24"/><stop offset="1" stop-color="#ff5a1f" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="960" height="668" rx="24" fill="#0b0b0c"/>
+  <rect width="960" height="668" rx="24" fill="url(#dots)"/>
+  <text x="40" y="58" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13" font-weight="600" letter-spacing="2.5" text-anchor="start" fill="#ff5a1f">// FEATURES</text>
+  <text x="40" y="98" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="30" font-weight="600" letter-spacing="-0.5" text-anchor="start" fill="#ecebe6">Built like hardware.</text>
+  <g>
+    <rect x="40" y="132" width="432" height="112" rx="16" fill="#131315" stroke="#26262a"/>
+    <rect x="60" y="152" width="72" height="72" rx="14" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="61" y="153" width="70" height="36" rx="13" fill="url(#keyshine)"/>
+    <g transform="translate(60 152)"><circle cx="36" cy="36" r="5" fill="#ff5a1f"/><circle cx="36" cy="36" r="12" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke="#ecebe6" opacity="0.55"/><circle cx="36" cy="36" r="19" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke="#ecebe6" opacity="0.25"/></g>
+    <text x="152" y="166" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" font-weight="600" letter-spacing="2" text-anchor="start" fill="#8d8c86">01 · KEYCAP</text>
+    <text x="152" y="190" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="18" font-weight="700" letter-spacing="0" text-anchor="start" fill="#ecebe6">Four gestures per key</text>
+    <text x="152" y="212" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">Tap, double tap, long press and</text>
+    <text x="152" y="231" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">hold. Each runs its own flow.</text>
+  </g>
+  <g>
+    <rect x="488" y="132" width="432" height="112" rx="16" fill="#131315" stroke="#26262a"/>
+    <rect x="508" y="152" width="72" height="72" rx="14" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="509" y="153" width="70" height="36" rx="13" fill="url(#keyshine)"/>
+    <g transform="translate(508 152)"><rect x="17" y="17" width="38" height="38" rx="8" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke="#ecebe6" opacity="0.7"/><circle cx="46" cy="26" r="10" fill="#ff5a1f" opacity="0.25"/><circle cx="46" cy="26" r="4" fill="#ff5a1f"/><path d="M25 46h14" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke="#ecebe6" opacity="0.7"/></g>
+    <text x="600" y="166" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" font-weight="600" letter-spacing="2" text-anchor="start" fill="#8d8c86">02 · LOOKS</text>
+    <text x="600" y="190" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="18" font-weight="700" letter-spacing="0" text-anchor="start" fill="#ecebe6">Keys that react</text>
+    <text x="600" y="212" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">Looks follow live values:</text>
+    <text x="600" y="231" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">recording, muted, now playing.</text>
+  </g>
+  <g>
+    <rect x="40" y="260" width="432" height="112" rx="16" fill="#131315" stroke="#26262a"/>
+    <rect x="60" y="280" width="72" height="72" rx="14" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="61" y="281" width="70" height="36" rx="13" fill="url(#keyshine)"/>
+    <g transform="translate(60 280)"><path d="M27 16v40M45 16v40" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke="#ecebe6" opacity="0.3"/><path d="M27 38v18M45 26v30" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke="#ff5a1f"/><rect x="20" y="33" width="14" height="8" rx="2" fill="#ecebe6"/><rect x="38" y="21" width="14" height="8" rx="2" fill="#ecebe6"/></g>
+    <text x="152" y="294" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" font-weight="600" letter-spacing="2" text-anchor="start" fill="#8d8c86">03 · FADERS</text>
+    <text x="152" y="318" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="18" font-weight="700" letter-spacing="0" text-anchor="start" fill="#ecebe6">Faders that feel physical</text>
+    <text x="152" y="340" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">Paced so your thumb never fights</text>
+    <text x="152" y="359" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">the echo. Graceful on release.</text>
+  </g>
+  <g>
+    <rect x="488" y="260" width="432" height="112" rx="16" fill="#131315" stroke="#26262a"/>
+    <rect x="508" y="280" width="72" height="72" rx="14" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="509" y="281" width="70" height="36" rx="13" fill="url(#keyshine)"/>
+    <g transform="translate(508 280)"><path d="M22 22L50 36L22 50" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke="#ecebe6" opacity="0.5"/><circle cx="22" cy="22" r="5" fill="#1c1c1f" stroke="#ecebe6" stroke-width="2.5"/><circle cx="22" cy="50" r="5" fill="#1c1c1f" stroke="#ecebe6" stroke-width="2.5"/><circle cx="50" cy="36" r="6" fill="#ff5a1f"/></g>
+    <text x="600" y="294" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" font-weight="600" letter-spacing="2" text-anchor="start" fill="#8d8c86">04 · FLOWS</text>
+    <text x="600" y="318" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="18" font-weight="700" letter-spacing="0" text-anchor="start" fill="#ecebe6">Automations without code</text>
+    <text x="600" y="340" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">When, if, repeat, do: in plain</text>
+    <text x="600" y="359" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">sentences. Dry-run them first.</text>
+  </g>
+  <g>
+    <rect x="40" y="388" width="432" height="112" rx="16" fill="#131315" stroke="#26262a"/>
+    <rect x="60" y="408" width="72" height="72" rx="14" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="61" y="409" width="70" height="36" rx="13" fill="url(#keyshine)"/>
+    <g transform="translate(60 408)"><rect x="17" y="17" width="16" height="16" rx="3" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke="#ecebe6" opacity="0.7"/><rect x="39" y="17" width="16" height="16" rx="3" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke="#ecebe6" opacity="0.7"/><rect x="17" y="39" width="16" height="16" rx="3" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke="#ecebe6" opacity="0.7"/><rect x="40" y="40" width="16" height="16" rx="3" fill="#ff5a1f"/></g>
+    <text x="152" y="422" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" font-weight="600" letter-spacing="2" text-anchor="start" fill="#8d8c86">05 · PLUGINS</text>
+    <text x="152" y="446" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="18" font-weight="700" letter-spacing="0" text-anchor="start" fill="#ecebe6">An open plugin system</text>
+    <text x="152" y="468" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">OBS, Discord, Spotify and more.</text>
+    <text x="152" y="487" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">Every permission shown first.</text>
+  </g>
+  <g>
+    <rect x="488" y="388" width="432" height="112" rx="16" fill="#131315" stroke="#26262a"/>
+    <rect x="508" y="408" width="72" height="72" rx="14" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="509" y="409" width="70" height="36" rx="13" fill="url(#keyshine)"/>
+    <g transform="translate(508 408)"><rect x="16" y="16" width="11" height="11" rx="2" fill="#ecebe6" opacity="0.5"/><rect x="31" y="16" width="26" height="11" rx="2" fill="#ff5a1f"/><rect x="16" y="31" width="11" height="11" rx="2" fill="#ecebe6" opacity="0.5"/><rect x="31" y="31" width="11" height="11" rx="2" fill="#ecebe6" opacity="0.5"/><rect x="46" y="31" width="11" height="26" rx="2" fill="#ecebe6" opacity="0.5"/><rect x="16" y="46" width="26" height="11" rx="2" fill="#ecebe6" opacity="0.5"/></g>
+    <text x="600" y="422" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" font-weight="600" letter-spacing="2" text-anchor="start" fill="#8d8c86">06 · PLATE</text>
+    <text x="600" y="446" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="18" font-weight="700" letter-spacing="0" text-anchor="start" fill="#ecebe6">Any grid, any tablet</text>
+    <text x="600" y="468" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">Reflows to the screen. Preview</text>
+    <text x="600" y="487" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">and tablet match to the pixel.</text>
+  </g>
+  <g>
+    <rect x="40" y="516" width="432" height="112" rx="16" fill="#131315" stroke="#26262a"/>
+    <rect x="60" y="536" width="72" height="72" rx="14" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="61" y="537" width="70" height="36" rx="13" fill="url(#keyshine)"/>
+    <g transform="translate(60 536)"><path d="M27 33v-6a9 9 0 0 1 18 0v6" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke="#ff5a1f"/><rect x="21" y="33" width="30" height="22" rx="5" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke="#ecebe6" opacity="0.8"/><circle cx="36" cy="44" r="3" fill="#ff5a1f"/></g>
+    <text x="152" y="550" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" font-weight="600" letter-spacing="2" text-anchor="start" fill="#8d8c86">07 · LINK</text>
+    <text x="152" y="574" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="18" font-weight="700" letter-spacing="0" text-anchor="start" fill="#ecebe6">Your Wi-Fi only</text>
+    <text x="152" y="596" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">Tablets talk to your PC over</text>
+    <text x="152" y="615" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">pinned TLS. No cloud in the loop.</text>
+  </g>
+  <g>
+    <rect x="488" y="516" width="432" height="112" rx="16" fill="#131315" stroke="#26262a"/>
+    <rect x="508" y="536" width="72" height="72" rx="14" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="509" y="537" width="70" height="36" rx="13" fill="url(#keyshine)"/>
+    <g transform="translate(508 536)"><path d="M18 24h36M18 50h36" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke="#ecebe6" opacity="0.3" stroke-dasharray="4 4"/><text x="36" y="42" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="16" font-weight="700" letter-spacing="1" text-anchor="middle" fill="#ff5a1f">482</text></g>
+    <text x="600" y="550" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" font-weight="600" letter-spacing="2" text-anchor="start" fill="#8d8c86">08 · PAIRING</text>
+    <text x="600" y="574" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="18" font-weight="700" letter-spacing="0" text-anchor="start" fill="#ecebe6">No accounts, ever</text>
+    <text x="600" y="596" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">Nothing to sign up for. Pair</text>
+    <text x="600" y="615" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13.5" font-weight="400" letter-spacing="0" text-anchor="start" fill="#8d8c86">with six digits and you're done.</text>
+  </g>
+</svg>

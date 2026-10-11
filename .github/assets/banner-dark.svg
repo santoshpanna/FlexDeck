@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="440" viewBox="0 0 1280 440" role="img" aria-label="flexdeck — every key, exactly yours">
+  <defs>
+    <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="10" cy="10" r="1" fill="#ffffff1a"/>
+    </pattern>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ff5a1f" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#ff5a1f" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="keyshine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="litglow" cx="0.5" cy="0.5" r="0.7">
+      <stop offset="0" stop-color="#ff5a1f" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#ff5a1f" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0b0b0c" stop-opacity="0.9"/>
+      <stop offset="0.5" stop-color="#0b0b0c" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#0b0b0c" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="440" rx="24" fill="#0b0b0c"/>
+  <rect width="1280" height="440" rx="24" fill="url(#dots)"/>
+  <rect width="1280" height="440" rx="24" fill="url(#fade)"/>
+  <ellipse cx="965" cy="220" rx="380" ry="230" fill="url(#halo)"/>
+
+  <g transform="translate(84 112) scale(1.375)">
+    <rect width="64" height="64" rx="14.08" fill="#111113" stroke="#2c2c30" stroke-width="0.7272727272727273"/>
+    <path fill="#5f5e5a" d="M15,12h4.5v40h-4.5zM15,12h8v4.5h-8zM15,47.5h8v4.5h-8zM44.5,12h4.5v40h-4.5zM41,12h8v4.5h-8zM41,47.5h8v4.5h-8z"/>
+    <path fill="#ff5a1f" d="M28.5,22h4.5v30h-4.5zM28.5,22A8,8 0 0 1 36.5,14L36.5,18.5A3.5,3.5 0 0 0 33,22zM36.5,14h2.5v4.5h-2.5zM25,26h14v4.5h-14z"/>
+  </g>
+  <text x="196" y="178" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="68" font-weight="600" letter-spacing="-2" fill="#ecebe6">flexdeck</text>
+
+  <text x="86" y="262" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="30" font-weight="500" letter-spacing="-0.5" fill="#ecebe6">Every key, exactly yours.</text>
+  <text x="86" y="300" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="16" fill="#8d8c86">Turn the tablet in your drawer into a control surface.</text>
+
+  <g font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="12" font-weight="600" letter-spacing="2" fill="#8d8c86">
+    <circle cx="90" cy="351" r="3.5" fill="#ff5a1f"/><text x="102" y="355">LAN ONLY</text>
+    <circle cx="210" cy="351" r="3.5" fill="#ff5a1f"/><text x="222" y="355">TLS PINNED</text>
+    <circle cx="346" cy="351" r="3.5" fill="#ff5a1f"/><text x="358" y="355">NO ACCOUNTS</text>
+    <circle cx="492" cy="351" r="3.5" fill="#ff5a1f"/><text x="504" y="355">OPEN PLUGINS</text>
+  </g>
+
+  <g>
+    <rect x="728" y="44" width="502" height="352" rx="30" fill="#0e0e10" stroke="#2a2a2e"/>
+    <rect x="729" y="45" width="500" height="350" rx="29" fill="none" stroke="#ffffff" stroke-opacity="0.04"/>
+    <circle cx="1220" cy="220" r="2.5" fill="#26262a"/>
+    <rect x="744" y="60" width="470" height="320" rx="14" fill="#111113"/>
+    <rect x="766" y="82" width="99" height="85.33333333333333" rx="10" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="767" y="83" width="97" height="42.666666666666664" rx="9" fill="url(#keyshine)"/>
+    <text x="815.5" y="122.66666666666666" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" fill="#ecebe6">SCENE</text>
+    <text x="815.5" y="141.66666666666666" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" letter-spacing="1" fill="#8d8c86">CAMERA</text>
+    <circle cx="853" cy="94" r="3.5" fill="#3ddc84"/>
+    <rect x="875" y="82" width="99" height="85.33333333333333" rx="10" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="876" y="83" width="97" height="42.666666666666664" rx="9" fill="url(#keyshine)"/>
+    <text x="924.5" y="122.66666666666666" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" fill="#ecebe6">SCENE</text>
+    <text x="924.5" y="141.66666666666666" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" letter-spacing="1" fill="#8d8c86">DESK</text>
+    <circle cx="962" cy="94" r="3.5" fill="#3a3a3f"/>
+    <rect x="984" y="82" width="99" height="85.33333333333333" rx="10" fill="#2a160d" stroke="#ff5a1f" stroke-width="1.5"/>
+    <rect x="985" y="83" width="97" height="42.666666666666664" rx="9" fill="url(#keyshine)"/>
+    <rect x="984" y="82" width="99" height="85.33333333333333" rx="10" fill="url(#litglow)"/>
+    <text x="1033.5" y="122.66666666666666" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" fill="#ff5a1f">● REC</text>
+    <text x="1033.5" y="141.66666666666666" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" letter-spacing="1" fill="#ffb08f">00:42:17</text>
+    <rect x="1093" y="82" width="99" height="85.33333333333333" rx="10" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="1094" y="83" width="97" height="42.666666666666664" rx="9" fill="url(#keyshine)"/>
+    <text x="1142.5" y="122.66666666666666" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" fill="#ecebe6">MIC</text>
+    <text x="1142.5" y="141.66666666666666" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" letter-spacing="1" fill="#8d8c86">LIVE</text>
+    <circle cx="1180" cy="94" r="3.5" fill="#3ddc84"/>
+    <rect x="766" y="177.33333333333331" width="99" height="85.33333333333333" rx="10" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="767" y="178.33333333333331" width="97" height="42.666666666666664" rx="9" fill="url(#keyshine)"/>
+    <text x="815.5" y="217.99999999999997" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" fill="#ecebe6">◂◂</text>
+    <text x="815.5" y="236.99999999999997" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" letter-spacing="1" fill="#8d8c86">PREV</text>
+    <rect x="875" y="177.33333333333331" width="99" height="85.33333333333333" rx="10" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="876" y="178.33333333333331" width="97" height="42.666666666666664" rx="9" fill="url(#keyshine)"/>
+    <text x="924.5" y="217.99999999999997" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" fill="#ecebe6">▶ ❚❚</text>
+    <text x="924.5" y="236.99999999999997" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" letter-spacing="1" fill="#8d8c86">PLAY</text>
+    <rect x="984" y="177.33333333333331" width="99" height="85.33333333333333" rx="10" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="985" y="178.33333333333331" width="97" height="42.666666666666664" rx="9" fill="url(#keyshine)"/>
+    <text x="1033.5" y="217.99999999999997" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" fill="#ecebe6">CPU</text>
+    <text x="1033.5" y="236.99999999999997" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" letter-spacing="1" fill="#8d8c86">23%</text>
+    <polyline points="998,248.16666666666663 1005.1,245.66666666666663 1012.2,247.16666666666663 1019.3,243.66666666666663 1026.4,246.16666666666663 1033.5,241.66666666666663 1040.6,244.66666666666663 1047.7,246.66666666666663 1054.8,243.16666666666663 1061.9,245.16666666666663 1069,241.16666666666663" fill="none" stroke="#ff5a1f" stroke-width="1.5" stroke-linejoin="round" opacity="0.8"/>
+    <rect x="1093" y="177.33333333333331" width="99" height="180.66666666666666" rx="10" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="1094" y="178.33333333333331" width="97" height="90.33333333333333" rx="9" fill="url(#keyshine)"/>
+    <line x1="1142.5" y1="211.33333333333331" x2="1142.5" y2="340" stroke="#34343a" stroke-width="4" stroke-linecap="round"/>
+    <line x1="1142.5" y1="260.2266666666667" x2="1142.5" y2="340" stroke="#ff5a1f" stroke-width="4" stroke-linecap="round"/>
+    <rect x="1124.5" y="253.2266666666667" width="36" height="14" rx="4" fill="#ecebe6"/>
+    <text x="1142.5" y="199.33333333333331" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="12" font-weight="600" letter-spacing="1" fill="#8d8c86">VOL 62</text>
+    <rect x="766" y="272.66666666666663" width="99" height="85.33333333333333" rx="10" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="767" y="273.66666666666663" width="97" height="42.666666666666664" rx="9" fill="url(#keyshine)"/>
+    <text x="815.5" y="313.3333333333333" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" fill="#ecebe6">DISCORD</text>
+    <text x="815.5" y="332.3333333333333" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" letter-spacing="1" fill="#8d8c86">DEAFEN</text>
+    <circle cx="853" cy="284.66666666666663" r="3.5" fill="#3a3a3f"/>
+    <rect x="875" y="272.66666666666663" width="99" height="85.33333333333333" rx="10" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="876" y="273.66666666666663" width="97" height="42.666666666666664" rx="9" fill="url(#keyshine)"/>
+    <text x="924.5" y="313.3333333333333" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" fill="#ecebe6">LIGHTS</text>
+    <text x="924.5" y="332.3333333333333" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" letter-spacing="1" fill="#8d8c86">WARM</text>
+    <rect x="984" y="272.66666666666663" width="99" height="85.33333333333333" rx="10" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="985" y="273.66666666666663" width="97" height="42.666666666666664" rx="9" fill="url(#keyshine)"/>
+    <text x="1033.5" y="313.3333333333333" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" fill="#ecebe6">14:32</text>
+    <text x="1033.5" y="332.3333333333333" text-anchor="middle" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11" letter-spacing="1" fill="#8d8c86">SAT 11</text>
+  </g>
+</svg>

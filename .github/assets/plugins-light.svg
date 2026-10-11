@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="406" viewBox="0 0 960 406" role="img" aria-label="Plugins: OBS STUDIO, DISCORD, SPOTIFY, STREAMER.BOT, SOUNDBOARD, WEATHER, HOME ASSISTANT, + YOUR PLUGIN">
+  <defs>
+    <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="1" fill="#11111317"/></pattern>
+    <linearGradient id="keyshine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.06"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="litglow" cx="0.5" cy="0.5" r="0.7">
+      <stop offset="0" stop-color="#ff5a1f" stop-opacity="0.24"/><stop offset="1" stop-color="#ff5a1f" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="960" height="406" rx="24" fill="#f6f5f1"/>
+  <rect width="960" height="406" rx="24" fill="url(#dots)"/>
+  <text x="40" y="58" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="13" font-weight="600" letter-spacing="2.5" text-anchor="start" fill="#ff5a1f">// PLUGINS</text>
+  <text x="40" y="98" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="30" font-weight="600" letter-spacing="-0.5" text-anchor="start" fill="#111113">Plays well with your setup.</text>
+  
+    <rect x="40" y="132" width="880" height="234" rx="20" fill="#0e0e10" stroke="#2a2a2e"/>
+    <rect x="58" y="150" width="200.5" height="92" rx="12" fill="#2a160d" stroke="#ff5a1f" stroke-width="1.5"/>
+    <rect x="59" y="151" width="198.5" height="46" rx="11" fill="url(#keyshine)"/>
+    <rect x="58" y="150" width="200.5" height="92" rx="12" fill="url(#litglow)"/>
+    <text x="158.25" y="192" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" text-anchor="middle" fill="#ff5a1f">OBS STUDIO</text>
+    <text x="158.25" y="214" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11.5" font-weight="400" letter-spacing="1" text-anchor="middle" fill="#ffb08f">● REC  00:42</text>
+    <rect x="272.5" y="150" width="200.5" height="92" rx="12" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="273.5" y="151" width="198.5" height="46" rx="11" fill="url(#keyshine)"/>
+    <text x="372.75" y="192" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" text-anchor="middle" fill="#ecebe6">DISCORD</text>
+    <text x="372.75" y="214" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11.5" font-weight="400" letter-spacing="1" text-anchor="middle" fill="#8d8c86">PUSH TO TALK</text>
+    <circle cx="460" cy="163" r="3.5" fill="#3ddc84"/>
+    <rect x="487" y="150" width="200.5" height="92" rx="12" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="488" y="151" width="198.5" height="46" rx="11" fill="url(#keyshine)"/>
+    <text x="587.25" y="192" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" text-anchor="middle" fill="#ecebe6">SPOTIFY</text>
+    <text x="587.25" y="214" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11.5" font-weight="400" letter-spacing="1" text-anchor="middle" fill="#8d8c86">♥ LIKED</text>
+    <rect x="701.5" y="150" width="200.5" height="92" rx="12" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="702.5" y="151" width="198.5" height="46" rx="11" fill="url(#keyshine)"/>
+    <text x="801.75" y="192" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" text-anchor="middle" fill="#ecebe6">STREAMER.BOT</text>
+    <text x="801.75" y="214" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11.5" font-weight="400" letter-spacing="1" text-anchor="middle" fill="#8d8c86">RUN ACTION</text>
+    <rect x="58" y="256" width="200.5" height="92" rx="12" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="59" y="257" width="198.5" height="46" rx="11" fill="url(#keyshine)"/>
+    <text x="158.25" y="298" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" text-anchor="middle" fill="#ecebe6">SOUNDBOARD</text>
+    <text x="158.25" y="320" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11.5" font-weight="400" letter-spacing="1" text-anchor="middle" fill="#8d8c86">AIRHORN</text>
+    <rect x="272.5" y="256" width="200.5" height="92" rx="12" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="273.5" y="257" width="198.5" height="46" rx="11" fill="url(#keyshine)"/>
+    <text x="372.75" y="298" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" text-anchor="middle" fill="#ecebe6">WEATHER</text>
+    <text x="372.75" y="320" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11.5" font-weight="400" letter-spacing="1" text-anchor="middle" fill="#8d8c86">24° · CLEAR</text>
+    <rect x="487" y="256" width="200.5" height="92" rx="12" fill="#1c1c1f" stroke="#2c2c30" stroke-width="1"/>
+    <rect x="488" y="257" width="198.5" height="46" rx="11" fill="url(#keyshine)"/>
+    <text x="587.25" y="298" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" text-anchor="middle" fill="#ecebe6">HOME ASSISTANT</text>
+    <text x="587.25" y="320" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11.5" font-weight="400" letter-spacing="1" text-anchor="middle" fill="#8d8c86">LIGHTS ON</text>
+    <circle cx="674.5" cy="269" r="3.5" fill="#3ddc84"/>
+    <rect x="701.5" y="256" width="200.5" height="92" rx="12" fill="none" stroke="#ff5a1f" stroke-width="1.5" stroke-dasharray="6 5"/>
+    <text x="801.75" y="298" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="14" font-weight="700" letter-spacing="0.5" text-anchor="middle" fill="#ff5a1f">+ YOUR PLUGIN</text>
+    <text x="801.75" y="320" font-family="ui-monospace,'SF Mono','JetBrains Mono','Cascadia Mono',Menlo,Consolas,monospace" font-size="11.5" font-weight="400" letter-spacing="1" text-anchor="middle" fill="#8d8c86">TS · PYTHON · RUST</text>
+</svg>

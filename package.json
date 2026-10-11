@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Local-network control surface: Tauri desktop agent + web configurator + native Android client.",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "packageManager": "pnpm@10.33.2",
   "engines": {
     "node": ">=22"
@@ -17,7 +17,7 @@
     "dev:android": "node scripts/startup/android.ts",
     "desktop:dev": "pnpm --filter @flexdeck/desktop dev",
     "desktop:build": "pnpm --filter @flexdeck/desktop build",
-    "brand:icons": "node scripts/gen-brand.mjs",
+    "brand:icons": "node scripts/gen-brand.mjs && node scripts/gen-art.mjs",
     "desktop:app": "cargo run -p flexdeck-desktop",
     "agent:build": "cargo build -p flexdeck-agent",
     "portal:build": "pnpm --filter @flexdeck/portal build",
