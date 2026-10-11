@@ -1,0 +1,56 @@
+name: Web
+
+# The public pages — landing, docs, changelog, download — to Vercel.
+#
+# CI builds and tests the portal itself, then deploys that exact bundle as a
+# prebuilt output (apps/portal/scripts/vercel-output.ts); Vercel runs no build.
+# `/config` and `/api` redirect to the editor on the cloud server.
+#
+# Secrets: VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+# Variable (optional): EDITOR_URL — the cloud's origin, default https://app.flex-deck.com
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to deploy
+        type: string
+        required: true
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Vercel
+    runs-on: ubuntu-latest
+    env:
+      VITE_EDITOR_URL: ${{ vars.EDITOR_URL || 'https://app.flex-deck.com' }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile --filter "@flexdeck/portal..."
+
+      - name: Typecheck and test
+        run: |
+          pnpm --filter @flexdeck/portal typecheck
+          pnpm --filter @flexdeck/portal test
+
+      - name: Build
+        run: |
+          pnpm --filter @flexdeck/portal build
+          node apps/portal/scripts/vercel-output.ts
+
+      - name: Deploy
+        run: npx --yes vercel@latest deploy --prebuilt --prod --token "${{ secrets.VERCEL_TOKEN }}"

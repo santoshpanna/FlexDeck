@@ -1,0 +1,105 @@
+name: Android
+
+# The release APK, uploaded as the `android` artifact.
+#
+# Called by the pipeline for a release commit, where it must be signed: Android
+# refuses to install an unsigned APK, so a release without the key fails here
+# rather than shipping something nobody can install. A hand-run test build may
+# be unsigned.
+#
+# Secrets: ANDROID_KEYSTORE_BASE64 (the .jks, base64), ANDROID_KEYSTORE_PASSWORD,
+#          ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+# Keep the keystore safe forever: updates must be signed with the same key.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Release version, e.g. v0.2.0
+        type: string
+        required: true
+      ref:
+        description: Commit or tag to build
+        type: string
+        required: true
+      signed:
+        description: Fail unless the APK is signed
+        type: boolean
+        default: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to stamp into the build
+        type: string
+        default: v0.0.0-dev
+      signed:
+        description: Fail unless the APK is signed
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: Release APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Version
+        id: version
+        run: node scripts/release/version.ts "${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+
+      - name: Signing key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            echo "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/release.jks"
+            echo "FLEXDECK_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          elif [ "${{ inputs.signed }}" = "true" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set, and a release APK must be signed."
+            exit 1
+          else
+            echo "::warning::No signing key: this APK is unsigned and will not install."
+          fi
+
+      - name: Build
+        working-directory: android
+        env:
+          FLEXDECK_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          FLEXDECK_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          FLEXDECK_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon --console=plain \
+            -PflexdeckVersionName="${{ steps.version.outputs.name }}" \
+            -PflexdeckVersionCode="${{ steps.version.outputs.code }}"
+
+      # A fixed name: the download page links to releases/latest/download/<name>.
+      - name: Collect
+        run: |
+          mkdir -p out
+          apk=$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)
+          cp "$apk" out/flexdeck-android.apk
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/flexdeck-android.apk
+          if-no-files-found: error

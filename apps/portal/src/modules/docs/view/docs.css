@@ -1,0 +1,158 @@
+/*
+ * Rendered Markdown. The doc body is HTML from `marked`, so it is styled by
+ * element here rather than by utility classes. Colours are the theme's raw
+ * properties, so a doc follows light and dark like everything else.
+ */
+
+.doc {
+  color: var(--fd-ink-2);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.doc > :first-child {
+  margin-top: 0;
+}
+
+.doc p,
+.doc ul,
+.doc ol,
+.doc table,
+.doc pre,
+.doc blockquote {
+  margin: 16px 0 0;
+}
+
+.doc h2,
+.doc h3,
+.doc h4 {
+  color: var(--fd-ink);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  scroll-margin-top: 96px;
+}
+
+.doc h2 {
+  margin: 56px 0 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--fd-line);
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.doc h3 {
+  margin: 36px 0 0;
+  font-size: 20px;
+}
+
+.doc h4 {
+  margin: 28px 0 0;
+  font-size: 16px;
+}
+
+.doc a {
+  color: var(--fd-signal);
+  text-underline-offset: 3px;
+}
+
+.doc a:hover {
+  color: var(--fd-signal-hi);
+}
+
+.doc strong {
+  color: var(--fd-ink);
+  font-weight: 600;
+}
+
+/* Tailwind's preflight strips list markers; a doc needs them back. */
+.doc ul,
+.doc ol {
+  padding-left: 22px;
+}
+
+.doc ul {
+  list-style: disc;
+}
+
+.doc ol {
+  list-style: decimal;
+}
+
+.doc li + li {
+  margin-top: 6px;
+}
+
+.doc li::marker {
+  color: var(--fd-faint);
+}
+
+.doc code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--fd-well);
+  color: var(--fd-ink);
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  overflow-wrap: anywhere;
+}
+
+.doc pre {
+  overflow-x: auto;
+  padding: 16px 18px;
+  border: 1px solid var(--fd-line);
+  border-radius: 14px;
+  background: var(--fd-well);
+  box-shadow: inset 0 2px 12px var(--fd-well-shade);
+  line-height: 1.6;
+}
+
+.doc pre code {
+  overflow-wrap: normal;
+  padding: 0;
+  background: none;
+  color: var(--fd-ink-2);
+  font-size: 13px;
+}
+
+.doc blockquote {
+  padding: 14px 18px;
+  border: 1px solid var(--fd-line);
+  border-radius: 14px;
+  background: var(--fd-plate);
+}
+
+.doc blockquote > :first-child {
+  margin-top: 0;
+}
+
+/* Wide tables scroll inside themselves rather than widening the page. */
+.doc table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.doc th,
+.doc td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--fd-line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.doc th {
+  color: var(--fd-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.doc hr {
+  margin: 40px 0;
+  border: 0;
+  border-top: 1px solid var(--fd-line);
+}

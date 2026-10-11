@@ -1,5 +1,6 @@
 import { Children, cloneElement, type ReactElement } from "react";
 
+import { EDITOR_HREF } from "../../../common/site/site.ts";
 import type { LandingViewProps } from "../view/landing.view.tsx";
 
 export interface LandingControllerProps {
@@ -17,7 +18,7 @@ export function LandingController({ children }: LandingControllerProps): ReactEl
     headline: "Every key,\nexactly yours.",
     blurb:
       "Turn the tablet in your drawer into a hardware-grade control surface. Keys, faders, live states and automations — on your own Wi-Fi, with no accounts.",
-    callToAction: { label: "Open the editor", to: "/config" },
+    callToAction: { label: "Open the editor", to: EDITOR_HREF },
     facts: ["LAN only", "TLS pinned", "No accounts", "Open plugins"],
     anatomy: [
       { tag: "01 · Keycap", title: "Four gestures per key", body: "Tap, double tap, long press, hold and release — each runs its own flow." },

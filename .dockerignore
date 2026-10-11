@@ -1,0 +1,13 @@
+# Only what the cloud image builds from. Build output, local toolchains and the
+# Android project stay out, so the context is small and the cache stays warm.
+.git
+**/node_modules
+**/dist
+target
+.tools
+.vercel
+.flexdeck*
+android/**/build
+android/.gradle
+tmp
+*.log

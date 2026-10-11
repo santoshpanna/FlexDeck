@@ -11,8 +11,16 @@
 
 /** The environment variables the portal reads. */
 interface ImportMetaEnv {
-  /** Unused: the portal has no build-time settings. Kept so the type exists. */
   readonly MODE: string;
+  /**
+   * The editor's origin, when it is deployed apart from the public pages
+   * (e.g. `https://app.flex-deck.com`). Unset: the editor is on this origin.
+   */
+  readonly VITE_EDITOR_URL?: string;
+  /** `"true"`: this build is the editor alone, at `/` (the cloud's own build). */
+  readonly VITE_EDITOR_ONLY?: string;
+  /** The public site's origin, for the editor's wordmark (e.g. `https://flex-deck.com`). */
+  readonly VITE_SITE_URL?: string;
 }
 
 interface ImportMeta {

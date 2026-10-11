@@ -35,6 +35,8 @@
     "verify:android": "node scripts/gradle.mjs :app:assembleDebug :core:client:test :core:grid:test --no-daemon --console=plain",
     "gen:face": "node packages/face/scripts/gen-expected.ts",
     "gen:presets": "node apps/portal/scripts/gen-presets.ts",
-    "gen:recipe": "node apps/portal/scripts/gen-recipe.ts"
+    "gen:recipe": "node apps/portal/scripts/gen-recipe.ts",
+    "changelog": "node scripts/changelog/changelog.ts",
+    "test:changelog": "node --test scripts/changelog/changelog.test.ts"
   }
 }

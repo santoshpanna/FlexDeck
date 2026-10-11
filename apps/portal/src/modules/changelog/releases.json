@@ -1,0 +1,46 @@
+{
+  "next": [
+    {
+      "name": "Added",
+      "items": [
+        {
+          "area": "DESKTOP",
+          "text": "Add configurator live feed at /api/live with cloud watch leases."
+        },
+        {
+          "area": "EDITOR",
+          "text": "Relay live frames through /api/live after desktop watch grants."
+        },
+        {
+          "area": "EDITOR",
+          "text": "Consume live socket for revision, state, page, devices, sources."
+        },
+        {
+          "area": "EDITOR",
+          "text": "Ship FillPicker with linear/radial gradients and angle dial."
+        },
+        {
+          "area": "EDITOR",
+          "text": "Add ColorArea, HueStrip, AngleDial, Popover, and Endpoint."
+        },
+        {
+          "area": "PLUGINS",
+          "text": "Raise ABI 4 with action.active for lit keys while a pick holds."
+        },
+        {
+          "area": "PLUGINS",
+          "text": "OBS Studio: bump to 0.4 with scene/record/stream presets and set_scene active."
+        },
+        {
+          "area": "ANDROID",
+          "text": "Add connection panel, ASCII link view, and pairing polish."
+        },
+        {
+          "area": "DESKTOP",
+          "text": "Surface endpoint address/port on home and pair screens."
+        }
+      ]
+    }
+  ],
+  "releases": []
+}

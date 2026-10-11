@@ -1,0 +1,174 @@
+name: Pipeline
+
+# Everything that happens after a push to main, in order:
+#
+#   changelog ──┬── web       public pages → Vercel                 every push
+#               ├── server    editor + API → Docker Hub → Easypanel    when cloud/portal code changed
+#               ├── desktop ──┐                                      on a release commit
+#               └── android ──┴── publish   GitHub release + notes   on a release commit
+#
+# The changelog runs first and everything else builds from what it produced:
+# the regenerated `releases.json` is what the web pages render, and a commit
+# carrying `release: vX.Y.Z` is what turns on the desktop and Android builds.
+# Each stage is its own workflow file, also runnable by hand.
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - CHANGELOG.md
+      - apps/portal/src/modules/changelog/releases.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Queue rather than cancel: a cancelled run could leave a tag without a release.
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+jobs:
+  changelog:
+    name: Changelog
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+      release: ${{ steps.release.outputs.version }}
+      server: ${{ steps.changes.outputs.server }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          # The whole history and every tag: releases are cut by commits.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Parser tests
+        run: node --test scripts/changelog/changelog.test.ts
+
+      - name: Regenerate and tag releases
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node scripts/changelog/changelog.ts --tag
+          git push origin --tags
+
+      - name: Commit if changed
+        id: commit
+        run: |
+          if ! git diff --quiet -- CHANGELOG.md apps/portal/src/modules/changelog/releases.json; then
+            git add CHANGELOG.md apps/portal/src/modules/changelog/releases.json
+            git commit -m "chore(changelog): regenerate [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # The newest release with no GitHub release yet. Checking the release, not
+      # the tag, makes a failed build retryable: run the pipeline again by hand.
+      - name: Release to build
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./apps/portal/src/modules/changelog/releases.json').releases[0]?.version ?? ''")
+          if [ -n "$version" ] && ! gh release view "$version" > /dev/null 2>&1; then
+            echo "Building release $version."
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Restarting the server drops every live editor session, so it only
+      # happens when something it serves changed.
+      - name: Does the server need a deploy
+        id: changes
+        run: |
+          before="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" != "push" ] || [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+            echo "server=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$before" "${{ github.sha }}" | grep -qE '^(crates/|apps/portal/|packages/|contract/|Cargo\.(toml|lock)$|Dockerfile$|pnpm-lock\.yaml$)'; then
+            echo "server=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "server=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  web:
+    name: Web
+    needs: changelog
+    uses: ./.github/workflows/web.yml
+    with:
+      ref: ${{ needs.changelog.outputs.sha }}
+    secrets: inherit
+
+  server:
+    name: Server
+    needs: changelog
+    if: needs.changelog.outputs.server == 'true' || needs.changelog.outputs.release != ''
+    uses: ./.github/workflows/server.yml
+    with:
+      ref: ${{ needs.changelog.outputs.sha }}
+    secrets: inherit
+
+  desktop:
+    name: Desktop
+    needs: changelog
+    if: needs.changelog.outputs.release != ''
+    uses: ./.github/workflows/desktop.yml
+    with:
+      version: ${{ needs.changelog.outputs.release }}
+      ref: ${{ needs.changelog.outputs.release }}
+
+  android:
+    name: Android
+    needs: changelog
+    if: needs.changelog.outputs.release != ''
+    uses: ./.github/workflows/android.yml
+    with:
+      version: ${{ needs.changelog.outputs.release }}
+      ref: ${{ needs.changelog.outputs.release }}
+      signed: true
+    secrets: inherit
+
+  publish:
+    name: Publish release
+    needs: [changelog, desktop, android]
+    if: needs.changelog.outputs.release != ''
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.changelog.outputs.release }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      # The file names are the contract with the download page, which links to
+      # releases/latest/download/<name>: see apps/portal/src/common/release.
+      - name: Checksums
+        working-directory: out
+        run: |
+          ls -l
+          test -f flexdeck-windows-x64-setup.exe
+          test -f flexdeck-android.apk
+          sha256sum flexdeck-windows-x64-setup.exe flexdeck-android.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create the GitHub release
+        run: |
+          node scripts/changelog/changelog.ts --notes "$VERSION" > notes.md
+          title=$(node scripts/changelog/changelog.ts --notes "$VERSION" --title)
+          gh release create "$VERSION" out/flexdeck-windows-x64-setup.exe out/flexdeck-android.apk out/SHA256SUMS.txt \
+            --verify-tag --latest --title "$VERSION — $title" --notes-file notes.md

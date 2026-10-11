@@ -1,6 +1,6 @@
 import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { AppLink } from "../../../../common/components/AppLink/AppLink.component.tsx";
 
 import { ease } from "@flexdeck/ui";
 import { AsciiScene, decode, decodeDuration, render } from "@flexdeck/ui/ascii";
@@ -77,12 +77,12 @@ export function Hero({ headline, blurb, callToAction, facts }: { headline: strin
         </h1>
         <p className="m-0 max-w-[460px] text-lg leading-relaxed text-ink-2">{blurb}</p>
         <div className="flex flex-wrap gap-3">
-          <Link
+          <AppLink
             to={callToAction.to}
             className="inline-flex h-13 items-center rounded-key border border-signal-hi bg-linear-to-b from-signal-hi to-signal px-6 text-[15px] font-semibold text-signal-ink no-underline shadow-key transition-transform active:translate-y-0.5"
           >
             {callToAction.label}
-          </Link>
+          </AppLink>
           <a
             href="#anatomy"
             className="inline-flex h-13 items-center rounded-key border border-[var(--fd-key-line)] bg-linear-to-b from-[var(--fd-key-top)] to-[var(--fd-key-bottom)] px-5 text-[15px] text-ink no-underline shadow-key transition-transform active:translate-y-0.5"

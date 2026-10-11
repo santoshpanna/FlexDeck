@@ -1,0 +1,73 @@
+name: Desktop
+
+# The Windows installer (Tauri, NSIS), uploaded as the `desktop` artifact.
+#
+# Called by the pipeline for a release commit; the publish job attaches the
+# installer to the GitHub release. Run it by hand for a test build.
+#
+# The installer is not code-signed yet, so Windows SmartScreen warns on first
+# run. Signing slots in after "Build" once there is a certificate.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Release version, e.g. v0.2.0
+        type: string
+        required: true
+      ref:
+        description: Commit or tag to build
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to stamp into the build
+        type: string
+        default: v0.0.0-dev
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Stamp version
+        run: node scripts/release/version.ts "${{ inputs.version }}" --desktop
+
+      - name: Build
+        run: pnpm --filter @flexdeck/desktop tauri build --bundles nsis
+
+      # A fixed name: the download page links to releases/latest/download/<name>.
+      - name: Collect
+        run: |
+          mkdir -p out
+          cp target/release/bundle/nsis/*-setup.exe out/flexdeck-windows-x64-setup.exe
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop
+          path: out/flexdeck-windows-x64-setup.exe
+          if-no-files-found: error

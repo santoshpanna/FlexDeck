@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test test/connections.test.ts test/config.test.ts test/editing.test.ts test/pages.test.ts test/grid.test.ts test/widgets.test.ts test/interaction.test.ts test/dots.test.ts test/gesture.test.ts test/automation-display.test.ts test/plugins.test.ts test/slider.test.ts test/icons.test.ts test/flow.test.ts test/face.test.ts test/face.edit.test.ts test/presets.test.ts test/sources.test.ts test/share.test.ts test/canvas.test.ts test/recipe.test.ts test/live.test.ts test/fill.test.ts",
+    "test": "node --test test/connections.test.ts test/config.test.ts test/editing.test.ts test/pages.test.ts test/grid.test.ts test/widgets.test.ts test/interaction.test.ts test/dots.test.ts test/gesture.test.ts test/automation-display.test.ts test/plugins.test.ts test/slider.test.ts test/icons.test.ts test/flow.test.ts test/face.test.ts test/face.edit.test.ts test/presets.test.ts test/sources.test.ts test/share.test.ts test/canvas.test.ts test/recipe.test.ts test/live.test.ts test/fill.test.ts test/site.test.ts",
     "check:roundtrip": "node scripts/roundtrip.check.ts"
   },
   "dependencies": {
@@ -16,6 +16,7 @@
     "@flexdeck/grid": "workspace:*",
     "@flexdeck/tokens": "workspace:*",
     "@flexdeck/ui": "workspace:*",
+    "marked": "^16.4.2",
     "motion": "^14.1.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

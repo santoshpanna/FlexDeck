@@ -1,7 +1,8 @@
 import type { GridSpec, Orientation } from "@flexdeck/grid";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { AppLink } from "../../../common/components/AppLink/AppLink.component.tsx";
+import { SITE_HREF } from "../../../common/site/site.ts";
 
 import { Key, Label, Led, Mark, Notice, NoticeSlot, Plate, ease, spring } from "@flexdeck/ui";
 import { AsciiScene, render, rings, scan } from "@flexdeck/ui/ascii";
@@ -312,10 +313,10 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
     <div className="min-h-screen bg-body bg-dots text-ink">
       <header className="sticky top-0 z-30 border-b border-line/80 bg-body/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1680px] flex-wrap items-center gap-x-5 gap-y-3 px-5 py-3">
-          <Link to="/" className="flex items-center gap-2.5 text-[15px] font-bold tracking-[0.3em] text-ink no-underline">
+          <AppLink to={SITE_HREF} className="flex items-center gap-2.5 text-[15px] font-bold tracking-[0.3em] text-ink no-underline">
             <Mark className="h-5" />
             FLEXDECK
-          </Link>
+          </AppLink>
           <DesktopSwitcher desktops={desktops} selected={desktop} onSelect={selectDesktop} />
           {loaded ? <Tabs tabs={CONFIG_TABS} active={tab} onSelect={selectTab} /> : null}
           <div className="ml-auto flex items-center gap-4">

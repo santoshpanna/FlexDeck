@@ -138,6 +138,70 @@ would do nothing because no live executor is installed. They are warnings rather
 than errors, because same-machine testing is legitimate, so the caller decides
 what to show.
 
+## Releasing and deploying
+
+Everything after a push to `main` is one workflow,
+`.github/workflows/pipeline.yml`, which runs the changelog first and then calls
+one workflow per target. Each target workflow can also be run by hand from the
+Actions tab.
+
+| Stage | Workflow | Runs | Goes to |
+| --- | --- | --- | --- |
+| Changelog | `pipeline.yml` | every push | `CHANGELOG.md` + `releases.json`, committed back; release tags |
+| Web | `web.yml` | every push | Vercel: landing, docs, changelog, download at `flex-deck.com` |
+| Server | `server.yml` | when cloud or portal code changed, and on releases | Docker Hub image → Easypanel: editor + API at `app.flex-deck.com` |
+| Desktop | `desktop.yml` | release commits | Windows installer (NSIS) |
+| Android | `android.yml` | release commits | signed release APK |
+| Publish | `pipeline.yml` | release commits | GitHub release with both files, `SHA256SUMS.txt` and notes |
+
+The public pages and the editor are deployed apart because the editor and the
+cloud API must share an origin (see `crates/flexdeck-cloud/src/portal.rs`). The
+Vercel build is told the editor's address (`VITE_EDITOR_URL`), and
+`flex-deck.com/config` redirects there. The cloud image is built with
+`VITE_EDITOR_ONLY=true`, so `app.flex-deck.com/` is the editor itself.
+
+### The changelog comes from commits
+
+Every `feat`, `fix`, `perf` or `sec` line in a commit, subject or body, is a
+public changelog entry, so write those lines for users. The scope picks the part
+of the product: `desktop`, `android`, `portal`, `ui`, `plugin`, or a plugin's id.
+`chore`, `ci`, `test`, `docs` and `refactor` lines stay off the page. The mapping
+lives in `scripts/changelog/changelog.lib.ts`.
+
+A release is cut by a commit with a `release:` line. Its subject is the release
+title, and its untyped lines are the blurb:
+
+```text
+First public release
+release: v0.1.0
+The tablet in your drawer, turned into a control surface for your PC.
+feat(desktop): pair with six digits
+```
+
+Pushing that builds both apps, tags the commit and publishes the release. If a
+build fails, fix it and run *Pipeline* again by hand: a version that has a tag
+but no GitHub release is built again. Run `pnpm changelog` to preview locally.
+
+### One-time setup
+
+| Where | Name | What |
+| --- | --- | --- |
+| Repository secret | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | A Vercel token and the project's ids (`vercel link` writes them to `.vercel/project.json`) |
+| Repository variable | `EDITOR_URL` | The cloud's origin; defaults to `https://app.flex-deck.com` |
+| Repository variable | `DOCKERHUB_USERNAME` | The Docker Hub account the image is pushed to |
+| Repository secret | `DOCKERHUB_TOKEN` | A Docker Hub access token with read and write access |
+| Repository secret | `EASYPANEL_DEPLOY_WEBHOOK` | The Easypanel service's deploy webhook URL |
+| Repository secret | `ANDROID_KEYSTORE_BASE64` | The release keystore, `base64 -w0 release.jks` |
+| Repository secret | `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | Its passwords and alias |
+
+The Easypanel service uses the Docker image `<DOCKERHUB_USERNAME>/flexdeck-cloud:latest`
+on port `8787`, with a volume at `/data` and the domain `app.flex-deck.com`. The
+Docker Hub repository can be public (the source is public anyway). If you make
+it private, give Easypanel a read-only Docker Hub access token.
+
+Keep the Android keystore safe forever. Every update must be signed with the same
+key, or Android refuses to install it over the old version.
+
 ## Build status
 
 **Phase C complete — the agent builds, runs, pairs, and serves.**
