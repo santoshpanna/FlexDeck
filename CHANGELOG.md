@@ -15,3 +15,5 @@ Generated from commit history by `pnpm changelog`. Do not edit by hand.
 - **plugins** OBS Studio: bump to 0.4 with scene/record/stream presets and set_scene active.
 - **android** Add connection panel, ASCII link view, and pairing polish.
 - **desktop** Surface endpoint address/port on home and pair screens.
+- **editor** Add download, docs, and changelog routes with site nav.
+- **editor** Split public site vs editor-only builds via VITE flags.
