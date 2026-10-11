@@ -50,5 +50,5 @@ dependencies {
   // WebSockets. Hand-rolling the upgrade and framing would be a large amount of
   // code to get subtly wrong, and this is the one dependency the client cannot
   // reasonably avoid.
-  implementation("com.squareup.okhttp3:okhttp:4.12.0")
+  implementation("com.squareup.okhttp3:okhttp:5.5.0")
 }
