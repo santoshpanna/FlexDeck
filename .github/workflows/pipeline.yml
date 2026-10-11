@@ -175,7 +175,7 @@ jobs:
 
       # Only the apps: the server job's Docker build record is an artifact too,
       # and it does not download. A single-app release matches just one.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: "{desktop-*,android}"
           path: out
