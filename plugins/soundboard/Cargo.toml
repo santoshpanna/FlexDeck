@@ -14,7 +14,7 @@ path = "src/main.rs"
 flexdeck-plugin-sdk = { path = "../../crates/flexdeck-plugin-sdk" }
 serde_json = { workspace = true }
 cpal = "0.15.3"
-symphonia = { version = "0.5.4", default-features = false, features = ["mp3", "wav", "pcm", "flac", "ogg", "vorbis", "aac", "isomp4", "adpcm"] }
+symphonia = { version = "0.6.1", default-features = false, features = ["mp3", "wav", "pcm", "flac", "ogg", "vorbis", "aac", "isomp4", "adpcm"] }
 # The same TLS setup as the agent: rustls with aws-lc-rs only. A second provider
 # (ureq 2 brings ring) leaves rustls unable to pick one, workspace-wide.
 ureq = { version = "3", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots"] }
