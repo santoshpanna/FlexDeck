@@ -13,7 +13,7 @@ rust-version = "1.89"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "2"
-zip = { version = "2", default-features = false, features = ["deflate"], optional = true }
+zip = { version = "8", default-features = false, features = ["deflate"], optional = true }
 
 [features]
 # Reading a `.fdpkg`. Optional so the contract itself stays dependency-light;
