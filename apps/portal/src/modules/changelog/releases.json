@@ -48,6 +48,15 @@
           "text": "Split public site vs editor-only builds via VITE flags."
         }
       ]
+    },
+    {
+      "name": "Fixed",
+      "items": [
+        {
+          "area": "DESKTOP",
+          "text": "Run pnpm dev/build from app cwd in Tauri hooks."
+        }
+      ]
     }
   ],
   "releases": []

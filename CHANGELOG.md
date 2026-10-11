@@ -17,3 +17,7 @@ Generated from commit history by `pnpm changelog`. Do not edit by hand.
 - **desktop** Surface endpoint address/port on home and pair screens.
 - **editor** Add download, docs, and changelog routes with site nav.
 - **editor** Split public site vs editor-only builds via VITE flags.
+
+### Fixed
+
+- **desktop** Run pnpm dev/build from app cwd in Tauri hooks.
