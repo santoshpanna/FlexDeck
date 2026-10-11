@@ -1,0 +1,18 @@
+{
+  "name": "@flexdeck/face",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Key faces — which face a widget shows and where each place falls — TypeScript reference implementation.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test test/face.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

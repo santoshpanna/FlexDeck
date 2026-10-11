@@ -1,0 +1,14 @@
+{
+  "abi": 3,
+  "id": "obs",
+  "name": "OBS Studio",
+  "version": "0.3.0",
+  "description": "Switch scenes, record, stream, and mute inputs in OBS Studio — and show its state on the deck.",
+  "author": "flexdeck",
+  "homepage": "https://obsproject.com",
+  "runtime": "node",
+  "entry": "dist/index.js",
+  "permissions": [
+    "network"
+  ]
+}

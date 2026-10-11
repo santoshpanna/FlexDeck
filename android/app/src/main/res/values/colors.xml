@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!--
+    The same palette DeckView draws with (the editor deck tokens, fd-deck-*).
+    Kept here as well so the window background painted before the first frame
+    matches the deck that replaces it, instead of flashing on launch.
+  -->
+  <color name="deck_background">#0A0A0B</color>
+  <color name="deck_widget_fill">#232327</color>
+  <color name="deck_widget_border">#2A2A2F</color>
+  <color name="deck_text_muted">#8B8A85</color>
+</resources>

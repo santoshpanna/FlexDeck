@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!--
+    Inherits the platform "Fullscreen" variant, which already drops the status
+    bar from the very first frame on every API level the app supports. The
+    navigation bar and the large-screen taskbar are hidden in code, because
+    hiding those needs API-aware calls the theme cannot express.
+
+    No appcompat here: this is one activity and a Canvas, and pulling in the
+    whole support library for a theme would triple the APK.
+  -->
+  <style name="Theme.Flexdeck" parent="@android:style/Theme.Material.NoActionBar.Fullscreen">
+    <item name="android:windowBackground">@color/deck_background</item>
+    <item name="android:colorBackground">@color/deck_background</item>
+    <item name="android:windowContentTransitions">false</item>
+  </style>
+</resources>

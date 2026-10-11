@@ -1,0 +1,64 @@
+{
+  "sources": [
+    {
+      "id": "crypto",
+      "name": "Crypto price",
+      "everySeconds": 120,
+      "args": [
+        { "name": "coin", "default": "bitcoin", "description": "CoinGecko's id for the coin" },
+        { "name": "in", "default": "usd", "description": "The currency, lowercase" }
+      ],
+      "http": {
+        "url": "https://api.coingecko.com/api/v3/simple/price?ids={{args.coin}}&vs_currencies={{args.in}}&include_24hr_change=true"
+      },
+      "fields": [
+        { "name": "price", "value": "json.{{args.coin}}.{{args.in}}" },
+        { "name": "change", "value": "json.{{args.coin}}.{{args.in}}_24h_change" }
+      ]
+    },
+    {
+      "id": "crypto-chart",
+      "name": "Crypto price, the last day",
+      "everySeconds": 900,
+      "args": [
+        { "name": "coin", "default": "bitcoin", "description": "CoinGecko's id for the coin" },
+        { "name": "in", "default": "usd", "description": "The currency, lowercase" }
+      ],
+      "http": {
+        "url": "https://api.coingecko.com/api/v3/coins/{{args.coin}}/market_chart?vs_currency={{args.in}}&days=1"
+      },
+      "fields": [
+        { "name": "day", "value": "json.prices.*.1", "series": true }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "id": "ticker",
+      "name": "Crypto ticker",
+      "category": "Web",
+      "description": "A coin's price, green or red with its change today.",
+      "w": 2,
+      "h": 1,
+      "widget": {
+        "sources": [{ "source": "crypto" }],
+        "face": {
+          "layout": "FACE_LAYOUT_VALUE",
+          "background": { "graph": "src.crypto-chart.day", "graphColor": "#facc15" },
+          "elements": [
+            { "slot": "SLOT_TOP", "template": "Bitcoin" },
+            { "slot": "SLOT_VALUE", "template": "{{ this.price | currency }}", "text": { "font": "FONT_MONO" } },
+            {
+              "slot": "SLOT_CAPTION",
+              "template": "{{ this.change | round(2) | sign }}% today",
+              "rules": [
+                { "when": "this.change < 0", "color": "#ef4444" },
+                { "when": "this.change >= 0", "color": "#4ade80" }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

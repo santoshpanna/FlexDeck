@@ -1,0 +1,14 @@
+[package]
+name = "flexdeck-actions"
+description = "Resolves configured actions and executes them on the desktop."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+enigo = "0.6.1"
+flexdeck-protocol = { path = "../flexdeck-protocol" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = "2.0.21"

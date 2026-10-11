@@ -1,0 +1,14 @@
+{
+  "abi": 3,
+  "id": "streamerbot",
+  "name": "Streamer.bot",
+  "version": "0.1.0",
+  "description": "Run Streamer.bot actions, flip between two, switch them on and off, and show their state and global variables on the deck.",
+  "author": "flexdeck",
+  "homepage": "https://streamer.bot",
+  "runtime": "node",
+  "entry": "dist/index.js",
+  "permissions": [
+    "network"
+  ]
+}

@@ -1,0 +1,19 @@
+[package]
+name = "flexdeck-protocol"
+description = "Generated proto3 types and proto3-JSON mapping for the flexdeck contract."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+pbjson = "0.9.0"
+pbjson-types = "0.9.0"
+prost = "0.14.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[build-dependencies]
+pbjson-build = "0.9.0"
+prost-build = "0.14.1"
+protoc-bin-vendored = "3.2.0"

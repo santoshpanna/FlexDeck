@@ -1,0 +1,75 @@
+# Node / JS
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+.pnpm-store/
+
+# Rust
+target/
+
+# Tauri regenerates these from tauri.conf.json on every build. They are build
+# output, not source, and `dist/` and `target/` above already cover the rest of
+# the desktop app — this is the one directory they do not reach.
+apps/desktop/src-tauri/gen/schemas/
+
+# Gradle / Android
+.gradle/
+android/local.properties
+android/**/build/
+*.apk
+
+# IDE / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Local runtime data (agent config store, logs, pairing identity)
+# `.flexdeck/` is the agent binary's default `--data-dir`, so `pnpm dev:desktop`
+# creates it at the repository root. It is ignored as a directory rather than
+# relying on the `*.db`/`*.pem` patterns below, which would stop covering it the
+# moment a differently-named file appears in there.
+.flexdeck/
+# The cloud binary's default `--data-dir`: the accounts and linked desktops it
+# would otherwise forget on every restart. Ignored as a directory for the same
+# reason `.flexdeck/` is — a file added inside it later must not leak silently.
+.flexdeck-cloud/
+flexdeck-data/
+.testdata/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.log
+*.pem
+*.der
+
+# Locally downloaded toolchains (JDK, Gradle) — never committed
+.tools/
+
+# Throwaway probe crates used to answer a build question before committing to a
+# dependency (e.g. "does the prebuilt extism runtime link on Windows?"). They have
+# their own `[workspace]` table so they never join the root workspace.
+.probe/
+.tauri-probe/
+
+# Python
+__pycache__/
+.venv/
+
+# Temporary files
+*.tmp
+tmp/
+# AI agent / editor tooling — local only, never committed
+.agents/
+.claude/
+.codex/
+.cursor/
+.windsurf/
+.gemini/
+.mcp.json
+skills-lock.json
+CLAUDE.local.md
+HANDOFF.md

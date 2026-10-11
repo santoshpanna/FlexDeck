@@ -1,0 +1,73 @@
+{
+  "name": "@flexdeck/plugin-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Write FlexDeck plugins: define actions, variables, events and feeds; the SDK speaks the protocol, builds, checks and packs.",
+  "keywords": [
+    "flexdeck",
+    "plugin",
+    "sdk",
+    "deck",
+    "tablet"
+  ],
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./pack": "./src/pack.ts",
+    "./repo": "./src/repo.ts",
+    "./testing": "./src/testing.ts",
+    "./conformance": "./src/conformance.ts"
+  },
+  "bin": {
+    "flexdeck-plugin": "./src/cli.ts"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "pnpm run build"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./pack": {
+        "types": "./dist/pack.d.ts",
+        "default": "./dist/pack.js"
+      },
+      "./repo": {
+        "types": "./dist/repo.d.ts",
+        "default": "./dist/repo.js"
+      },
+      "./testing": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
+      "./conformance": {
+        "types": "./dist/conformance.d.ts",
+        "default": "./dist/conformance.js"
+      }
+    },
+    "bin": {
+      "flexdeck-plugin": "./dist/cli.js"
+    }
+  },
+  "dependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.9.3"
+  }
+}

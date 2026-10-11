@@ -1,0 +1,113 @@
+{
+  "about": "The face each renderer works out for a widget in a look (faceFor). Read by crates/flexdeck-server (faces.rs), android/core/client (FacesTest) and apps/portal (test/face.test.ts). Faces are in the proto3 JSON mapping: defaults are omitted.",
+  "cases": [
+    {
+      "name": "a plain key: its icon over its label, in its colours",
+      "widget": {"id": "mute", "props": {"label": "Mute", "icon": "mic", "bgColor": "#1e40af", "fgColor": "#ffffff"}},
+      "face": {
+        "background": {"color": "#1e40af"},
+        "elements": [
+          {"slot": "SLOT_ICON", "kind": "ELEMENT_KIND_ICON", "template": "mic", "color": "#ffffff"},
+          {"template": "Mute", "color": "#ffffff"}
+        ]
+      }
+    },
+    {
+      "name": "a label alone has no icon element",
+      "widget": {"id": "go", "props": {"label": "Go"}},
+      "face": {"elements": [{"template": "Go"}]}
+    },
+    {
+      "name": "no props: an empty title (the renderer shows the id)",
+      "widget": {"id": "bare"},
+      "face": {"elements": [{}]}
+    },
+    {
+      "name": "a live label and a live icon win over the plain ones",
+      "widget": {"id": "rec", "props": {"label": "Rec", "labelTemplate": "REC {{obs.record_time}}", "icon": "music", "iconTemplate": "{{media.art}}"}},
+      "face": {
+        "elements": [
+          {"slot": "SLOT_ICON", "kind": "ELEMENT_KIND_ICON", "template": "{{media.art}}"},
+          {"template": "REC {{obs.record_time}}"}
+        ]
+      }
+    },
+    {
+      "name": "a schema-3 look replaces the label, icon and colours it has",
+      "widget": {
+        "id": "mic", "props": {"label": "Mic", "icon": "mic", "fgColor": "#eeeeee"},
+        "states": {"looks": [{"id": "muted", "label": "Muted", "icon": "mic-off", "bgColor": "#7f1d1d"}], "cycle": {}}
+      },
+      "look": "muted",
+      "face": {
+        "background": {"color": "#7f1d1d"},
+        "elements": [
+          {"slot": "SLOT_ICON", "kind": "ELEMENT_KIND_ICON", "template": "mic-off", "color": "#eeeeee"},
+          {"template": "Muted", "color": "#eeeeee"}
+        ]
+      }
+    },
+    {
+      "name": "a live label still wins over a look's label",
+      "widget": {
+        "id": "scene", "props": {"labelTemplate": "{{obs.scene}}"},
+        "states": {"looks": [{"id": "on", "label": "On", "fgColor": "#000000"}], "cycle": {}}
+      },
+      "look": "on",
+      "face": {"elements": [{"template": "{{obs.scene}}", "color": "#000000"}]}
+    },
+    {
+      "name": "a widget's own face is used as it is",
+      "widget": {
+        "id": "cpu", "props": {"label": "ignored"},
+        "face": {"layout": "FACE_LAYOUT_VALUE", "elements": [{"slot": "SLOT_VALUE", "template": "{{system.cpu.usage}}%"}, {"slot": "SLOT_CAPTION", "template": "CPU"}]}
+      },
+      "face": {"layout": "FACE_LAYOUT_VALUE", "elements": [{"slot": "SLOT_VALUE", "template": "{{system.cpu.usage}}%"}, {"slot": "SLOT_CAPTION", "template": "CPU"}]}
+    },
+    {
+      "name": "a look over a face: the first title, the first icon, the background, and every text and icon colour",
+      "widget": {
+        "id": "cpu",
+        "face": {
+          "layout": "FACE_LAYOUT_VALUE",
+          "elements": [
+            {"slot": "SLOT_VALUE", "template": "{{system.cpu.usage}}"},
+            {"template": "CPU"},
+            {"slot": "SLOT_ICON", "kind": "ELEMENT_KIND_ICON", "template": "cpu"},
+            {"slot": "SLOT_VISUAL", "kind": "ELEMENT_KIND_GAUGE", "template": "{{system.cpu.usage}}", "color": "#4ade80"}
+          ]
+        },
+        "states": {"looks": [{"id": "hot", "label": "HOT", "icon": "flame", "bgColor": "#7f1d1d", "fgColor": "#ffffff"}], "cycle": {}}
+      },
+      "look": "hot",
+      "face": {
+        "layout": "FACE_LAYOUT_VALUE",
+        "background": {"color": "#7f1d1d"},
+        "elements": [
+          {"slot": "SLOT_VALUE", "template": "{{system.cpu.usage}}", "color": "#ffffff"},
+          {"template": "HOT", "color": "#ffffff"},
+          {"slot": "SLOT_ICON", "kind": "ELEMENT_KIND_ICON", "template": "flame", "color": "#ffffff"},
+          {"slot": "SLOT_VISUAL", "kind": "ELEMENT_KIND_GAUGE", "template": "{{system.cpu.usage}}", "color": "#4ade80"}
+        ]
+      }
+    },
+    {
+      "name": "a look with a face of its own shows that face",
+      "widget": {
+        "id": "rec", "props": {"label": "Rec"},
+        "states": {"looks": [{"id": "live", "label": "ignored", "face": {"layout": "FACE_LAYOUT_ART", "background": {"image": "{{media.art}}"}, "elements": [{"template": "LIVE"}]}}], "cycle": {}}
+      },
+      "look": "live",
+      "face": {"layout": "FACE_LAYOUT_ART", "background": {"image": "{{media.art}}"}, "elements": [{"template": "LIVE"}]}
+    },
+    {
+      "name": "a look that does not exist: the widget's own face",
+      "widget": {
+        "id": "mic", "props": {"label": "Mic"},
+        "states": {"looks": [{"id": "muted", "label": "Muted"}], "cycle": {}}
+      },
+      "look": "gone",
+      "face": {"elements": [{"template": "Mic"}]}
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "abi": 3,
+  "id": "template",
+  "name": "Template",
+  "version": "0.1.0",
+  "description": "A starting point for a flexdeck plugin.",
+  "author": "you",
+  "runtime": "node",
+  "entry": "dist/index.js",
+  "permissions": [
+    "notifications"
+  ]
+}

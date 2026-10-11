@@ -1,0 +1,29 @@
+{
+  "name": "@flexdeck/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The flexdeck desktop window: what this computer is doing, who is connected, and what it can do.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/status.test.ts test/plugins.test.ts test/countdown.test.ts test/home.test.ts"  },
+  "dependencies": {
+    "@flexdeck/tokens": "workspace:*",
+    "@flexdeck/ui": "workspace:*",
+    "@tauri-apps/api": "^2.9.0",
+    "motion": "^14.1.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.1"
+  }
+}

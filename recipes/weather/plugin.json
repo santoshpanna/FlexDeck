@@ -1,0 +1,13 @@
+{
+  "abi": 4,
+  "id": "weather",
+  "name": "Weather",
+  "version": "1.0.0",
+  "description": "The weather where each key says, from Open-Meteo. No account needed.",
+  "author": "flexdeck",
+  "runtime": "recipe",
+  "recipe": "recipe.json",
+  "permissions": [
+    "network"
+  ]
+}

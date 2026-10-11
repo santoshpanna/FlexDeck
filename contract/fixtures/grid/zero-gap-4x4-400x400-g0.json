@@ -1,0 +1,9 @@
+{
+  "name": "4x4, 400x400, gap 0 (hand-checkable: 100px cells)",
+  "spec": { "cols": 4, "rows": 4, "gapX": 0, "gapY": 0, "usableW": 400, "usableH": 400 },
+  "widgets": [
+    { "id": "a", "col": 0, "row": 0, "w": 1, "h": 1 },
+    { "id": "b", "col": 1, "row": 1, "w": 2, "h": 2 },
+    { "id": "c", "col": 3, "row": 3, "w": 1, "h": 1 }
+  ]
+}

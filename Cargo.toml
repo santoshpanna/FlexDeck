@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+# Listed explicitly rather than globbing `apps/*`. The portal is a JavaScript
+# package with no Cargo.toml, and a glob makes Cargo try to load it as a crate,
+# which fails with a bare "cannot find the file specified" that names the
+# directory but not the reason.
+members = ["crates/*", "apps/agent", "apps/desktop/src-tauri", "plugins/soundboard"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+# Declared honestly rather than aspirationally: 1.89 because `File::try_lock` is
+# what gives the cloud a data-directory lock the kernel releases on a crash, which
+# is the only shape of lock that does not need deleting by hand afterwards.
+# An artificially low number makes Cargo's MSRV-aware resolver silently downgrade
+# dependencies instead of failing loudly, which hides the mismatch rather than
+# resolving it.
+rust-version = "1.89"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

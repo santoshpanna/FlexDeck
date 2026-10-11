@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the older run's answer irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # The reference implementation. If this fails, the golden fixtures are wrong
+  # and everything downstream is meaningless — fix this first.
+  # ---------------------------------------------------------------------------
+  grid-parity-typescript:
+    name: Grid parity — TypeScript (reference)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node 24 runs .ts directly via type stripping; no build step needed.
+          node-version: "24"
+
+      - name: Correctness + parity tests
+        run: node --test packages/grid/test/grid.test.ts packages/grid/test/parity.test.ts
+
+      - name: Golden fixtures are not stale
+        run: |
+          node packages/grid/scripts/gen-expected.ts
+          if ! git diff --exit-code -- contract/fixtures/grid; then
+            echo "::error::contract/fixtures/grid/*.expected.json is out of date."
+            echo "Run 'pnpm gen:expected' and commit the result."
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Every TypeScript package: portal, desktop UI, tokens, plugin SDK, plugins.
+  # ---------------------------------------------------------------------------
+  node:
+    name: TypeScript — typecheck + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck + tests
+        run: pnpm verify:node
+
+      - name: Plugin SDK, template and plugins
+        run: pnpm --filter "./plugins/*" --filter @flexdeck/plugin-sdk -r run test
+
+      # Production dependencies only: a dev-tool advisory does not ship.
+      - name: Audit
+        run: pnpm audit --prod --audit-level high
+
+  # ---------------------------------------------------------------------------
+  # Renderer #2, and the whole Rust workspace with it. Run on Windows too: it is
+  # the platform the live system backend, the installer and most users are on,
+  # and `cfg(windows)` code is invisible to a Linux-only build.
+  # ---------------------------------------------------------------------------
+  rust:
+    name: Rust — ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tauri (webkit2gtk, gtk, appindicator) and enigo (libxdo) link against
+      # these; without them the workspace does not build on a stock runner.
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Formatting
+        if: runner.os == 'Linux'
+        run: cargo fmt --all -- --check
+
+      - name: Lints
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test --workspace
+
+  # ---------------------------------------------------------------------------
+  # Known-vulnerable crates. Advisories only for now; licences and bans need a
+  # `deny.toml` policy first.
+  # ---------------------------------------------------------------------------
+  rust-advisories:
+    name: Rust — advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories
+
+  # ---------------------------------------------------------------------------
+  # Renderer #3 — the one the user actually looks at — plus the client core and
+  # a real APK build, so a broken app module cannot hide behind green JVM tests.
+  # ---------------------------------------------------------------------------
+  android:
+    name: Android — grid, client, app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # GitHub's Ubuntu image ships an Android SDK and sets ANDROID_HOME.
+      - name: Tests + debug APK
+        run: ./gradlew :core:grid:test :core:client:test :app:assembleDebug --no-daemon

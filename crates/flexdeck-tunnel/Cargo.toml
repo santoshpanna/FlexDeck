@@ -1,0 +1,13 @@
+[package]
+name = "flexdeck-tunnel"
+description = "The desktop <-> cloud tunnel: frame coding and request correlation."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+flexdeck-protocol = { path = "../flexdeck-protocol" }
+serde_json = { workspace = true }
+thiserror = "2.0.21"
+tokio = { version = "1.53.1", features = ["sync"] }

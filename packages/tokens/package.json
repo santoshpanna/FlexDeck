@@ -1,0 +1,23 @@
+{
+  "name": "@flexdeck/tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared design tokens — one palette, type scale and rule set for the portal and the desktop window.",
+  "exports": {
+    "./tokens.css": "./src/tokens.css",
+    "./theme.css": "./src/theme.css",
+    "./tokens.ts": "./src/tokens.ts",
+    "./theme.ts": "./src/theme.ts",
+    ".": "./src/tokens.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/theme.test.ts && node scripts/check-contrast.mjs",
+    "check:contrast": "node scripts/check-contrast.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3"
+  }
+}

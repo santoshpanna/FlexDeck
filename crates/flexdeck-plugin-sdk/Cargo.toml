@@ -1,0 +1,17 @@
+[package]
+name = "flexdeck-plugin-sdk"
+description = "Write a native flexdeck plugin in Rust: describe it, and the SDK speaks the protocol."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# Only the contract and JSON. A plugin is a separate program the user installs,
+# so it must not drag in the agent's input injection or Windows bindings.
+[dependencies]
+flexdeck-plugin-abi = { path = "../flexdeck-plugin-abi" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# `images/put` names the image by its sha256 and carries it as base64.
+base64 = "0.22"
+sha2 = "0.10"

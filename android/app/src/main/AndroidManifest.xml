@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- INTERNET is the only one actually used. WAKE_LOCK and ACCESS_NETWORK_STATE
+       were declared but never taken: an unused permission is a promise the app
+       does not keep, and one of them is the scary-looking one in a bug report
+       about battery drain. -->
+  <uses-permission android:name="android.permission.INTERNET" />
+
+  <application
+    android:label="flexdeck"
+    android:allowBackup="false"
+    android:icon="@mipmap/ic_launcher"
+    android:theme="@style/Theme.Flexdeck">
+
+    <activity
+      android:name=".MainActivity"
+      android:exported="true"
+      android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode"
+      android:launchMode="singleTask"
+      android:screenOrientation="fullSensor"
+      android:windowSoftInputMode="adjustResize">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>

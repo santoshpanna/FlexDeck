@@ -1,0 +1,149 @@
+syntax = "proto3";
+
+package flexdeck.v1;
+
+import "flexdeck/v1/config.proto";
+
+// Characteristics a client reports on connect, used to pick a profile.
+message DeviceProfile {
+  uint32 width_px = 1;
+  uint32 height_px = 2;
+  uint32 dpi = 3;
+  string orientation = 4; // "landscape" | "portrait"
+}
+
+// First frame a client sends. Must be the first message on the socket.
+message ClientHello {
+  string role = 1; // "android" | "portal"
+  string device_id = 2;
+  string token = 3;
+  DeviceProfile device = 4;
+}
+
+// A widget interaction from a client.
+message PressEvent {
+  string widget_id = 1;
+  // Schema 1's free-text "press" | "long_press" | "release".
+  reserved 2;
+  reserved "type";
+  string value = 3;
+  int64 ts = 4; // unix milliseconds
+  Gesture gesture = 5;
+  // Which zone of the face's strip was pressed. Empty: the key itself.
+  string zone = 6;
+}
+
+// A slider moved. Sent while the finger moves, paced by the tablet, and once
+// more with `final` when it lifts. The agent runs only the latest value it has
+// when it is ready, so a burst costs one run, not one per frame.
+message ValueEvent {
+  string widget_id = 1;
+  double value = 2;
+  // Increases per drag; a stale event from an earlier drag is ignored.
+  uint32 seq = 3;
+  bool final = 4;
+  int64 ts = 5; // unix milliseconds
+}
+
+message ClientMessage {
+  oneof kind {
+    ClientHello hello = 1;
+    PressEvent press = 2;
+    ValueEvent value = 3;
+  }
+}
+
+// Sent once, in reply to a valid ClientHello.
+message ServerWelcome {
+  uint64 rev = 1;
+  string profile_id = 2;
+  Config config = 3;
+}
+
+// What a widget shows now, and how its last interaction went.
+message StateEvent {
+  string widget_id = 1;
+  // Schema 1's "idle" | "pressed" | "on" | "off": replaced by `state_id`.
+  reserved 2;
+  reserved "state";
+  // False when the last interaction failed; `error` says why, in words.
+  bool ok = 3;
+  string error = 4;
+  // The widget's live label, from its `label_template`. Empty means "use the
+  // configured label".
+  string label = 5;
+  // The id of the `StateLook` to draw. Empty: the widget's own `props`.
+  string state_id = 6;
+  // A slider's current value, from its `variable`. Absent: unknown, so the
+  // thumb stays put.
+  optional double value = 7;
+  // An icon that follows a value (album art): a bundled icon name, or
+  // `img:<sha256>` fetched from the agent. Empty: the configured icon.
+  string icon = 8;
+  // Schema 4: each element of the face that shows, by its index there.
+  repeated ElementValue elements = 9;
+  // The background colour a face rule picked. Empty: the configured one.
+  string background = 10;
+  // A face rule asks the whole key to pulse.
+  bool pulse = 11;
+  // The face's background picture, its template filled. Empty: none.
+  string background_image = 12;
+  // Why what it shows may be stale: a data source it reads could not be
+  // reached, in words. Empty: nothing is wrong.
+  string problem = 13;
+  // The face's zones whose `when` holds: they show their `icon_on`.
+  repeated string zones_on = 14;
+}
+
+// One element's live value.
+message ElementValue {
+  uint32 index = 1;
+  // TEXT: the filled template. ICON: an icon name or `img:<sha256>`, empty
+  // while unknown.
+  string text = 2;
+  // BAR and GAUGE: the value. Absent: unknown.
+  optional double number = 3;
+  // The colour a rule picked. Empty: the configured one.
+  string color = 4;
+  bool pulse = 5;
+}
+
+// The recent history of a variable a graph draws. Sent whole when a tablet
+// connects (`append` false), then a point at a time (`append` true). Points
+// are evenly spaced, oldest first.
+message SeriesEvent {
+  string variable = 1;
+  repeated double points = 2;
+  bool append = 3;
+}
+
+// Show a page: what a "go to page" step does.
+message PageEvent {
+  // A page's id. Empty: move by `step` from the page on screen.
+  string page_id = 1;
+  // +1 the next page, -1 the previous; wraps around.
+  sint32 step = 2;
+}
+
+// An RFC 6902 JSON-Patch, applied to the proto3-JSON mapping of Config.
+// `rev` is the revision AFTER the patch is applied.
+message ConfigPatch {
+  uint64 rev = 1;
+  string patch = 2;
+}
+
+message ErrorEvent {
+  string code = 1;
+  string message = 2;
+}
+
+message ServerMessage {
+  oneof kind {
+    ServerWelcome welcome = 1;
+    ConfigPatch patch = 2;
+    StateEvent state = 3;
+    ErrorEvent error = 4;
+    SeriesEvent series = 5;
+    PageEvent page = 6;
+  }
+}

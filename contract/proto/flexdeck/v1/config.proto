@@ -1,0 +1,493 @@
+syntax = "proto3";
+
+package flexdeck.v1;
+
+import "google/protobuf/struct.proto";
+
+// Root configuration document.
+//
+// `rev` is the authoritative revision counter. It increments by exactly one
+// for every accepted mutation, and never decreases. Every client applies
+// changes in rev order, so a client can detect a gap and request a full
+// snapshot.
+//
+// The wire representation is the proto3 JSON mapping of this message (see
+// contract/README.md). That mapping is what RFC 6902 JSON-Patch operates on.
+message Config {
+  // Contract schema version. Bumped only for breaking changes; the agent
+  // refuses a document of a schema it does not read. 2: widgets own flows and
+  // states. 3: slider widgets, hold gestures and value-triggered flows — an
+  // older reader would refuse the new enum values, which is why it is a bump.
+  // 4: faces (layouts, elements, backgrounds, rules) and page backgrounds; a
+  // schema-3 deck reads unchanged.
+  uint32 schema = 1;
+
+  // Monotonic revision counter.
+  uint64 rev = 2;
+
+  repeated Profile profiles = 3;
+}
+
+// A layout target: one physical tablet, or a named layout a tablet can adopt.
+message Profile {
+  string id = 1;
+  string name = 2;
+  // The landscape grid: the one widgets' own col/row/w/h are placed on.
+  Grid grid = 3;
+  repeated Page pages = 4;
+  // Its own grid for portrait — 3x9 where landscape is 6x4, say. Absent: the
+  // landscape grid turned on its side.
+  Grid portrait_grid = 5;
+  // Looking after a screen that is never off. Schema 4.
+  ScreenCare screen = 6;
+}
+
+// For a tablet that shows the deck all day.
+message ScreenCare {
+  // Move the whole deck a few pixels every couple of minutes, so nothing
+  // stays in one place long enough to burn in.
+  bool shift = 1;
+  // Dim the screen between `dim_from` and `dim_to`, minutes after midnight
+  // in the tablet's time (22:00 is 1320). `dim_from` after `dim_to` spans
+  // midnight.
+  bool dim = 2;
+  uint32 dim_from = 3;
+  uint32 dim_to = 4;
+  // How bright while dimmed, 1-100 percent. 0: 10.
+  uint32 dim_level = 5;
+}
+
+// Integer grid definition.
+//
+// All geometry is derived from these integers. The cell algorithm lives in
+// packages/grid, crates/flexdeck-grid and android/core/grid — three
+// implementations of one spec, locked together by golden fixtures.
+message Grid {
+  uint32 cols = 1;
+  uint32 rows = 2;
+  uint32 gap_x = 3;
+  uint32 gap_y = 4;
+  uint32 usable_w = 5;
+  uint32 usable_h = 6;
+}
+
+message Page {
+  string id = 1;
+  string name = 2;
+  repeated Widget widgets = 3;
+  // Behind every key on the page: a picture or a gradient across the whole
+  // deck. A key whose face is `transparent` shows it through. Schema 4.
+  Background background = 4;
+}
+
+// A placement on the grid. `col`/`row` is the top-left cell (zero-based,
+// origin top-left); `w`/`h` is the span in whole cells and must be >= 1.
+message Widget {
+  string id = 1;
+  WidgetType type = 2;
+  uint32 col = 3;
+  uint32 row = 4;
+  uint32 w = 5;
+  uint32 h = 6;
+  WidgetProps props = 7;
+  // Schema 1's `actions` (one press list): replaced by `flows`.
+  reserved 8;
+  reserved "actions";
+  // What the widget does, and when: one flow per gesture, plus any number
+  // triggered by plugin events.
+  repeated Flow flows = 9;
+  // How the widget looks from moment to moment. Absent: one look, `props`.
+  WidgetStates states = 10;
+  // For WIDGET_TYPE_SLIDER: its range, direction, and the value it follows.
+  SliderProps slider = 11;
+  // Where it sits in portrait, once someone has put it there. Absent: the
+  // position is ASSUMED from the landscape one (see `placePage` in
+  // packages/grid), and moves with it until it is pinned.
+  Placement portrait = 12;
+  // How it looks beyond one label and one icon: a layout, elements in it, a
+  // background, and rules. Absent: drawn from `props` exactly as schema 3
+  // drew it (`faceOf` in each renderer, held together by the face fixtures).
+  // Schema 4.
+  Face face = 13;
+  // Data feeds this key runs its own copy of: a weather source for this
+  // key's city. Its values are `src.<source>.@<widget id>.<field>`, and the
+  // key's templates reach the first one's as `{{this.<field>}}`. Schema 4.
+  repeated SourceUse sources = 14;
+}
+
+// One key's own run of a data source, with its arguments.
+message SourceUse {
+  string source = 1;
+  map<string, string> args = 2;
+}
+
+// A widget's cells on one orientation's grid.
+message Placement {
+  uint32 col = 1;
+  uint32 row = 2;
+  uint32 w = 3;
+  uint32 h = 4;
+}
+
+enum WidgetType {
+  WIDGET_TYPE_UNSPECIFIED = 0;
+  WIDGET_TYPE_BUTTON = 1;
+  // Dragged to a value in [min, max]. Each value it settles on runs its
+  // value-triggered flow, with the value as the run's input "value".
+  WIDGET_TYPE_SLIDER = 2;
+}
+
+// How a slider is laid out and what it reports.
+message SliderProps {
+  SliderOrientation orientation = 1;
+  // The range and the step the value snaps to. An editor writes 0, 100, 1.
+  double min = 2;
+  double max = 3;
+  double step = 4;
+  // The variable the thumb follows, so a volume changed elsewhere moves the
+  // slider too. Empty: the thumb stays where the finger left it.
+  string variable = 5;
+  // At most one run per this many milliseconds while dragging; the last value
+  // always runs. 0: the agent's default.
+  uint32 throttle_ms = 6;
+}
+
+enum SliderOrientation {
+  // Along the widget's longer side.
+  SLIDER_ORIENTATION_AUTO = 0;
+  SLIDER_ORIENTATION_HORIZONTAL = 1;
+  // Bottom is `min`.
+  SLIDER_ORIENTATION_VERTICAL = 2;
+}
+
+message WidgetProps {
+  string label = 1;
+  string icon = 2;
+  string bg_color = 3; // CSS-style hex colour, e.g. "#1e40af"
+  string fg_color = 4;
+  // Schema 1's single "on while true" variable: replaced by `WidgetStates`.
+  reserved 5;
+  reserved "state_variable";
+  // A label that follows live values: "REC {{obs.record_time}}". When set it
+  // replaces `label` on the tablet; `label` remains the editor's name for it.
+  string label_template = 6;
+  // An icon that follows a value: "{{media.spotify.art}}" shows the album art
+  // as it changes. A value is a bundled icon's name or `img:<sha256>`.
+  string icon_template = 7;
+}
+
+// How a person touched a widget. The tablet tells them apart, because only
+// it knows the timing; it waits for a second tap only on a widget that has a
+// DOUBLE_TAP flow, so every other press is instant.
+enum Gesture {
+  GESTURE_UNSPECIFIED = 0;
+  GESTURE_SHORT_PRESS = 1;
+  GESTURE_LONG_PRESS = 2;
+  GESTURE_DOUBLE_TAP = 3;
+  // A finger went down and stays down: push-to-talk. Always followed by
+  // HOLD_END — when the finger lifts, or, if the tablet goes away first, sent
+  // by the agent itself, so nothing is left held.
+  GESTURE_HOLD_START = 4;
+  GESTURE_HOLD_END = 5;
+}
+
+// A run of steps and what starts it.
+//
+// `blocks` is the automation engine's block list (crates/flexdeck-automation:
+// do an action, if/else, wait, repeat, set a variable) as plain JSON. Only the
+// agent runs flows, so a tablet never needs to understand it — and keeping
+// the block language in one place means a widget and an automation can never
+// disagree about what a step means.
+message Flow {
+  FlowTrigger trigger = 1;
+  // Tells several event-triggered flows on one widget apart.
+  string name = 2;
+  google.protobuf.ListValue blocks = 3;
+  // A press on this zone of the face's strip starts it, not one on the key.
+  string zone = 4;
+}
+
+message FlowTrigger {
+  oneof on {
+    Gesture gesture = 1;
+    PluginEventTrigger event = 2;
+    // A slider settled on a value. Steps read it as the input "value".
+    ValueTrigger value = 3;
+  }
+}
+
+message ValueTrigger {}
+
+// Runs when a plugin announces `event` and every `filter` key equals the same
+// key of its payload.
+message PluginEventTrigger {
+  string plugin = 1;
+  string event = 2;
+  map<string, string> filter = 3;
+}
+
+// A widget with several looks — Muted/Live, Recording/Stopped — and what
+// decides which one shows.
+message WidgetStates {
+  repeated StateLook looks = 1;
+  oneof source {
+    // Each short press moves to the next look, after the press's flow runs.
+    CycleSource cycle = 2;
+    // A variable's value picks the look.
+    VariableSource variable = 3;
+    // An action in one of the widget's flows reports which look applies.
+    ProviderSource provider = 4;
+  }
+}
+
+// One look. Empty fields fall back to the widget's `props`.
+message StateLook {
+  string id = 1;
+  string label = 2;
+  string bg_color = 3;
+  string fg_color = 4;
+  string icon = 5;
+  // This look's whole face, in place of the widget's while it shows. Absent:
+  // the widget's face, with this look's label, icon and colours. Schema 4.
+  Face face = 6;
+}
+
+message CycleSource {}
+
+message VariableSource {
+  string variable = 1;
+  repeated StateCase cases = 2;
+  // The look while no case matches, or the variable has no value yet.
+  string otherwise = 3;
+}
+
+// "When the variable is `value`, show look `state`." Text matches exactly;
+// numbers by value; bools as "true"/"false". `op` makes it a range — "above
+// 80, show Hot". Cases are tried in order; the first that holds wins.
+message StateCase {
+  string value = 1;
+  string state = 2;
+  CompareOp op = 3;
+}
+
+enum CompareOp {
+  COMPARE_OP_EQ = 0;
+  COMPARE_OP_NE = 1;
+  COMPARE_OP_LT = 2;
+  COMPARE_OP_LE = 3;
+  COMPARE_OP_GT = 4;
+  COMPARE_OP_GE = 5;
+}
+
+// ---- Faces (schema 4) -------------------------------------------------------
+//
+// A face is a LAYOUT (named places on the key) with ELEMENTS put in those
+// places, a BACKGROUND, and RULES that recolour it as values change. Where
+// each place falls is computed alike by the editor and the tablet, held
+// together by `contract/fixtures/face`, the way the grid is.
+
+message Face {
+  FaceLayout layout = 1;
+  Background background = 2;
+  repeated Element elements = 3;
+  // The first rule that holds sets the background colour, and may pulse.
+  repeated Rule rules = 4;
+  // Buttons along the key's bottom strip, each with flows of its own: a music
+  // key's previous, play and next. The rest of the face sits above them.
+  repeated Zone zones = 5;
+}
+
+// One button of a face's bottom strip. Equal widths, in order. A flow with
+// this `name` as its `zone` runs when it is pressed; a press above the strip
+// runs the key's own flows.
+message Zone {
+  // Lowercase letters, digits, - and _: what flows name it by.
+  string name = 1;
+  // A bundled icon, `pack:<id>/<name>` or `img:<sha256>`.
+  string icon = 2;
+  // An expression: while it holds, `icon_on` shows instead (pause for play).
+  string when = 3;
+  string icon_on = 4;
+}
+
+enum FaceLayout {
+  // An icon over a label: every key before faces.
+  FACE_LAYOUT_ICON_LABEL = 0;
+  // A small line at the top, a big value in the middle, a caption under it.
+  FACE_LAYOUT_VALUE = 1;
+  // A picture fills the key; a title and a caption sit on a shade at the
+  // bottom. Album art, a photo.
+  FACE_LAYOUT_ART = 2;
+  // A visual on the leading side, a title and a caption beside it. On a key
+  // taller than it is wide, the visual goes on top.
+  FACE_LAYOUT_SPLIT = 3;
+  // A gauge or a clock filling the key, its value inside, a caption under.
+  FACE_LAYOUT_DIAL = 4;
+}
+
+// A named place in a layout. Every layout has every place; the fixtures say
+// where each falls.
+enum Slot {
+  SLOT_TITLE = 0;
+  SLOT_ICON = 1;
+  SLOT_VALUE = 2;
+  SLOT_CAPTION = 3;
+  SLOT_TOP = 4;
+  // A pill in the top corner: a count, a status.
+  SLOT_BADGE = 5;
+  // Where the layout puts its gauge, graph, clock or picture.
+  SLOT_VISUAL = 6;
+}
+
+message Element {
+  Slot slot = 1;
+  ElementKind kind = 2;
+  // TEXT: a template. ICON: a template giving a bundled icon's name or
+  // `img:<sha256>`. BAR and GAUGE: a template whose value is a number.
+  string template = 3;
+  // GRAPH: the variable whose recent history is drawn.
+  string variable = 4;
+  // BAR, GAUGE and GRAPH: the range. Both 0: 0-100 for a bar or a gauge, the
+  // data's own lowest and highest for a graph.
+  double min = 5;
+  double max = 6;
+  TextStyle text = 7;
+  // Its text's colour, an icon's stroke, or a bar's, gauge's or graph's fill
+  // (#rrggbb). Empty: the face's ink, or the signal colour.
+  string color = 8;
+  // The first rule that holds replaces `color`, and may pulse the element.
+  repeated Rule rules = 9;
+  ClockProps clock = 10;
+  GraphProps graph = 11;
+  // Put anywhere on the key, not in its layout's place: fractions of the
+  // face (the key above any strip of zones), 0 to 1. `slot` still gives its
+  // text's size and alignment.
+  Box box = 12;
+}
+
+// A part of a key's face, as fractions of it from its top-left.
+message Box {
+  double x = 1;
+  double y = 2;
+  double w = 3;
+  double h = 4;
+}
+
+enum ElementKind {
+  ELEMENT_KIND_TEXT = 0;
+  ELEMENT_KIND_ICON = 1;
+  ELEMENT_KIND_BAR = 2;
+  ELEMENT_KIND_GAUGE = 3;
+  ELEMENT_KIND_GRAPH = 4;
+  // Drawn by the tablet from its own clock: no traffic, and it ticks smoothly.
+  ELEMENT_KIND_CLOCK = 5;
+  // A countdown of the `timer` plugin, `variable` naming which (focus, tea):
+  // sent the seconds left, then counted down by the tablet itself.
+  ELEMENT_KIND_TIMER = 6;
+}
+
+message TextStyle {
+  TextSize size = 1;
+  bool bold = 2;
+  TextAlign align = 3;
+  Font font = 4;
+  // How many lines it may wrap to. 0: the place's own.
+  uint32 max_lines = 5;
+  // Too long for its place: one line, scrolling sideways, instead of cut short.
+  bool marquee = 6;
+}
+
+enum TextSize {
+  // The place's own size.
+  TEXT_SIZE_AUTO = 0;
+  TEXT_SIZE_XS = 1;
+  TEXT_SIZE_S = 2;
+  TEXT_SIZE_M = 3;
+  TEXT_SIZE_L = 4;
+  TEXT_SIZE_XL = 5;
+  // As large as fits the place.
+  TEXT_SIZE_FIT = 6;
+}
+
+enum TextAlign {
+  // The place's own alignment.
+  TEXT_ALIGN_AUTO = 0;
+  TEXT_ALIGN_START = 1;
+  TEXT_ALIGN_CENTER = 2;
+  TEXT_ALIGN_END = 3;
+}
+
+enum Font {
+  FONT_SANS = 0;
+  // Fixed width: digits that do not jiggle as a clock or a number changes.
+  FONT_MONO = 1;
+  FONT_SERIF = 2;
+}
+
+message ClockProps {
+  bool analog = 1;
+  bool seconds = 2;
+  // Digital: a strftime-style format, "%H:%M". Empty: 24-hour "%H:%M".
+  string format = 3;
+  // An IANA zone, "Asia/Tokyo". Empty: the tablet's own.
+  string zone = 4;
+}
+
+message GraphProps {
+  GraphStyle style = 1;
+  // How many of the latest points to draw. 0: 60, a minute at one a second.
+  uint32 points = 2;
+}
+
+enum GraphStyle {
+  GRAPH_STYLE_AREA = 0;
+  GRAPH_STYLE_LINE = 1;
+  GRAPH_STYLE_BARS = 2;
+}
+
+message Background {
+  // A solid colour (#rrggbb).
+  string color = 1;
+  // With `color`: a fade from it at the top to this at the bottom.
+  string color_to = 2;
+  // A picture filling the face: `img:<sha256>`, or a template that gives one
+  // ("{{media.current.art}}").
+  string image = 3;
+  ImageFit fit = 4;
+  // How much a picture is darkened so text on it reads, 0-90. 0: the
+  // layout's own (ART shades its bottom; the others nothing).
+  uint32 dim = 5;
+  // A graph of this variable's recent history, behind everything else.
+  string graph = 6;
+  string graph_color = 7;
+  // No face at all: the page's background shows through.
+  bool transparent = 8;
+}
+
+enum ImageFit {
+  IMAGE_FIT_COVER = 0;
+  IMAGE_FIT_CONTAIN = 1;
+}
+
+// "While `when` holds, use this colour." `when` is an expression over live
+// values, without braces: `system.cpu.usage > 80`.
+message Rule {
+  string when = 1;
+  string color = 2;
+  bool pulse = 3;
+}
+
+// Which action reports the state: the `flow`-th flow, and the path of block
+// indexes down to its DoAction (into if/repeat bodies when nested).
+message ProviderSource {
+  uint32 flow = 1;
+  repeated uint32 path = 2;
+}
+
+// A single action invocation. `plugin`/`action` select the handler;
+// `args` are passed through. Built-ins use plugin = "core".
+message Action {
+  string plugin = 1;
+  string action = 2;
+  map<string, string> args = 3;
+}

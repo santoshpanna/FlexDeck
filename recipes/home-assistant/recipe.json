@@ -1,0 +1,47 @@
+{
+  "sources": [
+    {
+      "id": "home-assistant",
+      "name": "Home Assistant entity",
+      "everySeconds": 30,
+      "lan": true,
+      "args": [
+        { "name": "url", "default": "http://homeassistant.local:8123", "description": "Your Home Assistant's address" },
+        { "name": "token", "secret": true, "description": "A long-lived access token (Profile → Security). Kept on this computer only." },
+        { "name": "entity", "default": "sensor.living_room_temperature", "description": "The entity's id" }
+      ],
+      "http": {
+        "url": "{{args.url}}/api/states/{{args.entity}}",
+        "headers": { "Authorization": "Bearer {{args.token}}" }
+      },
+      "fields": [
+        { "name": "state", "value": "json.state" },
+        { "name": "name", "value": "json.attributes.friendly_name | default(json.entity_id)" },
+        { "name": "unit", "value": "json.attributes.unit_of_measurement | default(\"\")" },
+        { "name": "on", "value": "json.state == \"on\"" }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "id": "entity",
+      "name": "Home Assistant",
+      "category": "Web",
+      "description": "One entity's state: a sensor's reading, or a light on or off. Set the address, token and entity in Its own data.",
+      "w": 1,
+      "h": 1,
+      "widget": {
+        "sources": [{ "source": "home-assistant" }],
+        "face": {
+          "layout": "FACE_LAYOUT_VALUE",
+          "rules": [{ "when": "this.on", "color": "#854d0e" }],
+          "elements": [
+            { "slot": "SLOT_TOP", "template": "{{ this.name | truncate(18) }}" },
+            { "slot": "SLOT_VALUE", "template": "{{this.state}}{{this.unit}}" },
+            { "slot": "SLOT_CAPTION", "template": "Home" }
+          ]
+        }
+      }
+    }
+  ]
+}

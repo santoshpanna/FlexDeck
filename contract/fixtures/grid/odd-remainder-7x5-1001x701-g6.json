@@ -1,0 +1,10 @@
+{
+  "name": "7x5, 1001x701, gap 6 (exercises remainder distribution)",
+  "spec": { "cols": 7, "rows": 5, "gapX": 6, "gapY": 6, "usableW": 1001, "usableH": 701 },
+  "widgets": [
+    { "id": "top-strip", "col": 0, "row": 0, "w": 7, "h": 1 },
+    { "id": "mid", "col": 3, "row": 2, "w": 3, "h": 2 },
+    { "id": "last", "col": 6, "row": 4, "w": 1, "h": 1 },
+    { "id": "tall", "col": 6, "row": 0, "w": 1, "h": 5 }
+  ]
+}

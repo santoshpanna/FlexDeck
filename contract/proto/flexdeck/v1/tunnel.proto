@@ -1,0 +1,207 @@
+syntax = "proto3";
+
+package flexdeck.v1;
+
+import "flexdeck/v1/events.proto";
+
+// The desktop <-> cloud tunnel.
+//
+// ---------------------------------------------------------------------------
+// DIRECTION: THE DESKTOP ALWAYS DIALS OUT, AND NOTHING DIALS IN
+// ---------------------------------------------------------------------------
+// The desktop app opens ONE persistent, outbound WebSocket to the portal and
+// holds it open. That single decision is what makes the whole product workable:
+//
+//   * no inbound port, no port forwarding, no firewall rule, no public address;
+//   * a desktop behind NAT is still reachable by its owner;
+//   * the portal never listens on the user's machine.
+//
+// It also sidesteps a problem that would otherwise sit on the critical path: a
+// page served from our domain could not reach `localhost` in the user's browser
+// because of Local Network Access restrictions, and if it could, every website
+// could. Here the browser only ever talks to our own origin.
+//
+// The tablet is untouched by all of this. It still reaches the desktop over the
+// LAN on the agent's own HTTPS listener using its device token. That token
+// never travels on this tunnel, so the cloud cannot impersonate a tablet: it
+// has never seen the credential.
+//
+// ---------------------------------------------------------------------------
+// AUTHORITY: THE DESKTOP DECIDES, THE CLOUD ONLY TRANSPORTS
+// ---------------------------------------------------------------------------
+// There are no accounts. A browser earns the right to reach a desktop by typing
+// a code shown on that desktop's own screen, and receives a credential the
+// DESKTOP issued and the desktop alone checks. The cloud forwards that
+// credential in `TunnelRequest.token` and holds nothing of its own that can act
+// on a desktop: even a fully compromised cloud cannot do more than replay what
+// a paired browser sent it.
+//
+// The one thing the cloud must get right is WHICH tunnel a fingerprint names,
+// and that is not taken on trust either. The cloud opens every tunnel with a
+// random challenge, and the desktop answers by signing it with the private key
+// of the certificate whose fingerprint it claims. A fingerprint is not a
+// secret — every paired tablet has it — but the key behind it is.
+
+// ---------------------------------------------------------------------------
+// WHY REQUESTS ARE SHAPED LIKE HTTP
+// ---------------------------------------------------------------------------
+// The agent already serves a complete, tested admin REST API, deliberately
+// built with fixed paths and JSON bodies — no path parameters — so a client can
+// hard-code every route. Forwarding `method` + `path` + `body` therefore reuses
+// that surface verbatim rather than re-declaring each command as a message
+// here, and lets the desktop dispatch into the same axum router it serves
+// locally.
+//
+// The cost, stated plainly: to *this* file, `body` is an opaque JSON string.
+// Its shape is still pinned, by the agent's REST tests, but not by the proto3
+// JSON mapping the way `Config` is. The agent's router is the authority on
+// those shapes; this contract only guarantees they survive the trip.
+//
+// ---------------------------------------------------------------------------
+// THE USUAL proto3 JSON RULES APPLY, defaults included
+// ---------------------------------------------------------------------------
+// Defaults are OMITTED, not zeroed. An empty string or a `false` boolean is
+// absent from the JSON entirely, so a client that tests `ok === false` will
+// never match anything — it must test `ok === true`. `uint64`/`int64` travel as
+// strings. This is pinned for these messages by `tests/tunnel_json.rs`.
+
+// First frame on a new tunnel, sent by the CLOUD. The desktop must answer it
+// with a TunnelHello that signs `nonce`.
+message TunnelChallenge {
+  // Random, single-use. Signing it proves the key is held *now*, so a hello
+  // recorded off an earlier tunnel cannot be replayed into a new one.
+  string nonce = 1;
+}
+
+// The desktop's answer to the challenge. Must be the first frame it sends.
+message TunnelHello {
+  // Must be bumped on ANY change to the messages in this file, not only on an
+  // obviously incompatible one.
+  //
+  // That is stricter than it sounds, and it is not caution for its own sake.
+  // The generated Rust decoder REJECTS a field it does not know — verified, see
+  // `crates/flexdeck-tunnel/src/frame.rs` — so adding a field is already a
+  // breaking change for any build that has not been updated. The protobuf JSON
+  // spec would prefer readers to ignore unknown fields; this toolchain does not.
+  //
+  // So the cloud refuses a version it does not know rather than guessing, and a
+  // mismatch is refused at the handshake with a stated reason instead of
+  // surfacing later as frames that mysteriously will not parse.
+  uint32 protocol_version = 1;
+
+  // The desktop's identity fingerprint: the SHA-256 of its self-signed
+  // certificate, the same value the tablet pins on first contact. It is what
+  // the cloud routes by.
+  string fingerprint = 2;
+
+  // Human label shown on the website, e.g. "Studio PC". Purely cosmetic, and
+  // chosen by the local user — never trusted for authorisation.
+  string name = 3;
+
+  // Was `link_token`. There are no accounts to link to any more.
+  reserved 4;
+  reserved "link_token";
+
+  // The config revision the desktop currently holds, so the portal knows where
+  // this desktop is starting from instead of assuming it is current.
+  uint64 rev = 5;
+
+  // The certificate `fingerprint` is the SHA-256 of, DER-encoded.
+  bytes certificate = 6;
+
+  // ECDSA P-256 / SHA-256, ASN.1 DER, by the certificate's key, over the
+  // three lines "flexdeck-tunnel-v2", the nonce, and the fingerprint, joined by
+  // newlines. See `flexdeck_pairing::tunnel_proof_message`.
+  bytes signature = 7;
+}
+
+// Accepted. Sent once, in reply to a valid TunnelHello.
+message TunnelWelcome {
+  // Were `desktop_id` and `account_id`, from when desktops were linked to
+  // accounts. The fingerprint is the identity now, and there are no accounts.
+  reserved 1, 2;
+  reserved "desktop_id", "account_id";
+}
+
+// Refused, and the tunnel will be closed. A rejection is terminal for this
+// connection, so `code` says why rather than leaving the desktop to reconnect
+// in a loop.
+message TunnelRejected {
+  string code = 1; // "protocol_version" | "fingerprint" | "proof" | "hello_expected" | "busy"
+  string message = 2;
+}
+
+// Desktop -> cloud: a browser pairing code is open on this desktop, so route a
+// website that presents it here.
+//
+// Only the HASH of the code travels this way. The cloud needs to find the
+// desktop, not to know the code; the code itself crosses the cloud once, when a
+// browser redeems it, and is checked by the desktop.
+message PairOffer {
+  // SHA-256 of the normalised code. EMPTY withdraws any offer this desktop made.
+  string code_hash = 1;
+
+  // Unix seconds. The cloud forgets the offer at this instant.
+  int64 expires_at = 2;
+}
+
+// A portal request, forwarded verbatim to the desktop's admin REST surface.
+message TunnelRequest {
+  // Correlates with TunnelResponse. The portal may have many in flight, so a
+  // response is only meaningful next to the request it answers.
+  uint64 id = 1;
+
+  string method = 2; // "GET" | "PUT" | "POST"
+  string path = 3;   // e.g. "/api/config"
+  string body = 4;   // JSON, empty for GET
+
+  // The calling browser's credential, exactly as it sent it. The desktop
+  // authenticates the request with this and nothing else — the cloud adds no
+  // authority of its own. Empty only for redeeming a pairing code, which is how
+  // a browser gets a credential in the first place.
+  string token = 5;
+}
+
+message TunnelResponse {
+  uint64 id = 1;
+  uint32 status = 2;
+  string body = 3;
+}
+
+// Unsolicited desktop -> cloud.
+//
+// Carries the SAME `ServerMessage` the desktop already sends down a LAN socket,
+// so the portal parses one shape for both a live patch and a catch-up — and so
+// a change to what a client sees has exactly one definition, in events.proto.
+message TunnelPush {
+  ServerMessage message = 1;
+}
+
+// NAT keepalive and liveness. An idle tunnel is dropped by routers in minutes
+// if nothing crosses it, and a dead tunnel that looks open is worse than one
+// that is known to be gone.
+message TunnelPing {}
+
+message TunnelPong {}
+
+// Every frame on the tunnel. One envelope, one `oneof`, so the reader is a
+// single match and an unhandled frame is a compile error rather than a silent
+// no-op.
+message TunnelFrame {
+  // The link ceremony, removed along with accounts.
+  reserved 4, 5, 6, 7;
+  reserved "link_request", "link_window", "link_claim", "link_result";
+
+  oneof kind {
+    TunnelHello hello = 1;
+    TunnelWelcome welcome = 2;
+    TunnelRejected rejected = 3;
+    TunnelRequest request = 8;
+    TunnelResponse response = 9;
+    TunnelPush push = 10;
+    TunnelPing ping = 11;
+    TunnelPong pong = 12;
+    TunnelChallenge challenge = 13;
+    PairOffer pair_offer = 14;
+  }
+}

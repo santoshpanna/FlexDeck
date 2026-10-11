@@ -1,0 +1,97 @@
+/*
+ * The kit's stylesheet. An app's entry CSS is three lines:
+ *
+ *   @import "tailwindcss";
+ *   @import "@flexdeck/tokens/theme.css";
+ *   @import "@flexdeck/ui/styles.css";
+ *
+ * Fonts are bundled, never fetched: the desktop window's CSP forbids remote
+ * styles, and a deck should not depend on a CDN to look like itself.
+ */
+
+@import "@fontsource/space-grotesk/400.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/700.css";
+
+/* Scan the kit's own components, wherever the app that imports this lives. */
+@source "./";
+
+@layer base {
+  html,
+  body {
+    background: var(--color-body);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--color-signal);
+    color: var(--color-signal-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-signal);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+@utility lbl {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* The KNORR pad: a dot grid that reads as a surface without becoming a pattern. */
+@utility bg-dots {
+  background-image: radial-gradient(var(--color-dot) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+@utility ascii {
+  margin: 0;
+  font-family: var(--font-mono);
+  white-space: pre;
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+  user-select: none;
+}
+
+@utility ascii-glow {
+  color: var(--color-signal);
+  text-shadow:
+    0 0 6px color-mix(in oklab, var(--color-signal) 90%, transparent),
+    0 0 18px color-mix(in oklab, var(--color-signal) 45%, transparent);
+}
+
+@utility led-glow {
+  box-shadow: 0 0 10px currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

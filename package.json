@@ -1,0 +1,40 @@
+{
+  "name": "flexdeck",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-network control surface: Tauri desktop agent + web configurator + native Android client.",
+  "license": "MIT",
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "pnpm portal:build && cargo run -p flexdeck-cloud",
+    "dev:desktop": "node scripts/startup/window.ts",
+    "dev:agent": "node scripts/startup/desktop.ts",
+    "dev:web": "node scripts/startup/web.ts",
+    "dev:android": "node scripts/startup/android.ts",
+    "desktop:dev": "pnpm --filter @flexdeck/desktop dev",
+    "desktop:build": "pnpm --filter @flexdeck/desktop build",
+    "brand:icons": "node scripts/gen-brand.mjs",
+    "desktop:app": "cargo run -p flexdeck-desktop",
+    "agent:build": "cargo build -p flexdeck-agent",
+    "portal:build": "pnpm --filter @flexdeck/portal build",
+    "portal:dev": "pnpm --filter @flexdeck/portal dev",
+    "test": "pnpm -r --if-present test",
+    "test:parity": "pnpm -r --if-present test:parity",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "gen:expected": "node packages/grid/scripts/gen-expected.ts",
+    "verify": "pnpm verify:node && pnpm verify:rust && pnpm verify:plugins && pnpm verify:android",
+    "verify:node": "pnpm -r --if-present typecheck && pnpm -r --if-present test",
+    "verify:rust": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
+    "verify:plugins": "pnpm --filter \"./plugins/*\" --filter @flexdeck/plugin-sdk -r run test && cargo test -p flexdeck-plugin-host -p flexdeck-plugin-abi",
+    "create-plugin": "node scripts/create-plugin.mjs",
+    "plugins:package": "pnpm --filter \"./plugins/*\" -r --if-present run package",
+    "verify:android": "node scripts/gradle.mjs :app:assembleDebug :core:client:test :core:grid:test --no-daemon --console=plain",
+    "gen:face": "node packages/face/scripts/gen-expected.ts",
+    "gen:presets": "node apps/portal/scripts/gen-presets.ts",
+    "gen:recipe": "node apps/portal/scripts/gen-recipe.ts"
+  }
+}

@@ -1,0 +1,15 @@
+[package]
+name = "flexdeck-vars"
+description = "Typed, namespaced variables for the flexdeck agent: live values, change events, and lazy-sampling interest."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = "2.0.21"
+tokio = { version = "1.53.1", features = ["sync"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }

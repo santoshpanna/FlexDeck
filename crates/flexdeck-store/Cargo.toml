@@ -1,0 +1,17 @@
+[package]
+name = "flexdeck-store"
+description = "SQLite-backed configuration store with an undo/redo revision log."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+json-patch = "4.2.0"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = "2.0.21"
+
+[dev-dependencies]
+tempfile = "3.27.0"

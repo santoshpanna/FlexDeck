@@ -1,0 +1,11 @@
+{
+  "name": "8x4 landscape, 1280x800, gap 8",
+  "spec": { "cols": 8, "rows": 4, "gapX": 8, "gapY": 8, "usableW": 1280, "usableH": 800 },
+  "widgets": [
+    { "id": "mute", "col": 0, "row": 0, "w": 2, "h": 1 },
+    { "id": "volume-up", "col": 2, "row": 0, "w": 1, "h": 1 },
+    { "id": "obs-scene", "col": 3, "row": 0, "w": 2, "h": 2 },
+    { "id": "corner", "col": 7, "row": 2, "w": 1, "h": 1 },
+    { "id": "play", "col": 0, "row": 3, "w": 8, "h": 1 }
+  ]
+}

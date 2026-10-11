@@ -1,0 +1,23 @@
+[package]
+name = "flexdeck-agent"
+description = "The flexdeck agent: serves the deck, runs actions, hosts the portal."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "flexdeck"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8.9", features = ["ws"] }
+axum-server = { version = "0.8.0", features = ["tls-rustls"] }
+flexdeck-actions = { path = "../../crates/flexdeck-actions" }
+flexdeck-pairing = { path = "../../crates/flexdeck-pairing" }
+flexdeck-plugin = { path = "../../crates/flexdeck-plugin" }
+flexdeck-plugin-host = { path = "../../crates/flexdeck-plugin-host" }
+flexdeck-server = { path = "../../crates/flexdeck-server" }
+flexdeck-store = { path = "../../crates/flexdeck-store" }
+open = "5"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "net"] }

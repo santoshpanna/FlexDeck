@@ -1,0 +1,23 @@
+[package]
+name = "flexdeck-pairing"
+description = "Pairing for flexdeck: self-signed identity, PIN/QR windows, device tokens."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+flexdeck-protocol = { path = "../flexdeck-protocol" }
+rand = "0.10.3"
+rcgen = "0.14.7"
+# Already in the tree through rcgen; named directly to sign and verify the
+# tunnel proof of identity (ECDSA P-256) and read a certificate's public key.
+ring = "0.17"
+x509-parser = "0.18"
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = "0.11.0"
+thiserror = "2.0.21"
+
+[dev-dependencies]
+tempfile = "3.27.0"

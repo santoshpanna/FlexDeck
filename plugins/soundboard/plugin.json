@@ -1,0 +1,16 @@
+{
+  "abi": 3,
+  "id": "soundboard",
+  "name": "Soundboard",
+  "version": "0.1.0",
+  "description": "Play sound clips to your headphones and, through a virtual audio cable, into your microphone.",
+  "author": "flexdeck",
+  "runtime": "native",
+  "entries": {
+    "windows": "bin/flexdeck-soundboard.exe"
+  },
+  "permissions": [
+    "filesystem",
+    "network"
+  ]
+}

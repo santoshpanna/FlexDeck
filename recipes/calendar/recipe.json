@@ -1,0 +1,41 @@
+{
+  "sources": [
+    {
+      "id": "calendar",
+      "name": "Calendar",
+      "everySeconds": 300,
+      "args": [
+        { "name": "url", "default": "https://", "description": "Your calendar's secret iCal (.ics) address" }
+      ],
+      "http": { "url": "{{args.url}}" },
+      "fields": [
+        { "name": "next", "value": "json.events.0.summary" },
+        { "name": "at", "value": "json.events.0.start" },
+        { "name": "soon", "value": "json.events.0.start - now" },
+        { "name": "where", "value": "json.events.0.location" }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "id": "next",
+      "name": "Next meeting",
+      "category": "Web",
+      "description": "Your next event and how soon it starts; red in the last five minutes. Paste your calendar's iCal address in Its own data.",
+      "w": 2,
+      "h": 1,
+      "widget": {
+        "sources": [{ "source": "calendar" }],
+        "face": {
+          "layout": "FACE_LAYOUT_VALUE",
+          "rules": [{ "when": "this.soon <= 300 and this.soon > 0", "color": "#7f1d1d", "pulse": true }],
+          "elements": [
+            { "slot": "SLOT_TOP", "template": "{{ this.at | time(\"%a %H:%M\") }}" },
+            { "slot": "SLOT_VALUE", "template": "{{ this.next | default(\"Nothing coming\") | truncate(28) }}", "text": { "size": "TEXT_SIZE_L", "bold": true, "maxLines": 2 } },
+            { "slot": "SLOT_CAPTION", "template": "{{ if(this.soon > 0, \"in \" + (this.soon | duration), \"now\") }}" }
+          ]
+        }
+      }
+    }
+  ]
+}

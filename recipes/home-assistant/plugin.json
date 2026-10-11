@@ -1,0 +1,13 @@
+{
+  "abi": 4,
+  "id": "home-assistant",
+  "name": "Home Assistant",
+  "version": "1.0.0",
+  "description": "Any Home Assistant entity's state, on your network.",
+  "author": "flexdeck",
+  "runtime": "recipe",
+  "recipe": "recipe.json",
+  "permissions": [
+    "network"
+  ]
+}

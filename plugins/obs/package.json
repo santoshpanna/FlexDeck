@@ -1,0 +1,22 @@
+{
+  "name": "@flexdeck/plugin-obs",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "OBS Studio for flexdeck.",
+  "scripts": {
+    "build": "flexdeck-plugin build",
+    "check": "flexdeck-plugin check",
+    "package": "flexdeck-plugin pack",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify": "flexdeck-plugin verify"
+  },
+  "dependencies": {
+    "@flexdeck/plugin-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.9.3"
+  }
+}

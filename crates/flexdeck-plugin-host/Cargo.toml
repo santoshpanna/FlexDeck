@@ -1,0 +1,30 @@
+[package]
+name = "flexdeck-plugin-host"
+description = "Runs installed flexdeck plugins as supervised child processes."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+flexdeck-plugin = { path = "../flexdeck-plugin" }
+flexdeck-vars = { path = "../flexdeck-vars" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = "2"
+base64 = "0.22"
+hex = "0.4"
+sha2 = "0.10"
+
+# A plugin written in Rust against the raw protocol, used by the tests so that
+# `cargo test` proves the host without needing Node installed. Not shipped.
+[[bin]]
+name = "flexdeck-plugin-fixture"
+path = "src/bin/fixture.rs"
+test = false
+doc = false
+
+[dev-dependencies]
+flexdeck-actions = { path = "../flexdeck-actions" }
+flexdeck-protocol = { path = "../flexdeck-protocol" }
+tempfile = "3"

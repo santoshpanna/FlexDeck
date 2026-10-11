@@ -1,0 +1,21 @@
+[package]
+name = "flexdeck-plugin-abi"
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.89"
+
+# A leaf crate on purpose: it is shared by the HOST (`crates/flexdeck-plugin-host`)
+# and by every GUEST (which lives in the separate `plugins/` workspace and reaches
+# in by path). Keeping it dependency-free apart from serde means a guest does not
+# drag the whole world into a `.wasm` just to describe itself.
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = "2"
+zip = { version = "2", default-features = false, features = ["deflate"], optional = true }
+
+[features]
+# Reading a `.fdpkg`. Optional so the contract itself stays dependency-light;
+# the agent turns it on.
+package = ["dep:zip"]

@@ -1,0 +1,13 @@
+[package]
+name = "flexdeck-expr"
+description = "Templates and expressions for the flexdeck agent: \"{{ cpu | round(1) }}%\", rules, and the values recipes compute."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# Pure: no IO, no clock but the one a caller passes in, nothing to configure.
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+serde = { workspace = true }
+thiserror = "2.0.21"

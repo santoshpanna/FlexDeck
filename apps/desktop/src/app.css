@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "@flexdeck/tokens/theme.css";
+@import "@flexdeck/ui/styles.css";
+
+/* The window is a fixed-size device face: nothing scrolls but its screen. */
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}

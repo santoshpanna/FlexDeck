@@ -1,0 +1,10 @@
+{
+  "name": "6x3, 500x300, gap 3 (span endpoints on both axes)",
+  "spec": { "cols": 6, "rows": 3, "gapX": 3, "gapY": 3, "usableW": 500, "usableH": 300 },
+  "widgets": [
+    { "id": "row-span", "col": 0, "row": 0, "w": 1, "h": 3 },
+    { "id": "col-span", "col": 0, "row": 2, "w": 6, "h": 1 },
+    { "id": "quad", "col": 2, "row": 0, "w": 2, "h": 2 },
+    { "id": "one", "col": 5, "row": 0, "w": 1, "h": 1 }
+  ]
+}

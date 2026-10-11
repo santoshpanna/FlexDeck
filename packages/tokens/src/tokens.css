@@ -1,0 +1,183 @@
+/*
+ * FlexDeck design tokens.
+ *
+ * One palette, one type scale, one set of rules — shared by the portal (the web
+ * configurator) and the desktop window, so the two surfaces cannot drift apart
+ * again.
+ *
+ * TWO APPEARANCES, ONE MECHANISM. Light is the `:root` block below; dark is
+ * `:root.dark`. Nothing else sets a colour, and `prefers-color-scheme` is never
+ * used here — `theme.ts` reads it only to resolve the "system" preference, then
+ * puts `dark` on `<html>` or takes it off. One source of truth means a
+ * half-themed interface is not reachable.
+ *
+ * The look is warm monochrome either way: a cream ground and ink type by day, a
+ * warm near-black ground and bone type by night, with one restrained accent
+ * spent on selection and focus. The neutrals hold a single hue end to end (a
+ * trace of yellow, ~90°) and the accent stays a brick red in both.
+ *
+ * The values are not chosen by eye. `scripts/check-contrast.mjs` measures every
+ * pair these tokens actually render — in both appearances, with APCA and the
+ * WCAG 2 ratio — and fails when one breaks. Change a value, then run it.
+ *
+ * These are custom properties, not a framework. Importing this file changes
+ * nothing on its own; a surface opts in by naming a token.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* --- surfaces --------------------------------------------------------- */
+  --paper: #fafaf0; /* the page itself */
+  --surface: #f4f2e8; /* a raised panel */
+  --surface-sunken: #ece9dc; /* wells, inputs, the deck frame */
+  --ink: #111111;
+  --ink-2: #333333;
+  --muted: #777777;
+  --faint: #9a958a;
+
+  /* --- lines ------------------------------------------------------------ */
+  --rule: #cdc8bb; /* the hairline */
+  --rule-strong: #111111;
+
+  /* --- accent (selection + focus only) ---------------------------------- */
+  --accent: #8c3b2e;
+  --accent-soft: #f0e2dd;
+  --accent-ink: #fafaf0;
+
+  /* --- status ----------------------------------------------------------- */
+  --ok: #3f6b4a;
+  --warn: #8a6a1f;
+  --bad: #8c2f2a;
+  --off: #9a958a;
+  --ok-soft: #e4ece5;
+  --warn-soft: #f1ebda;
+  --bad-soft: #f3e4e2;
+
+  /* --- type ------------------------------------------------------------- */
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  --tracking-label: 0.12em;
+
+  /* --- geometry --------------------------------------------------------- */
+  --radius: 2px;
+  --radius-lg: 3px;
+
+  /* --- depth ------------------------------------------------------------ */
+  /* Elevation is a layered shadow, not a hairline: transparency adapts to the
+     ground under a surface, where a fixed border colour cannot. Structure and
+     state — dividers, inputs, focus — keep real borders.
+
+     In dark the top layer flips from a dark ring to a light one, because a
+     shadow cannot darken a ground that is already nearly black; the light ring
+     is what makes a raised panel read as raised. */
+  --shadow-border:
+    0 0 0 1px oklch(0 0 0 / 0.06),
+    0 1px 2px -1px oklch(0 0 0 / 0.06),
+    0 2px 4px 0 oklch(0 0 0 / 0.04);
+  --shadow-border-hover:
+    0 0 0 1px oklch(0 0 0 / 0.08),
+    0 1px 2px -1px oklch(0 0 0 / 0.08),
+    0 2px 4px 0 oklch(0 0 0 / 0.06);
+  /* The widget drawer slides over the page from the right edge, so its elevation
+     is a one-sided rim plus a cast shadow rather than a ring. */
+  --shadow-panel:
+    -1px 0 0 1px oklch(0 0 0 / 0.08),
+    -12px 0 32px -16px oklch(0 0 0 / 0.3);
+
+  /* --- the deck ---------------------------------------------------------- */
+  /*
+   * The DEVICE's paint, not the editor's. `DeckView` in the Android app draws
+   * these exact values (`BACKGROUND`/`FILL`/`BORDER`, `CORNER_RADIUS`, a 2px
+   * stroke) and `res/values/colors.xml` carries the window background.
+   *
+   * They are tokens here for one reason: the deck is a screen, and a preview that
+   * renders it in the editor's own palette is a preview that lies. Change one
+   * side and the other must change with it — the whole point of the grid package
+   * is that the two renderers cannot disagree.
+   *
+   * They are deliberately NOT redefined in the dark block. The tablet on the desk
+   * does not change colour because the editor did.
+   */
+  --deck: #14161a;
+  --deck-widget: #2a3140;
+  --deck-widget-line: #3d465a;
+  --deck-ink: #ffffff;
+  --deck-muted: #98a0b0;
+  --deck-radius: 6px;
+  --deck-stroke: 2px;
+
+  /*
+   * The editor's own controls are painted ON the deck — the hover edit/delete
+   * chips, the resize grip. They must read against the device, which never
+   * changes, so they are fixed values too. Using `--paper`/`--ink` here was a
+   * latent bug: the chips would have inverted to near-black on a near-black
+   * screen the moment a dark theme existed.
+   */
+  --deck-control: #fafaf0;
+  --deck-control-ink: #111111;
+
+  /*
+   * The frame between the device and the page. Unlike the deck itself this DOES
+   * belong to the editor, because its job is to separate the two — and the page
+   * it separates from changes. It is the one piece of the deck's surroundings
+   * that is redefined in dark.
+   */
+  --deck-bezel: #111111;
+}
+
+/**
+ * Dark.
+ *
+ * Not the light palette reversed. The surfaces do invert — and `surface-sunken`
+ * stays the darkest of the three, so a well still reads as a well — but the text
+ * steps were re-derived rather than mirrored: APCA is polarity-aware, so light
+ * text on a dark ground needs a wider lightness gap than the mirrored pair does.
+ * The vividness comes down and the dark end is spread out, per the usual
+ * dark-mode corrections.
+ *
+ * `--muted` is deliberately below the Lc 75 body threshold: on a ground this
+ * dark, raising it that far collapses it into `--ink-2`, so the two stop reading
+ * as two steps. It takes the non-body threshold instead, which is what secondary
+ * text is for.
+ */
+:root.dark {
+  color-scheme: dark;
+
+  --paper: #151410;
+  --surface: #201e19;
+  --surface-sunken: #0d0c09;
+  --ink: #f3f0e7;
+  --ink-2: #d4cfc2;
+  --muted: #bcb5a5;
+  --faint: #8b8677;
+
+  --rule: #403d34;
+  --rule-strong: #f3f0e7;
+
+  --accent: #f4a894;
+  --accent-soft: #3e1f17;
+  --accent-ink: #171312;
+
+  --ok: #9dd4a7;
+  --warn: #efc876;
+  --bad: #faa39c;
+  --off: #8b8677;
+  --ok-soft: #132416;
+  --warn-soft: #36290e;
+  --bad-soft: #3b1c1a;
+
+  --shadow-border:
+    0 0 0 1px oklch(1 0 0 / 0.07),
+    0 1px 2px -1px oklch(0 0 0 / 0.5),
+    0 2px 4px 0 oklch(0 0 0 / 0.35);
+  --shadow-border-hover:
+    0 0 0 1px oklch(1 0 0 / 0.11),
+    0 1px 2px -1px oklch(0 0 0 / 0.55),
+    0 2px 4px 0 oklch(0 0 0 / 0.4);
+  --shadow-panel:
+    -1px 0 0 1px oklch(1 0 0 / 0.08),
+    -12px 0 32px -16px oklch(0 0 0 / 0.55);
+
+  --deck-bezel: #313942;
+}

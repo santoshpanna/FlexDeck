@@ -1,0 +1,33 @@
+{
+  "name": "create-flexdeck-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "npm create flexdeck-plugin <id>: a new FlexDeck plugin, ready to test and pack.",
+  "keywords": [
+    "flexdeck",
+    "plugin",
+    "create"
+  ],
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "bin": {
+    "create-flexdeck-plugin": "./index.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "scaffold.mjs",
+    "template",
+    "README.md"
+  ],
+  "sdkVersion": "0.1.0",
+  "scripts": {
+    "prepack": "node copy-template.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

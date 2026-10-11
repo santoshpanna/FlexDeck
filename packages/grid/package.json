@@ -1,0 +1,19 @@
+{
+  "name": "@flexdeck/grid",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared integer grid layout algorithm — TypeScript reference implementation.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test test/grid.test.ts test/parity.test.ts test/place.test.ts",
+    "test:parity": "node --test test/parity.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

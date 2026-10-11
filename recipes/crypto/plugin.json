@@ -1,0 +1,13 @@
+{
+  "abi": 4,
+  "id": "crypto",
+  "name": "Crypto prices",
+  "version": "1.0.0",
+  "description": "A coin's price and its last day, from CoinGecko.",
+  "author": "flexdeck",
+  "runtime": "recipe",
+  "recipe": "recipe.json",
+  "permissions": [
+    "network"
+  ]
+}

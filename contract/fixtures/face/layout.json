@@ -1,0 +1,11 @@
+{
+  "about": "Key sizes every layout is placed on. layout.expected.json holds where each place falls, generated from packages/face with `pnpm gen:face`; never hand-edit it.",
+  "keys": [
+    {"name": "square key on a 1280 tablet", "w": 148, "h": 148, "unit": 1},
+    {"name": "wide 2x1 key", "w": 304, "h": 148, "unit": 1},
+    {"name": "tall 1x2 key", "w": 148, "h": 304, "unit": 1},
+    {"name": "small key on a phone", "w": 96, "h": 96, "unit": 0.7},
+    {"name": "big 2x2 key on a large tablet", "w": 412, "h": 412, "unit": 1.4},
+    {"name": "barely wider than tall", "w": 160, "h": 150, "unit": 1}
+  ]
+}

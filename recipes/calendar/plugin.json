@@ -1,0 +1,13 @@
+{
+  "abi": 4,
+  "id": "calendar",
+  "name": "Calendar",
+  "version": "1.0.0",
+  "description": "Your next event, from your calendar's iCal address.",
+  "author": "flexdeck",
+  "runtime": "recipe",
+  "recipe": "recipe.json",
+  "permissions": [
+    "network"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "5x3 portrait, 800x1280, gap 4",
+  "spec": { "cols": 5, "rows": 3, "gapX": 4, "gapY": 4, "usableW": 800, "usableH": 1280 },
+  "widgets": [
+    { "id": "full", "col": 0, "row": 0, "w": 5, "h": 3 },
+    { "id": "left", "col": 0, "row": 0, "w": 1, "h": 1 },
+    { "id": "centre", "col": 2, "row": 1, "w": 1, "h": 1 },
+    { "id": "footer", "col": 0, "row": 2, "w": 5, "h": 1 }
+  ]
+}

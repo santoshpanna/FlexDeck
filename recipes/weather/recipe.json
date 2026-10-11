@@ -1,0 +1,45 @@
+{
+  "sources": [
+    {
+      "id": "weather",
+      "name": "Weather",
+      "everySeconds": 900,
+      "args": [
+        { "name": "lat", "default": "52.52", "description": "Latitude" },
+        { "name": "lon", "default": "13.41", "description": "Longitude" }
+      ],
+      "http": {
+        "url": "https://api.open-meteo.com/v1/forecast?latitude={{args.lat}}&longitude={{args.lon}}&current=temperature_2m,weather_code,wind_speed_10m&hourly=temperature_2m&forecast_days=1"
+      },
+      "fields": [
+        { "name": "temp", "value": "json.current.temperature_2m" },
+        { "name": "sky", "value": "json.current.weather_code | map(0: \"Clear\", 1: \"Mostly clear\", 2: \"Partly cloudy\", 3: \"Cloudy\", 45: \"Fog\", 48: \"Fog\", 51: \"Drizzle\", 61: \"Rain\", 63: \"Rain\", 65: \"Heavy rain\", 71: \"Snow\", 80: \"Showers\", 95: \"Thunder\", _: \"Mixed\")" },
+        { "name": "icon", "value": "json.current.weather_code | map(0: \"sun\", 1: \"sun\", 2: \"cloud\", 3: \"cloud\", 61: \"cloud-rain\", 63: \"cloud-rain\", 65: \"cloud-rain\", 71: \"cloud-snow\", 80: \"cloud-rain\", 95: \"bolt\", _: \"cloud\")" },
+        { "name": "wind", "value": "json.current.wind_speed_10m" },
+        { "name": "today", "value": "json.hourly.temperature_2m", "series": true }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "id": "weather",
+      "name": "Weather",
+      "category": "Web",
+      "description": "The weather now, today's temperatures behind. Set the place in Its own data.",
+      "w": 2,
+      "h": 1,
+      "widget": {
+        "sources": [{ "source": "weather" }],
+        "face": {
+          "layout": "FACE_LAYOUT_SPLIT",
+          "background": { "graph": "this.today", "graphColor": "#38bdf8" },
+          "elements": [
+            { "slot": "SLOT_VISUAL", "kind": "ELEMENT_KIND_ICON", "template": "{{this.icon}}" },
+            { "slot": "SLOT_TITLE", "template": "{{ this.temp | temp }}", "text": { "size": "TEXT_SIZE_XL", "bold": true } },
+            { "slot": "SLOT_CAPTION", "template": "{{this.sky}} · {{ this.wind | round }} km/h" }
+          ]
+        }
+      }
+    }
+  ]
+}

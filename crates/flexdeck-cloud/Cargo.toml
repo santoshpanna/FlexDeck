@@ -1,0 +1,31 @@
+[package]
+name = "flexdeck-cloud"
+description = "The cloud portal's server side: the relay and browser pairing."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+axum = { version = "0.8.9", features = ["ws"] }
+base64 = "0.22"
+flexdeck-pairing = { path = "../flexdeck-pairing" }
+flexdeck-protocol = { path = "../flexdeck-protocol" }
+flexdeck-tunnel = { path = "../flexdeck-tunnel" }
+futures-util = "0.3.34"
+hex = "0.4"
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = "0.10"
+thiserror = "2.0.21"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "net", "time", "signal"] }
+tower-http = { version = "0.7.1", features = ["fs", "limit", "set-header"] }
+
+[[bin]]
+name = "flexdeck-cloud"
+path = "src/bin/flexdeck-cloud.rs"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+tokio-tungstenite = "0.30.0"
+tower = { version = "0.5.3", features = ["util"] }

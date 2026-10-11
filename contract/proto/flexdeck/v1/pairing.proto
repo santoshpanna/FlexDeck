@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package flexdeck.v1;
+
+import "flexdeck/v1/events.proto";
+
+// Payload encoded in the pairing QR code shown by the agent.
+//
+// The fingerprint is the SHA-256 of the agent's self-signed TLS certificate.
+// A client MUST verify it before trusting the connection, which is what makes
+// pairing over an untrusted LAN safe-ish without a CA.
+message PairingInfo {
+  string version = 1;
+  string host = 2;
+  uint32 port = 3;
+  string fingerprint = 4; // lowercase hex, no separators
+  string session_id = 5;
+  string one_time_secret = 6;
+  int64 expires_at = 7; // unix seconds
+}
+
+message PairRequest {
+  string device_name = 1;
+  DeviceProfile device = 2;
+
+  // QR flow: both supplied from the scanned PairingInfo.
+  string session_id = 3;
+  string one_time_secret = 4;
+
+  // PIN flow: read by the human off the agent window, typed on the tablet.
+  string pin = 5;
+}
+
+message PairResponse {
+  bool ok = 1;
+  string device_id = 2;
+  string token = 3;
+  string error = 4;
+}

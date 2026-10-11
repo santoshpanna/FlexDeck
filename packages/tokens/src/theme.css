@@ -1,0 +1,191 @@
+/*
+ * FlexDeck design tokens, as a Tailwind v4 theme.
+ *
+ * The device language: a near-black body with recessed wells and raised plates,
+ * ink and a muted step for type, LEDs for status, and ONE orange signal spent
+ * only on what is live or primary. Light is the same device in a white shell —
+ * not the dark palette reversed — and the deck paint never changes with it.
+ *
+ * Mechanism, unchanged from `tokens.css`: `theme.ts` puts `dark` on `<html>`,
+ * nothing reads `prefers-color-scheme` directly. Each colour is a raw custom
+ * property per appearance, and `@theme inline` maps it to a Tailwind colour, so
+ * `bg-plate` follows the class on `<html>` with no `dark:` variants anywhere.
+ *
+ * Import after `tailwindcss`:
+ *   @import "tailwindcss";
+ *   @import "@flexdeck/tokens/theme.css";
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+
+  /* --- the shell -------------------------------------------------------- */
+  --fd-body: #efeee8;
+  --fd-well: #e2e0d7;
+  --fd-plate: #f8f7f2;
+  --fd-plate-2: #ffffff;
+  --fd-line: #d5d2c6;
+  --fd-line-strong: #b9b5a7;
+
+  /* --- type ------------------------------------------------------------- */
+  --fd-ink: #121212;
+  --fd-ink-2: #2e2d2a;
+  --fd-muted: #64625b;
+  --fd-faint: #96938a;
+
+  /* --- signal and status ------------------------------------------------ */
+  --fd-signal: #e04a12;
+  --fd-signal-hi: #ff6a33;
+  --fd-signal-ink: #160803;
+  --fd-signal-soft: #fbe3d8;
+  --fd-signal-line: #f0b69c;
+  --fd-ok: #23824a;
+  --fd-warn: #9a6a06;
+  --fd-bad: #c03a28;
+  --fd-ok-soft: #dcefe2;
+  --fd-warn-soft: #f6ead0;
+  --fd-bad-soft: #f8dfda;
+
+  /* --- keys: the face gradient and its travel --------------------------- */
+  --fd-key-top: #ffffff;
+  --fd-key-bottom: #ebe9e2;
+  --fd-key-line: #d0ccbf;
+  --fd-key-base: #c9c5b8;
+  --fd-key-glint: rgb(255 255 255 / 0.9);
+  --fd-key-cast: rgb(40 36 24 / 0.16);
+  --fd-well-shade: rgb(40 36 24 / 0.16);
+  --fd-dot: #d9d6cb;
+  --fd-scrim: rgb(30 28 22 / 0.35);
+}
+
+:root.dark {
+  color-scheme: dark;
+
+  --fd-body: #0a0a0b;
+  --fd-well: #070708;
+  --fd-plate: #111113;
+  --fd-plate-2: #18181b;
+  --fd-line: #232327;
+  --fd-line-strong: #34343a;
+
+  --fd-ink: #ecebe6;
+  --fd-ink-2: #cfcec8;
+  --fd-muted: #8f8e88;
+  --fd-faint: #5f5e5a;
+
+  --fd-signal: #ff5a1f;
+  --fd-signal-hi: #ff7a45;
+  --fd-signal-ink: #140702;
+  --fd-signal-soft: #2b1a12;
+  --fd-signal-line: #5a2a18;
+  --fd-ok: #4ade80;
+  --fd-warn: #fbbf24;
+  --fd-bad: #f87171;
+  --fd-ok-soft: #132016;
+  --fd-warn-soft: #2a2110;
+  --fd-bad-soft: #2a1414;
+
+  --fd-key-top: #26262b;
+  --fd-key-bottom: #18181b;
+  --fd-key-line: #2c2c31;
+  --fd-key-base: #040405;
+  --fd-key-glint: rgb(255 255 255 / 0.07);
+  --fd-key-cast: rgb(0 0 0 / 0.45);
+  --fd-well-shade: rgb(0 0 0 / 0.8);
+  --fd-dot: #1a1a1d;
+  --fd-scrim: rgb(5 5 6 / 0.6);
+}
+
+/*
+ * The DEVICE's paint: the tablet's own colours, which the editor's preview draws
+ * exactly. Not redefined for light — the tablet on the desk does not change
+ * colour because the editor did. Mirrored in `DeckView.kt`'s palette; change one,
+ * change both.
+ */
+:root {
+  --fd-deck: #0a0a0b;
+  --fd-deck-dot: #17171a;
+  --fd-deck-key-top: #232327;
+  --fd-deck-key-bottom: #17171a;
+  --fd-deck-key-line: #2a2a2f;
+  --fd-deck-key-base: #040405;
+  --fd-deck-ink: #ecebe6;
+  --fd-deck-muted: #8b8a85;
+  --fd-deck-lit: #2e1c14;
+  --fd-deck-lit-line: #6a2e16;
+  --fd-deck-bezel: #19191c;
+}
+
+@theme inline {
+  --color-deck: var(--fd-deck);
+  --color-deck-ink: var(--fd-deck-ink);
+  --color-deck-muted: var(--fd-deck-muted);
+  --color-body: var(--fd-body);
+  --color-well: var(--fd-well);
+  --color-plate: var(--fd-plate);
+  --color-plate-2: var(--fd-plate-2);
+  --color-line: var(--fd-line);
+  --color-line-strong: var(--fd-line-strong);
+  --color-ink: var(--fd-ink);
+  --color-ink-2: var(--fd-ink-2);
+  --color-muted: var(--fd-muted);
+  --color-faint: var(--fd-faint);
+  --color-signal: var(--fd-signal);
+  --color-signal-hi: var(--fd-signal-hi);
+  --color-signal-ink: var(--fd-signal-ink);
+  --color-signal-soft: var(--fd-signal-soft);
+  --color-signal-line: var(--fd-signal-line);
+  --color-ok: var(--fd-ok);
+  --color-warn: var(--fd-warn);
+  --color-bad: var(--fd-bad);
+  --color-ok-soft: var(--fd-ok-soft);
+  --color-warn-soft: var(--fd-warn-soft);
+  --color-bad-soft: var(--fd-bad-soft);
+  --color-dot: var(--fd-dot);
+  --color-scrim: var(--fd-scrim);
+}
+
+@theme {
+  --font-sans: "Space Grotesk", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+
+  --radius-key: 14px;
+  --radius-plate: 20px;
+  --radius-well: 14px;
+
+  --tracking-label: 0.2em;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --shadow-key: inset 0 1px 0 var(--fd-key-glint), 0 3px 0 var(--fd-key-base), 0 10px 18px var(--fd-key-cast);
+  --shadow-key-pressed: inset 0 2px 10px var(--fd-well-shade), 0 0 0 var(--fd-key-base);
+  --shadow-well: inset 0 2px 12px var(--fd-well-shade);
+  --shadow-plate: inset 0 1px 0 var(--fd-key-glint), 0 18px 40px var(--fd-key-cast);
+  --shadow-sheet: 0 -24px 60px var(--fd-key-cast);
+
+  --animate-breathe: breathe 1.8s ease-in-out infinite;
+  --animate-rise: rise 420ms var(--ease-out-expo) both;
+
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 0.3;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}

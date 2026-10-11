@@ -1,0 +1,126 @@
+{
+  "manifest": {
+    "abi": 3,
+    "id": "sample",
+    "name": "Sample",
+    "version": "1.2.3",
+    "description": "The cross-language contract fixture",
+    "author": "flexdeck",
+    "actions": [
+      {
+        "action": "go",
+        "description": "Go somewhere",
+        "arguments": [
+          {
+            "name": "where",
+            "description": "",
+            "example": "left",
+            "kind": "choice",
+            "choices": [
+              "left",
+              "right"
+            ],
+            "optional": false
+          },
+          {
+            "name": "note",
+            "description": "",
+            "example": "",
+            "kind": "text",
+            "choices": [],
+            "optional": true
+          }
+        ]
+      },
+      {
+        "action": "level",
+        "description": "Set the level",
+        "arguments": [
+          {
+            "name": "channel",
+            "description": "",
+            "example": "main",
+            "kind": "text",
+            "choices": [],
+            "optional": false
+          },
+          {
+            "name": "percent",
+            "description": "",
+            "example": "50",
+            "kind": "number",
+            "choices": [],
+            "optional": false
+          }
+        ],
+        "slider": {
+          "argument": "percent",
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "feedback": "sample.{{channel}}.level"
+        }
+      }
+    ],
+    "settings": [
+      {
+        "key": "host",
+        "description": "Where to connect",
+        "kind": "text",
+        "choices": [],
+        "defaultValue": "localhost",
+        "secret": false
+      },
+      {
+        "key": "password",
+        "description": "",
+        "kind": "text",
+        "choices": [],
+        "defaultValue": null,
+        "secret": true
+      },
+      {
+        "key": "mode",
+        "description": "",
+        "kind": "choice",
+        "choices": [
+          "a",
+          "b"
+        ],
+        "defaultValue": "a",
+        "secret": false
+      }
+    ],
+    "events": [
+      {
+        "name": "changed",
+        "description": "Something changed",
+        "fields": [
+          "what"
+        ]
+      }
+    ],
+    "permissions": [
+      "network",
+      "notifications"
+    ]
+  },
+  "variables": [
+    {
+      "name": "sample.connected",
+      "description": "Connected",
+      "kind": "bool",
+      "unit": null,
+      "choices": [],
+      "readOnly": true
+    },
+    {
+      "name": "sample.level",
+      "description": "",
+      "kind": "number",
+      "unit": "%",
+      "choices": [],
+      "readOnly": false
+    }
+  ]
+}

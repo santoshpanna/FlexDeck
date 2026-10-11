@@ -1,0 +1,17 @@
+[package]
+name = "flexdeck-automation"
+description = "The flexdeck automation model and bounded evaluator."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+flexdeck-actions = { path = "../flexdeck-actions" }
+flexdeck-expr = { path = "../flexdeck-expr" }
+flexdeck-plugin = { path = "../flexdeck-plugin" }
+flexdeck-protocol = { path = "../flexdeck-protocol" }
+flexdeck-vars = { path = "../flexdeck-vars" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = "2.0.21"
