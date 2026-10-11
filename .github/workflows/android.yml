@@ -62,7 +62,7 @@ jobs:
       # The action's default package list includes the legacy `tools` package,
       # which current cmdline-tools no longer publish. Gradle fetches the
       # platform and build-tools it needs on its own once licenses are accepted.
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         with:
           packages: platform-tools
 
