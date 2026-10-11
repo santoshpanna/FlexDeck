@@ -38,6 +38,14 @@
         {
           "area": "DESKTOP",
           "text": "Surface endpoint address/port on home and pair screens."
+        },
+        {
+          "area": "EDITOR",
+          "text": "Add download, docs, and changelog routes with site nav."
+        },
+        {
+          "area": "EDITOR",
+          "text": "Split public site vs editor-only builds via VITE flags."
         }
       ]
     }
