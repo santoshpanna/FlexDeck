@@ -2,6 +2,18 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
+## v0.1.0-rc.2 — 2026-10-11
+
+**Ship scoped releases with Linux packages and per-ABI Android APKs**
+
+### Added
+
+- **editor** Add platforms to the Release type used by downloads.
+
+### Fixed
+
+- **general** Keep the full pre-release version in the Tauri config.
+
 ## v0.1.0-rc.1 — 2026-10-11
 
 **Test release candidate**

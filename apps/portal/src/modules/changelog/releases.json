@@ -2,6 +2,38 @@
   "next": [],
   "releases": [
     {
+      "version": "v0.1.0-rc.2",
+      "platforms": [
+        "desktop",
+        "android",
+        "server"
+      ],
+      "hash": "179249fec4c2abb456a3a87f341c060b116777f7",
+      "date": "2026-10-11",
+      "title": "Ship scoped releases with Linux packages and per-ABI Android APKs",
+      "blurb": "",
+      "groups": [
+        {
+          "name": "Added",
+          "items": [
+            {
+              "area": "EDITOR",
+              "text": "Add platforms to the Release type used by downloads."
+            }
+          ]
+        },
+        {
+          "name": "Fixed",
+          "items": [
+            {
+              "area": "GENERAL",
+              "text": "Keep the full pre-release version in the Tauri config."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.1.0-rc.1",
       "platforms": [
         "desktop",
