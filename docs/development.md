@@ -181,6 +181,8 @@ feat(desktop): pair with six digits
 Pushing that builds both apps, tags the commit and publishes the release. If a
 build fails, fix it and run *Pipeline* again by hand: a version that has a tag
 but no GitHub release is built again. Run `pnpm changelog` to preview locally.
+A pre-release suffix such as `release: v0.1.0-rc.1` works for test releases; the
+Windows installer carries the plain number, since NSIS rejects the suffix.
 
 ### One-time setup
 
