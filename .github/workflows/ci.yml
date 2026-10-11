@@ -144,7 +144,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # GitHub's Ubuntu image ships an Android SDK and sets ANDROID_HOME.
       - name: Tests + debug APK
