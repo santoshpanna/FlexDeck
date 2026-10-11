@@ -74,3 +74,6 @@ skills-lock.json
 CLAUDE.local.md
 HANDOFF.md
 .vercel/
+
+.vercel
+.env*
