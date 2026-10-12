@@ -8,7 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 axum = { version = "0.8.9", features = ["ws"] }
-base64 = "0.22"
+base64 = "0.23"
 flexdeck-pairing = { path = "../flexdeck-pairing" }
 flexdeck-protocol = { path = "../flexdeck-protocol" }
 flexdeck-tunnel = { path = "../flexdeck-tunnel" }
