@@ -2,6 +2,26 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
+## v0.1.0-rc.3 — 2026-10-12
+
+**Replace re-paired devices and ship window prefs with side-by-side dev**
+
+### Added
+
+- **desktop** Add optional client_id so re-pair replaces the old device row.
+- **desktop** Persist device.client and revoke-all with keep-self.
+- **desktop** Add forget-me and revoke-all; mark kind and current on devices.
+- **editor** Forward clientId on browser pair; serve api-only portal stub.
+- **android** Send install clientId, forget-me on disconnect, .dev package.
+- **desktop** Window prefs for autostart, start minimized, and close to tray.
+- **desktop** Paginate devices with remove-all and kind pills.
+- **editor** JsonTree raw config, paged devices, revoke-all others.
+- **editor** Add Pager, Pill, paginate, and useSteadyHeight.
+
+### Fixed
+
+- **editor** Proxy /api WebSockets and harden unreachable/cut-off errors.
+
 ## v0.1.0-rc.2 — 2026-10-11
 
 **Ship scoped releases with Linux packages and per-ABI Android APKs**

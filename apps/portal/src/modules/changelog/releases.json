@@ -2,6 +2,70 @@
   "next": [],
   "releases": [
     {
+      "version": "v0.1.0-rc.3",
+      "platforms": [
+        "desktop",
+        "android",
+        "server"
+      ],
+      "hash": "8b956226b366787e75fd16080b47af0d2e5a1327",
+      "date": "2026-10-12",
+      "title": "Replace re-paired devices and ship window prefs with side-by-side dev",
+      "blurb": "",
+      "groups": [
+        {
+          "name": "Added",
+          "items": [
+            {
+              "area": "DESKTOP",
+              "text": "Add optional client_id so re-pair replaces the old device row."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Persist device.client and revoke-all with keep-self."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Add forget-me and revoke-all; mark kind and current on devices."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Forward clientId on browser pair; serve api-only portal stub."
+            },
+            {
+              "area": "ANDROID",
+              "text": "Send install clientId, forget-me on disconnect, .dev package."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Window prefs for autostart, start minimized, and close to tray."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Paginate devices with remove-all and kind pills."
+            },
+            {
+              "area": "EDITOR",
+              "text": "JsonTree raw config, paged devices, revoke-all others."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Add Pager, Pill, paginate, and useSteadyHeight."
+            }
+          ]
+        },
+        {
+          "name": "Fixed",
+          "items": [
+            {
+              "area": "EDITOR",
+              "text": "Proxy /api WebSockets and harden unreachable/cut-off errors."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.1.0-rc.2",
       "platforms": [
         "desktop",
