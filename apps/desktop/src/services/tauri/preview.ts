@@ -65,7 +65,7 @@ function entry(id: string, name: string, patch: Partial<CatalogEntry> = {}): Cat
 export function previewShell(): Shell {
   const params = new URLSearchParams(location.search);
   const scene = params.get("scene") ?? "live";
-  let windowPrefs: WindowPrefs = { startMinimized: false, closeToTray: true, autostart: false };
+  let windowPrefs: WindowPrefs = { startMinimized: false, closeToTray: true, minimizeToTray: false, autostart: false };
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((listener) => listener());
 

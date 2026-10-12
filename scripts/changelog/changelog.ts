@@ -13,13 +13,16 @@
  *      pnpm changelog --tag      also create a local tag for each untagged release commit
  *      pnpm changelog --notes v0.2.0 [--title]
  *                                print one release's notes (or its title) and write nothing
+ *      pnpm changelog --sdk-pending
+ *                                print, as JSON, each SDK release with no tag yet (in two waves:
+ *                                base, then dependents), and write nothing
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { type Commit, buildChangelog, releaseMarkdown, toMarkdown } from "./changelog.lib.ts";
+import { type Commit, buildChangelog, buildSdkReleases, pendingSdkReleases, releaseMarkdown, toMarkdown } from "./changelog.lib.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const git = (...args: string[]) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
@@ -51,6 +54,11 @@ if (notesFor >= 0) {
     process.exit(1);
   }
   process.stdout.write(process.argv.includes("--title") ? `${release.title || release.version}\n` : releaseMarkdown(release));
+  process.exit(0);
+}
+if (process.argv.includes("--sdk-pending")) {
+  const tags = new Set(git("tag", "--list", "*-sdk-v*").split(/\r?\n/).filter(Boolean));
+  process.stdout.write(`${JSON.stringify(pendingSdkReleases(buildSdkReleases(commits()), tags))}\n`);
   process.exit(0);
 }
 const outputs: [string, string][] = [

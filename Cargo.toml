@@ -4,7 +4,7 @@ resolver = "2"
 # package with no Cargo.toml, and a glob makes Cargo try to load it as a crate,
 # which fails with a bare "cannot find the file specified" that names the
 # directory but not the reason.
-members = ["crates/*", "apps/agent", "apps/desktop/src-tauri", "plugins/soundboard"]
+members = ["crates/*", "apps/agent", "apps/desktop/src-tauri"]
 
 [workspace.package]
 version = "0.0.0"

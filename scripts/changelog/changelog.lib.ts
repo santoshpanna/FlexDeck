@@ -23,6 +23,10 @@
  * `release:` ships everything; a scope ships only what it names, e.g.
  * `release(android): v0.1.1` or `release(desktop, server): v0.1.1`.
  *
+ * Each plugin SDK package keeps a version of its own: `release(js-sdk): v0.2.0`
+ * (or create-plugin, rust-abi, rust-sdk, python-sdk) publishes that package. It
+ * is not an app release, so it neither cuts the changelog nor tags `v…`.
+ *
  * The release holds every change since the previous release commit, its own
  * lines included; whatever comes after the newest one is "next". CI tags the
  * release commit afterwards, so tags follow commits and never lead.
@@ -35,6 +39,24 @@ export type Group = "Added" | "Improved" | "Fixed" | "Security";
 /** The apps a release builds and ships. */
 export type Platform = "desktop" | "android" | "server";
 export const PLATFORMS: Platform[] = ["desktop", "android", "server"];
+/** The plugin SDK packages, each released on its own version line. */
+export type Sdk = "js-sdk" | "create-plugin" | "rust-abi" | "rust-sdk" | "python-sdk";
+export const SDKS: Sdk[] = ["js-sdk", "create-plugin", "rust-abi", "rust-sdk", "python-sdk"];
+/**
+ * A package built against another: `create-plugin` pins new plugins to a
+ * `js-sdk` version, and `rust-sdk` depends on a `rust-abi` that must already be
+ * on crates.io. Each takes the newest release of its dependency as of its own.
+ */
+export const SDK_DEPENDS: Partial<Record<Sdk, Sdk>> = { "create-plugin": "js-sdk", "rust-sdk": "rust-abi" };
+
+export interface SdkRelease {
+  sdk: Sdk;
+  version: string;
+  /** The release commit, which CI builds and then tags `<sdk>-<version>`. */
+  hash: string;
+  /** The version of the package it depends on, for `create-plugin` and `rust-sdk`. */
+  requires?: string;
+}
 
 export interface Entry {
   area: Area;
@@ -173,18 +195,74 @@ const RELEASE = /^release(?:\(([^)]*)\))?:\s*(v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?
 /** `Co-Authored-By: …`, `Signed-off-by: …` — git trailers, never prose. */
 const TRAILER = /^[A-Z][\w-]*-[\w-]+:\s/;
 
-/** The version a commit releases and the apps it ships, or null when it is an ordinary commit. */
-export function releaseOf(message: string): { version: string; platforms: Platform[] } | null {
-  for (const line of message.split(/\r?\n/)) {
-    const match = RELEASE.exec(line.trim());
-    if (!match) continue;
+/** Every release line in a message: its version and the names in its scope. */
+function releaseLines(message: string): { version: string; named: string[] }[] {
+  return message.split(/\r?\n/).flatMap((raw) => {
+    const line = raw.trim();
+    const match = RELEASE.exec(line);
+    if (!match) return [];
     const named = (match[1] ?? "").split(",").map((name) => name.trim().toLowerCase()).filter(Boolean);
     for (const name of named) {
-      if (!PLATFORMS.includes(name as Platform)) throw new Error(`changelog: unknown release platform "${name}" in "${line.trim()}"`);
+      if (!PLATFORMS.includes(name as Platform) && !SDKS.includes(name as Sdk)) throw new Error(`changelog: unknown release target "${name}" in "${line}"`);
     }
-    return { version: match[2], platforms: named.length ? PLATFORMS.filter((platform) => named.includes(platform)) : PLATFORMS };
-  }
-  return null;
+    const sdks = named.filter((name) => SDKS.includes(name as Sdk));
+    if (sdks.length && sdks.length !== named.length) throw new Error(`changelog: "${line}" names apps and SDKs, which have separate versions; release them on separate lines`);
+    return [{ version: match[2], named }];
+  });
+}
+
+const isSdkLine = (named: string[]) => named.length > 0 && named.every((name) => SDKS.includes(name as Sdk));
+
+/** The version a commit releases and the apps it ships, or null when it is an ordinary commit. */
+export function releaseOf(message: string): { version: string; platforms: Platform[] } | null {
+  const app = releaseLines(message).find(({ named }) => !isSdkLine(named));
+  if (!app) return null;
+  return { version: app.version, platforms: app.named.length ? PLATFORMS.filter((platform) => app.named.includes(platform)) : PLATFORMS };
+}
+
+/** The SDKs a commit releases, each with its version. */
+export function sdkReleasesOf(message: string): { sdk: Sdk; version: string }[] {
+  return releaseLines(message)
+    .filter(({ named }) => isSdkLine(named))
+    .flatMap(({ version, named }) => SDKS.filter((sdk) => named.includes(sdk)).map((sdk) => ({ sdk, version })));
+}
+
+/** Commits, oldest first → every SDK release, oldest first. */
+export function buildSdkReleases(commits: Commit[]): SdkRelease[] {
+  const seen = new Set<string>();
+  const newest = new Map<Sdk, string>();
+  return commits.flatMap((commit) => {
+    const releases = sdkReleasesOf(commit.message);
+    // A dependency released in the same commit counts.
+    for (const { sdk, version } of releases) {
+      const tag = sdkTag({ sdk, version });
+      if (seen.has(tag)) throw new Error(`changelog: ${sdk} ${version} is released twice (again in ${commit.hash.slice(0, 7)})`);
+      seen.add(tag);
+      newest.set(sdk, version);
+    }
+    return releases.map(({ sdk, version }): SdkRelease => {
+      const dependency = SDK_DEPENDS[sdk];
+      if (!dependency) return { sdk, version, hash: commit.hash };
+      // None yet: that package's publish fails and says so, nothing else does.
+      const requires = newest.get(dependency);
+      return requires ? { sdk, version, hash: commit.hash, requires } : { sdk, version, hash: commit.hash };
+    });
+  });
+}
+
+/** An SDK release's git tag, e.g. `js-sdk-v0.2.0`. */
+export const sdkTag = (release: { sdk: Sdk; version: string }) => `${release.sdk}-${release.version}`;
+
+/**
+ * The newest release of each SDK whose tag does not exist yet: what CI still
+ * has to publish, in two waves so a dependency is out before what needs it.
+ */
+export function pendingSdkReleases(releases: SdkRelease[], tags: Set<string>): { base: SdkRelease[]; dependents: SdkRelease[] } {
+  const pending = SDKS.flatMap((sdk) => {
+    const newest = releases.filter((release) => release.sdk === sdk).at(-1);
+    return newest && !tags.has(sdkTag(newest)) ? [newest] : [];
+  });
+  return { base: pending.filter((release) => !SDK_DEPENDS[release.sdk]), dependents: pending.filter((release) => SDK_DEPENDS[release.sdk]) };
 }
 
 /** The version a commit releases, or null when it is an ordinary commit. */

@@ -1,7 +1,6 @@
 {
   "name": "create-flexdeck-plugin",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "npm create flexdeck-plugin <id>: a new FlexDeck plugin, ready to test and pack.",
   "keywords": [
@@ -10,6 +9,15 @@
     "create"
   ],
   "license": "MIT",
+  "homepage": "https://flex-deck.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/santoshpanna/FlexDeck.git",
+    "directory": "packages/create-flexdeck-plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/santoshpanna/FlexDeck/issues"
+  },
   "engines": {
     "node": ">=22.18"
   },

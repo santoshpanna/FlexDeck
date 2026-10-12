@@ -190,78 +190,7 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
-  plugins/discord:
-    dependencies:
-      '@flexdeck/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.2
-        version: 22.20.4
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
-  plugins/obs:
-    dependencies:
-      '@flexdeck/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.2
-        version: 22.20.4
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
-  plugins/soundboard:
-    dependencies:
-      '@flexdeck/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-
-  plugins/spotify:
-    dependencies:
-      '@flexdeck/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.2
-        version: 22.20.4
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
-  plugins/streamerbot:
-    dependencies:
-      '@flexdeck/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.2
-        version: 22.20.4
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
   plugins/template:
-    dependencies:
-      '@flexdeck/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.2
-        version: 22.20.4
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
-  plugins/weather:
     dependencies:
       '@flexdeck/plugin-sdk':
         specifier: workspace:*

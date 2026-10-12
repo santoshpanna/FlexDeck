@@ -161,6 +161,7 @@ Actions tab.
 | Desktop | `desktop.yml` | release commits | Windows installer (NSIS) |
 | Android | `android.yml` | release commits | signed release APK |
 | Publish | `pipeline.yml` | release commits | GitHub release with both files, `SHA256SUMS.txt` and notes |
+| Plugin SDK | `sdk.yml` | SDK release commits | npm, crates.io or PyPI, then a `<sdk>-v…` tag |
 
 The public pages and the editor are deployed apart because the editor and the
 cloud API must share an origin (see `crates/flexdeck-cloud/src/portal.rs`). The
@@ -168,41 +169,11 @@ Vercel build is told the editor's address (`VITE_EDITOR_URL`), and
 `flex-deck.com/config` redirects there. The cloud image is built with
 `VITE_EDITOR_ONLY=true`, so `app.flex-deck.com/` is the editor itself.
 
-### The changelog comes from commits
+### Releases
 
-Every `feat`, `fix`, `perf` or `sec` line in a commit, subject or body, is a
-public changelog entry, so write those lines for users. The scope picks the part
-of the product: `desktop`, `android`, `portal`, `ui`, `plugin`, or a plugin's id.
-`chore`, `ci`, `test`, `docs` and `refactor` lines stay off the page. The mapping
-lives in `scripts/changelog/changelog.lib.ts`.
-
-A release is cut by a commit with a `release:` line. Its subject is the release
-title, and its untyped lines are the blurb:
-
-```text
-First public release
-release: v0.1.0
-The tablet in your drawer, turned into a control surface for your PC.
-feat(desktop): pair with six digits
-```
-
-Pushing that ships everything: it tags the commit, builds the desktop app
-(Windows installer, Linux AppImage and `.deb`) and the Android app (a universal
-APK plus one per CPU family: arm64-v8a, armeabi-v7a, x86_64, x86), deploys the
-server, and publishes the GitHub release. To ship only some of it, scope the
-line: `release(desktop): v0.1.1`, `release(android): v0.1.1`,
-`release(server): v0.1.1`, or several at once like `release(desktop, server): v0.1.1`.
-
-An app a release skips keeps its files from the previous release, so every
-download link on the site keeps working; `flexdeck-android.apk` is always the
-universal build. A server release also tags the Docker image with its version.
-The server still redeploys on any push that changes its code, release or not.
-
-Every build carries the full version, pre-release included: `v0.1.0-rc.1` is
-`0.1.0-rc.1` in the installers and the APK, so use a suffix like that for test
-releases. If a build fails, fix it and run *Pipeline* again by hand: a version
-that has a tag but no GitHub release is built again. Run `pnpm changelog` to
-preview locally.
+Releases are cut by commit lines: `release: v0.4.0` for the apps,
+`release(js-sdk): v0.2.0` and the like for the plugin SDKs. Every kind, what it
+builds, and how to retry one is in [release.md](release.md).
 
 ### One-time setup
 

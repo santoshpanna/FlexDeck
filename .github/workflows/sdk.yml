@@ -1,0 +1,237 @@
+name: Plugin SDK
+
+# Publishes ONE plugin SDK package, at the version its release line names:
+#
+#   js-sdk         npm        @flexdeck/plugin-sdk
+#   create-plugin  npm        create-flexdeck-plugin (pins new plugins to a js-sdk version)
+#   rust-abi       crates.io  flexdeck-plugin-abi
+#   rust-sdk       crates.io  flexdeck-plugin-sdk (depends on a rust-abi version)
+#   python-sdk     PyPI       flexdeck
+#
+# The Pipeline calls it for a commit carrying `release(js-sdk): v0.2.0` and the
+# like, passing `requires` (the newest release of the dependency) to the two
+# packages that have one; it is also runnable by hand. The version is written
+# into the manifests at build time (scripts/release/sdk-version.ts), so the ones
+# committed are placeholders. A version already published is skipped, so a
+# re-run finishes what failed. Once it is out, the commit is tagged
+# `<sdk>-v<version>`, which is how the Pipeline knows that release is done.
+#
+# Signing in: trusted publishing (OIDC) on all three registries, so no token is
+# stored. Each package lists this repository's `pipeline.yml` (the top-level
+# workflow, which is what a registry checks) and `sdk.yml` as its publishers.
+on:
+  workflow_call:
+    inputs:
+      sdk:
+        description: js-sdk, create-plugin, rust-abi, rust-sdk or python-sdk
+        type: string
+        required: true
+      version:
+        description: Release version, e.g. v0.2.0
+        type: string
+        required: true
+      requires:
+        description: The dependency's version, for create-plugin (js-sdk) and rust-sdk (rust-abi)
+        type: string
+        default: ""
+      ref:
+        description: Commit to build and tag
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      sdk:
+        description: Which package
+        type: choice
+        options: [js-sdk, create-plugin, rust-abi, rust-sdk, python-sdk]
+        required: true
+      version:
+        description: Release version, e.g. v0.2.0
+        type: string
+        required: true
+      requires:
+        description: "create-plugin: the js-sdk version it pins; rust-sdk: the rust-abi version it needs (already published)"
+        type: string
+        default: ""
+      ref:
+        description: "Commit to build and tag (default: the one this runs on)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-${{ inputs.sdk }}
+  cancel-in-progress: false
+
+env:
+  SDK: ${{ inputs.sdk }}
+  VERSION: ${{ inputs.version }}
+  REQUIRES: ${{ inputs.requires }}
+
+jobs:
+  npm:
+    name: npm
+    if: inputs.sdk == 'js-sdk' || inputs.sdk == 'create-plugin'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # trusted publishing, and provenance
+    env:
+      DIR: ${{ inputs.sdk == 'js-sdk' && 'packages/plugin-sdk' || 'packages/create-flexdeck-plugin' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g "npm@^11.5.1"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Stamp version
+        id: version
+        run: node scripts/release/sdk-version.ts "$SDK" "$VERSION" "$REQUIRES" | tee -a "$GITHUB_OUTPUT"
+
+      # The template is tested either way: it is built with the SDK and shipped
+      # inside create-flexdeck-plugin.
+      - name: Test
+        run: pnpm --filter "./$DIR" --filter ./plugins/template -r run test
+
+      # pnpm packs (running the package's prepack: the SDK's build, or the
+      # template copy); npm publishes, as it is npm that speaks OIDC. A
+      # pre-release goes out under `next`, so `latest` stays a stable one.
+      - name: Publish
+        env:
+          DIST_TAG: ${{ steps.version.outputs.prerelease == 'true' && 'next' || 'latest' }}
+          NAME: ${{ steps.version.outputs.name }}
+        run: |
+          package=$(node -p "require('./$DIR/package.json').name")
+          if npm view "$package@$NAME" version > /dev/null 2>&1; then
+            echo "$package $NAME is already published."
+            exit 0
+          fi
+          tarball=$(cd "$DIR" && pnpm pack --pack-destination "$RUNNER_TEMP" | tail -1)
+          npm publish "$tarball" --access public --provenance --tag "$DIST_TAG"
+
+  crates:
+    name: crates.io
+    if: inputs.sdk == 'rust-abi' || inputs.sdk == 'rust-sdk'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # trusted publishing
+    env:
+      CRATE: ${{ inputs.sdk == 'rust-abi' && 'flexdeck-plugin-abi' || 'flexdeck-plugin-sdk' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Stamp version
+        id: version
+        run: node scripts/release/sdk-version.ts "$SDK" "$VERSION" "$REQUIRES" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: cargo test -p "$CRATE"
+
+      # A short-lived token for this run, from crates.io's trusted publishing.
+      - name: Sign in to crates.io
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+
+      # --allow-dirty: the stamped manifests are the only change. The SDK
+      # resolves its ABI dependency from crates.io, which is why the Pipeline
+      # publishes rust-abi in the wave before.
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          NAME: ${{ steps.version.outputs.name }}
+        run: |
+          if curl -fsS -A "flexdeck-ci (github.com/santoshpanna/FlexDeck)" \
+              "https://crates.io/api/v1/crates/$CRATE/$NAME" > /dev/null 2>&1; then
+            echo "$CRATE $NAME is already published."
+          else
+            cargo publish -p "$CRATE" --allow-dirty
+          fi
+
+  pypi:
+    name: PyPI
+    if: inputs.sdk == 'python-sdk'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # The oldest Python the SDK supports.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Stamp version
+        run: node scripts/release/sdk-version.ts "$SDK" "$VERSION"
+
+      - name: Test
+        working-directory: packages/plugin-sdk-python
+        run: python -m unittest -q tests.test_sdk
+
+      - name: Build
+        working-directory: packages/plugin-sdk-python
+        run: |
+          python -m pip install build
+          python -m build --outdir dist
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/plugin-sdk-python/dist
+          skip-existing: true
+
+  tag:
+    name: Tag the release
+    needs: [npm, crates, pypi]
+    # The other registries' jobs are skipped, which is fine; a failed one is not.
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && contains(needs.*.result, 'success') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to push the tag
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Tag <sdk>-<version>
+        run: |
+          tag="$SDK-$VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then
+            echo "$tag already exists."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" -m "$SDK $VERSION"
+            git push origin "$tag"
+            echo "tagged $tag"
+          fi

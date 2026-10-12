@@ -51,10 +51,10 @@ pub const REPOS_KEY: &str = "plugins.repositories";
 
 /// flexdeck's own repository.
 pub const OFFICIAL_REPO_URL: &str =
-    "https://raw.githubusercontent.com/flexdeck/plugins/main/repository.min.json";
+    "https://raw.githubusercontent.com/Questory-Labs/FlexDeck-Plugins/main/repository.min.json";
 /// The list of vetted third-party repositories.
 pub const VETTED_LIST_URL: &str =
-    "https://raw.githubusercontent.com/flexdeck/plugins/main/repositories.min.json";
+    "https://raw.githubusercontent.com/Questory-Labs/FlexDeck-Plugins/main/repositories.min.json";
 
 /// Overrides [`OFFICIAL_REPO_URL`], for development and tests.
 pub const OFFICIAL_ENV: &str = "FLEXDECK_OFFICIAL_REPO";

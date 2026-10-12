@@ -5,13 +5,17 @@ name: Pipeline
 #   changelog ──┬── web       public pages → Vercel                 every push
 #               ├── server    editor + API → Docker Hub → Easypanel    when its code changed, or a release names it
 #               ├── desktop ──┐                                      on a release commit naming it
-#               └── android ──┴── publish   GitHub release + notes   on a release commit
+#               ├── android ──┴── publish   GitHub release + notes   on a release commit
+#               └── sdk ──── sdk-dependents  each SDK package → npm / crates.io / PyPI   on a release commit naming it
 #
 # The changelog runs first and everything else builds from what it produced:
 # the regenerated `releases.json` is what the web pages render, and a commit
 # carrying `release: vX.Y.Z` is what turns on the desktop, Android and server
 # releases; `release(desktop): …`, `release(android): …` or `release(server): …`
-# ships just the ones it names.
+# ships just the ones it names. Each plugin SDK package has a version of its
+# own: `release(js-sdk): v0.2.0` (or create-plugin, rust-abi, rust-sdk,
+# python-sdk) publishes it and tags it `<sdk>-v…`, apart from the app releases.
+# docs/release.md lists every kind of release.
 # Each stage is its own workflow file, also runnable by hand.
 on:
   push:
@@ -41,6 +45,8 @@ jobs:
       android: ${{ steps.release.outputs.android }}
       server: ${{ steps.release.outputs.server == 'true' || steps.changes.outputs.server == 'true' }}
       server_release: ${{ steps.release.outputs.server }}
+      sdks: ${{ steps.sdks.outputs.base }}
+      sdk_dependents: ${{ steps.sdks.outputs.dependents }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,6 +96,18 @@ jobs:
               case " $platforms " in *" $platform "*) echo "$platform=true" >> "$GITHUB_OUTPUT" ;; esac
             done
           fi
+
+      # The newest release of each SDK package with no `<sdk>-v…` tag yet; the
+      # SDK workflow tags it once published, so a failed publish is retried by
+      # running the pipeline again by hand. Split in two waves: packages that
+      # depend on another (create-plugin, rust-sdk) go after the rest.
+      - name: SDK releases to publish
+        id: sdks
+        run: |
+          export PENDING=$(node scripts/changelog/changelog.ts --sdk-pending)
+          echo "SDK releases to publish: $PENDING"
+          echo "base=$(node -p 'JSON.stringify(JSON.parse(process.env.PENDING).base)')" >> "$GITHUB_OUTPUT"
+          echo "dependents=$(node -p 'JSON.stringify(JSON.parse(process.env.PENDING).dependents)')" >> "$GITHUB_OUTPUT"
 
       # Restarting the server drops every live editor session, so it only
       # happens when something it serves changed.
@@ -142,6 +160,44 @@ jobs:
       ref: ${{ needs.changelog.outputs.release }}
       signed: true
     secrets: inherit
+
+  # js-sdk, rust-abi, python-sdk: nothing they need is released here.
+  sdk:
+    name: SDK ${{ matrix.sdk }} ${{ matrix.version }}
+    needs: changelog
+    if: needs.changelog.outputs.sdks != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changelog.outputs.sdks) }}
+    permissions:
+      contents: write # to tag the release
+      id-token: write # trusted publishing
+    uses: ./.github/workflows/sdk.yml
+    with:
+      sdk: ${{ matrix.sdk }}
+      version: ${{ matrix.version }}
+      ref: ${{ matrix.hash }}
+
+  # create-plugin and rust-sdk, after the packages they depend on: crates.io
+  # refuses an SDK whose ABI version it does not have yet.
+  sdk-dependents:
+    name: SDK ${{ matrix.sdk }} ${{ matrix.version }}
+    needs: [changelog, sdk]
+    if: ${{ !cancelled() && needs.changelog.result == 'success' && needs.sdk.result != 'failure' && needs.changelog.outputs.sdk_dependents != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changelog.outputs.sdk_dependents) }}
+    permissions:
+      contents: write # to tag the release
+      id-token: write # trusted publishing
+    uses: ./.github/workflows/sdk.yml
+    with:
+      sdk: ${{ matrix.sdk }}
+      version: ${{ matrix.version }}
+      requires: ${{ matrix.requires }}
+      ref: ${{ matrix.hash }}
 
   publish:
     name: Publish release

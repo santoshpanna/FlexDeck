@@ -1,13 +1,20 @@
 [package]
 name = "flexdeck-plugin-abi"
-version = "0.0.0"
+description = "The flexdeck plugin contract: the protocol, package manifest and repository index shared by the agent and every plugin."
+# Not the workspace's version: a placeholder that `release(rust-abi): vX.Y.Z`
+# replaces at publish time (scripts/release/sdk-version.ts).
+version = "0.1.0"
 edition = "2021"
 license = "MIT"
 rust-version = "1.89"
+repository = "https://github.com/santoshpanna/FlexDeck"
+homepage = "https://flex-deck.com"
+readme = "README.md"
+keywords = ["flexdeck", "plugin", "protocol"]
 
 # A leaf crate on purpose: it is shared by the HOST (`crates/flexdeck-plugin-host`)
-# and by every GUEST (which lives in the separate `plugins/` workspace and reaches
-# in by path). Keeping it dependency-free apart from serde means a guest does not
+# and by every GUEST (built outside this repository, against the copy on
+# crates.io). Keeping it dependency-free apart from serde means a guest does not
 # drag the whole world into a `.wasm` just to describe itself.
 [dependencies]
 serde = { workspace = true }

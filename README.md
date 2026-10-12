@@ -65,7 +65,7 @@
 
 **[Getting started](docs/getting-started.md)** · **[Plugins](docs/plugins.md)** ·
 **[Architecture](docs/architecture.md)** · **[Security](docs/security.md)** ·
-**[Development](docs/development.md)**
+**[Development](docs/development.md)** · **[Releasing](docs/release.md)**
 
 ## Build from source
 

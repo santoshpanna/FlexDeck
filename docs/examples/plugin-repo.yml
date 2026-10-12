@@ -34,11 +34,10 @@ jobs:
         with:
           node-version: "24"
 
-      # The flexdeck SDK, for `flexdeck-plugin pack` and `flexdeck-plugin repo`.
-      - name: Get the flexdeck SDK
-        run: |
-          git clone --depth 1 https://github.com/flexdeck/flexdeck.git .flexdeck
-          (cd .flexdeck/packages/plugin-sdk && npm install --no-audit --no-fund)
+      # Your plugin's dependencies, @flexdeck/plugin-sdk among them: it is
+      # `flexdeck-plugin pack` and `flexdeck-plugin repo`.
+      - name: Install
+        run: npm ci --no-audit --no-fund
 
       # What was published before, so the index keeps its history.
       - name: Restore the published site
@@ -49,11 +48,11 @@ jobs:
 
       - name: Pack and index
         run: |
-          node .flexdeck/packages/plugin-sdk/src/cli.ts pack .
+          npx flexdeck-plugin pack .
           mkdir -p site/packages site/icons
           cp *.fdpkg site/packages/
           if [ -d icons ]; then cp icons/* site/icons/; fi
-          node .flexdeck/packages/plugin-sdk/src/cli.ts repo site/packages --out site --icons site/icons \
+          npx flexdeck-plugin repo site/packages --out site --icons site/icons \
             --name "${{ github.event.repository.name }}"
 
       - uses: actions/upload-pages-artifact@v3

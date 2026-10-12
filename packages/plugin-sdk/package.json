@@ -1,7 +1,6 @@
 {
   "name": "@flexdeck/plugin-sdk",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Write FlexDeck plugins: define actions, variables, events and feeds; the SDK speaks the protocol, builds, checks and packs.",
   "keywords": [
@@ -12,6 +11,15 @@
     "tablet"
   ],
   "license": "MIT",
+  "homepage": "https://flex-deck.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/santoshpanna/FlexDeck.git",
+    "directory": "packages/plugin-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/santoshpanna/FlexDeck/issues"
+  },
   "engines": {
     "node": ">=22.18"
   },

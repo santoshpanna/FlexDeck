@@ -175,8 +175,8 @@ fn main() {
             }
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
                 // By default closing the window hides it rather than ending the
                 // process: the agent is serving tablets, and exiting because
                 // someone tidied a window away would take their deck down.
@@ -192,6 +192,17 @@ fn main() {
                     window.app_handle().exit(0);
                 }
             }
+            // Minimizing arrives as a resize. With "minimize to tray" on, the
+            // window leaves the taskbar too; the tray brings it back restored.
+            WindowEvent::Resized(_) => {
+                let minimize_to_tray = window
+                    .try_state::<startup::PrefsState>()
+                    .is_some_and(|prefs| prefs.get().minimize_to_tray);
+                if minimize_to_tray && window.is_minimized().unwrap_or(false) {
+                    let _ = window.hide();
+                }
+            }
+            _ => {}
         })
         .run(context())
         .expect("the window could not start");
@@ -297,6 +308,8 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
             "show" => {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
+                    // Hidden while minimized, it would come back minimized.
+                    let _ = window.unminimize();
                     let _ = window.set_focus();
                 }
             }

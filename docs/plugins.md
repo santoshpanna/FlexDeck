@@ -34,7 +34,7 @@ listing each plugin's latest version and where its package is. There are three k
 
 | Kind | What it is | Can be |
 | --- | --- | --- |
-| Official | flexdeck's own repository | always on |
+| Official | flexdeck's own repository, [Questory-Labs/FlexDeck-Plugins](https://github.com/Questory-Labs/FlexDeck-Plugins) | always on |
 | Community | third-party repositories flexdeck has reviewed, from a list published next to the official one | turned off |
 | Custom | any repository you add by address | removed |
 
@@ -157,7 +157,7 @@ await host.invoke("refresh");
 assert.equal(typeof host.variable("weather.temperature"), "number");
 ```
 
-The OBS plugin's tests (`plugins/obs/test/`) run the whole plugin against an
+The OBS plugin's tests ([`plugins/obs/test/`](https://github.com/Questory-Labs/FlexDeck-Plugins/tree/main/plugins/obs/test)) run the whole plugin against an
 in-memory OBS, with no network — a good model for a plugin that talks to another
 program.
 
@@ -190,9 +190,9 @@ A repository is a static folder: `repository.min.json`, the packages, and any ic
 GitHub Pages, a raw GitHub URL, or any web server will do.
 
 ```sh
-pnpm --filter @flexdeck/plugin-weather run package        # -> weather-0.1.0.fdpkg
-mkdir -p site/packages && cp plugins/weather/*.fdpkg site/packages/
-node packages/plugin-sdk/src/cli.ts repo site/packages --out site --name "My plugins" --icons site/icons
+npm run package                                  # -> weather-0.1.0.fdpkg
+mkdir -p site/packages && cp *.fdpkg site/packages/
+npx flexdeck-plugin repo site/packages --out site --name "My plugins" --icons site/icons
 ```
 
 `flexdeck-plugin repo` reads each package's `plugin.json`, keeps the highest version
@@ -256,7 +256,7 @@ Throughout, anything the host refuses fails the step it happened in: a value out
 
 ### Python plugins
 
-`pip install flexdeck-plugin`, then `flexdeck-plugin new <id> "<Name>"`. The SDK uses only the standard library. A packed plugin (`"runtime": "python"`, ABI 4) carries the SDK beside its own files, so it needs only Python 3.10+ on the computer. The agent runs it with `-u -E -s`: unbuffered, with no `PYTHON*` variables and no user site-packages. Set `FLEXDECK_PYTHON` to choose the interpreter.
+`pip install flexdeck`, then `flexdeck-plugin new <id> "<Name>"`. The SDK uses only the standard library. A packed plugin (`"runtime": "python"`, ABI 4) carries the SDK beside its own files, so it needs only Python 3.10+ on the computer. The agent runs it with `-u -E -s`: unbuffered, with no `PYTHON*` variables and no user site-packages. Set `FLEXDECK_PYTHON` to choose the interpreter.
 
 ```python
 from flexdeck_plugin import Plugin, arg
@@ -344,8 +344,9 @@ In TypeScript, `presets: [...]` and `feeds: {...}` go in `definePlugin`, and the
 context gains `ctx.series.set(name, points)` and `ctx.feed(instance).set({...})`,
 which declares and publishes a key's values. The test harness has `watch`,
 `unwatch`, `feed(instance)` and `series(name)`. In Rust, `Sidecar` has
-`watch_feed` and `unwatch_feed`, and `Host` has `set_series`. `plugins/weather`
-uses all three and is the reference.
+`watch_feed` and `unwatch_feed`, and `Host` has `set_series`.
+[`examples/weather-node`](https://github.com/Questory-Labs/FlexDeck-Plugins/tree/main/examples/weather-node) in the plugins
+repository uses all three and is the reference.
 
 Every notification is rate-limited per plugin (`vars/set` 50 a second, `log` 20,
 `images/put` 2, `notify` one every two seconds, …); what is over is dropped,
@@ -472,7 +473,8 @@ set_volume: {
 
 A package can be a native executable (`"runtime": "native"`, with `entries` per
 platform). `crates/flexdeck-plugin-sdk` speaks the protocol for one written in
-Rust — implement `Sidecar`, call `serve` — and `plugins/soundboard` is one.
+Rust — implement `Sidecar`, call `serve` — and the
+[soundboard](https://github.com/Questory-Labs/FlexDeck-Plugins/tree/main/plugins/soundboard) is one.
 `Host::put_image(bytes, mime)` hands the agent a picture and returns the
 `img:<sha256>` to put in a text variable, as `ctx.images.put` does in TypeScript.
 
@@ -496,8 +498,10 @@ minute is stopped, with that reason shown, until someone presses *Restart*.
 | `crates/flexdeck-plugin-abi/src/repo.rs` | The repository format |
 | `packages/plugin-sdk` | The TypeScript SDK, test harness, packer and repository builder |
 | `plugins/template` | The copy-me plugin |
-| `plugins/obs` | OBS Studio |
-| `plugins/streamerbot` | Streamer.bot |
-| `plugins/discord` | Discord (local RPC) |
-| `plugins/soundboard` | Soundboard (native, Rust) |
-| `plugins/spotify` | Spotify Web API |
+| `recipes/` | Recipes the agent's tests load; published from the plugins repository |
+
+The official plugins and recipes (OBS Studio, Streamer.bot, Discord, Spotify, the
+soundboard, weather, calendar, crypto, Home Assistant) live in their own
+repository, [Questory-Labs/FlexDeck-Plugins](https://github.com/Questory-Labs/FlexDeck-Plugins). It is built with the
+published SDKs, and its `repository.min.json` is the official repository the
+app reads.

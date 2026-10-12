@@ -255,6 +255,7 @@ const STARTUP: readonly { key: keyof WindowPrefs; title: string; detail: string 
     title: "Close to tray",
     detail: "Closing the window keeps decks working. Off, closing quits and disconnects them.",
   },
+  { key: "minimizeToTray", title: "Minimize to tray", detail: "Minimizing hides this window to the tray instead of the taskbar." },
 ];
 
 /** How the window starts and closes. */

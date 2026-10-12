@@ -215,9 +215,10 @@ export interface Status {
   approvals: ApprovalRequest[];
 }
 
-/** How the window starts and closes. `autostart` is read from the OS each time. */
+/** How the window starts, closes and minimizes. `autostart` is read from the OS each time. */
 export interface WindowPrefs {
   startMinimized: boolean;
   closeToTray: boolean;
+  minimizeToTray: boolean;
   autostart: boolean;
 }

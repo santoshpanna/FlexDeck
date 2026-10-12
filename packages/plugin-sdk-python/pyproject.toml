@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "flexdeck-plugin"
+name = "flexdeck"
 version = "0.1.0"
 description = "Write FlexDeck plugins in Python: declare actions, values, events and feeds; test, pack and verify them against FlexDeck itself."
 readme = "README.md"

@@ -1,5 +1,5 @@
 //! How the window behaves around the agent: whether it opens at sign-in,
-//! whether it opens at all, and what closing it does.
+//! whether it opens at all, and what closing or minimizing it does.
 //!
 //! These belong to the window, not the agent, so they live beside it — a small
 //! JSON file in the app's config folder — rather than in the agent's settings,
@@ -26,6 +26,9 @@ pub struct WindowPrefs {
     /// Closing the window hides it and keeps the agent serving. Off, closing
     /// the window quits — and takes every connected deck down with it.
     pub close_to_tray: bool,
+
+    /// Minimizing the window hides it to the tray instead of the taskbar.
+    pub minimize_to_tray: bool,
 }
 
 impl Default for WindowPrefs {
@@ -33,6 +36,7 @@ impl Default for WindowPrefs {
         Self {
             start_minimized: false,
             close_to_tray: true,
+            minimize_to_tray: false,
         }
     }
 }
@@ -72,12 +76,13 @@ fn view(app: &AppHandle, prefs: WindowPrefs) -> Value {
     json!({
         "startMinimized": prefs.start_minimized,
         "closeToTray": prefs.close_to_tray,
+        "minimizeToTray": prefs.minimize_to_tray,
         // Read from the OS each time, so it reflects reality, not a memory of it.
         "autostart": app.autolaunch().is_enabled().unwrap_or(false),
     })
 }
 
-/// How the window starts and closes.
+/// How the window starts, closes and minimizes.
 #[tauri::command]
 pub async fn window_prefs(app: AppHandle, prefs: State<'_, PrefsState>) -> Result<Value, String> {
     Ok(view(&app, prefs.get()))
@@ -90,6 +95,7 @@ pub async fn set_window_prefs(
     prefs: State<'_, PrefsState>,
     start_minimized: Option<bool>,
     close_to_tray: Option<bool>,
+    minimize_to_tray: Option<bool>,
     autostart: Option<bool>,
 ) -> Result<Value, String> {
     if let Some(enabled) = autostart {
@@ -108,6 +114,9 @@ pub async fn set_window_prefs(
     }
     if let Some(value) = close_to_tray {
         next.close_to_tray = value;
+    }
+    if let Some(value) = minimize_to_tray {
+        next.minimize_to_tray = value;
     }
     save(&app, &next)?;
     *prefs.0.lock().expect("the prefs lock is not poisoned") = next;

@@ -2,7 +2,7 @@
   "name": "@flexdeck/plugin-sdk-python",
   "version": "0.1.0",
   "private": true,
-  "description": "The Python plugin SDK (published to PyPI as flexdeck-plugin, not npm); here so pnpm -r test runs its tests.",
+  "description": "The Python plugin SDK (published to PyPI as flexdeck, not npm); here so pnpm -r test runs its tests.",
   "scripts": {
     "test": "python -m unittest -q tests.test_sdk"
   }
