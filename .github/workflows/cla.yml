@@ -22,10 +22,14 @@ permissions:
 jobs:
   cla:
     runs-on: ubuntu-latest
+    # Bot pull requests are skipped outright: their commits carry no GitHub user as
+    # author, so the action falls back to the committer (`web-flow`) and asks it to sign.
     if: >-
-      github.event_name == 'pull_request_target' ||
-      github.event.comment.body == 'recheck' ||
-      github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
+      !endsWith(github.event.pull_request.user.login || github.event.issue.user.login, '[bot]') && (
+        github.event_name == 'pull_request_target' ||
+        github.event.comment.body == 'recheck' ||
+        github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
+      )
     steps:
       - uses: contributor-assistant/github-action@v2.6.1
         env:
