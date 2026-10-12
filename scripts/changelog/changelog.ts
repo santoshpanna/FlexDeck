@@ -22,7 +22,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { type Commit, buildChangelog, buildSdkReleases, pendingSdkReleases, releaseMarkdown, toMarkdown } from "./changelog.lib.ts";
+import { type Commit, SDKS, buildChangelog, buildSdkReleases, pendingSdkReleases, releaseMarkdown, toMarkdown } from "./changelog.lib.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const git = (...args: string[]) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
@@ -57,7 +57,8 @@ if (notesFor >= 0) {
   process.exit(0);
 }
 if (process.argv.includes("--sdk-pending")) {
-  const tags = new Set(git("tag", "--list", "*-sdk-v*").split(/\r?\n/).filter(Boolean));
+  // Every SDK's tags: `rust-abi-v…` and `create-plugin-v…` have no `-sdk-` in them.
+  const tags = new Set(git("tag", "--list", ...SDKS.map((sdk) => `${sdk}-v*`)).split(/\r?\n/).filter(Boolean));
   process.stdout.write(`${JSON.stringify(pendingSdkReleases(buildSdkReleases(commits()), tags))}\n`);
   process.exit(0);
 }
