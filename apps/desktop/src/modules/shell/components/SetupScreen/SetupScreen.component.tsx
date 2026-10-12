@@ -7,6 +7,7 @@ import { Field, HoldToConfirm, Input, Key, Label, Led, Notice, Plate, Readout, S
 import { useTheme } from "../../hooks/useTheme.hook.ts";
 import { kindLabel, relativeDate } from "../../lib/plugins.lib.ts";
 import { webAccessSummary } from "../../lib/status.lib.ts";
+import type { WindowPrefs } from "../../lib/types.ts";
 import type { ShellViewProps } from "../../view/shell.view.tsx";
 
 /** Everything that is set once and then left alone. */
@@ -18,6 +19,9 @@ export function SetupScreen({ p }: { p: ShellViewProps }) {
       </Section>
       <Section title={`Repositories · ${p.repositories.length}`}>
         <Repositories p={p} />
+      </Section>
+      <Section title="Startup">
+        <Startup p={p} />
       </Section>
       <Section title="Appearance">
         <Appearance />
@@ -84,7 +88,7 @@ function WebAccess({ p }: { p: ShellViewProps }) {
           <Input
             id="portal-address"
             value={draft}
-            placeholder="wss://portal.example.com/tunnel"
+            placeholder="wss://app.flex-deck.com/tunnel"
             spellCheck={false}
             autoComplete="off"
             disabled={p.busy}
@@ -239,6 +243,39 @@ function Repositories({ p }: { p: ShellViewProps }) {
           </motion.form>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+const STARTUP: readonly { key: keyof WindowPrefs; title: string; detail: string }[] = [
+  { key: "autostart", title: "Start with this computer", detail: "Open when you sign in, so decks can connect without you opening it." },
+  { key: "startMinimized", title: "Start minimized", detail: "Open to the tray instead of showing this window." },
+  {
+    key: "closeToTray",
+    title: "Close to tray",
+    detail: "Closing the window keeps decks working. Off, closing quits and disconnects them.",
+  },
+];
+
+/** How the window starts and closes. */
+function Startup({ p }: { p: ShellViewProps }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {STARTUP.map((row) => (
+        <div key={row.key} className="flex items-center gap-3 rounded-[14px] border border-line bg-plate p-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm">{row.title}</div>
+            <p className="m-0 mt-1 text-[12px] leading-relaxed text-muted">{row.detail}</p>
+          </div>
+          <Switch
+            size="sm"
+            checked={p.windowPrefs?.[row.key] ?? false}
+            disabled={p.busy || p.windowPrefs === null}
+            label={row.title}
+            onChange={(value) => p.onSetWindowPrefs({ [row.key]: value })}
+          />
+        </div>
+      ))}
     </div>
   );
 }

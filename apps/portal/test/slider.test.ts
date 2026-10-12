@@ -14,6 +14,7 @@ import {
   setSliderTarget,
   setWidgetKind,
   sliderChannels,
+  sliderReading,
   sliderTargetOf,
   sliderTargets,
 } from "../src/modules/config/lib/slider.lib.ts";
@@ -262,3 +263,14 @@ function withLabel(config: WireConfig, label: string): WireConfig {
   const widget = widgetIn(config);
   return configWith({ ...widget, props: { ...widget.props, label } });
 }
+
+test("a slider reads the live value, as the tablet draws it", () => {
+  assert.deepEqual(sliderReading({ min: 0, max: 100, step: 1 }, 37), { value: 37, fraction: 0.37, text: "37" });
+  assert.equal(sliderReading({ min: 0, max: 1, step: 0 }, 0.25).text, "0.3");
+});
+
+test("an unknown value sits at the bottom; one out of range is clamped and stepped", () => {
+  assert.equal(sliderReading({ min: 10, max: 20 }, undefined).value, 10);
+  assert.equal(sliderReading({ min: 0, max: 100 }, 140).value, 100);
+  assert.equal(sliderReading({ min: 0, max: 100, step: 5 }, 42).value, 40);
+});

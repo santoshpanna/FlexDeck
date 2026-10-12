@@ -480,6 +480,35 @@ impl Agent {
         Ok(())
     }
 
+    /// Record a device that has just paired, replacing any earlier pairing
+    /// from the same `client` (see [`flexdeck_store::ConfigStore::add_device_for_client`]).
+    /// A blank or absent client id adds a row like [`Self::add_device`].
+    pub fn add_device_for_client(
+        &self,
+        id: &str,
+        name: &str,
+        token_hash: &str,
+        kind: DeviceKind,
+        client: Option<&str>,
+    ) -> Result<(), AgentError> {
+        match client.map(str::trim).filter(|client| !client.is_empty()) {
+            Some(client) => {
+                self.store()
+                    .add_device_for_client(id, name, token_hash, kind, client)?;
+            }
+            None => self.store().add_device_of_kind(id, name, token_hash, kind)?,
+        }
+        self.devices_moved();
+        Ok(())
+    }
+
+    /// Revoke every paired device except `keep`. Returns how many went.
+    pub fn revoke_all_devices(&self, keep: Option<&str>) -> Result<usize, AgentError> {
+        let revoked = self.store().revoke_all_devices(keep)?;
+        self.devices_moved();
+        Ok(revoked)
+    }
+
     /// Mint a credential of `kind` for a newly trusted client, returning the
     /// token (shown once) and the device it belongs to.
     pub fn issue_credential(
@@ -487,15 +516,30 @@ impl Agent {
         name: &str,
         kind: DeviceKind,
     ) -> Result<(String, Device), AgentError> {
+        self.issue_credential_for(name, kind, None)
+    }
+
+    /// [`Self::issue_credential`], replacing any earlier credential the same
+    /// `client` was given — a browser connecting again is not a new browser.
+    pub fn issue_credential_for(
+        &self,
+        name: &str,
+        kind: DeviceKind,
+        client: Option<&str>,
+    ) -> Result<(String, Device), AgentError> {
         let token = flexdeck_pairing::generate_token();
         let id = format!(
             "{}-{}",
             kind.as_str(),
             &flexdeck_pairing::generate_token()[..12]
         );
-        self.store()
-            .add_device_of_kind(&id, name, &flexdeck_pairing::hash_token(&token), kind)?;
-        self.devices_moved();
+        self.add_device_for_client(
+            &id,
+            name,
+            &flexdeck_pairing::hash_token(&token),
+            kind,
+            client,
+        )?;
         let device = self
             .authenticate(&token)?
             .expect("a credential just stored authenticates");
@@ -584,6 +628,12 @@ impl Agent {
     /// caller still has one obvious thing to call.
     pub fn begin_pairing_now(&self) -> SessionOffer {
         self.begin_pairing(now_secs())
+    }
+
+    /// The tablet pairing code currently open, if any. `None` once it is used,
+    /// cancelled or expired — so a window showing it knows to stop.
+    pub fn pairing_offer_now(&self) -> Option<SessionOffer> {
+        self.pairing().current(now_secs()).cloned()
     }
 
     /// Close the tablet pairing window without pairing anyone; its PIN stops

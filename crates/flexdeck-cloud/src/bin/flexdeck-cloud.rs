@@ -74,15 +74,23 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     println!();
     println!("flexdeck cloud");
     println!("  listening    http://{bind}");
-    println!("  portal       {}", args.portal_dir.display());
+    if args.no_portal {
+        println!("  portal       not served (--no-portal)");
+    } else {
+        println!("  portal       {}", args.portal_dir.display());
+    }
     println!("  data         {}", args.data_dir.display());
     println!("  tunnel       ws://{bind}/tunnel");
     if args.trust_proxy {
         println!("  proxy        trusting X-Forwarded-For for client addresses");
     }
 
-    let index_html = std::fs::read_to_string(args.portal_dir.join("index.html")).ok();
-    if index_html.is_none() {
+    let index_html = if args.no_portal {
+        None
+    } else {
+        std::fs::read_to_string(args.portal_dir.join("index.html")).ok()
+    };
+    if index_html.is_none() && !args.no_portal {
         println!("  warning      no portal build found; the API still works");
     }
 
@@ -99,7 +107,12 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // One port for everything, behind one set of protective headers.
-    let app = portal::router(&args.portal_dir)
+    let pages = if args.no_portal {
+        portal::api_only()
+    } else {
+        portal::router(&args.portal_dir)
+    };
+    let app = pages
         .merge(flexdeck_cloud::http::router(Arc::clone(&cloud)))
         .merge(flexdeck_cloud::live_socket::router(Arc::clone(&cloud)))
         .merge(tunnel_socket::router(cloud));
@@ -124,6 +137,8 @@ struct Args {
     bind: std::net::IpAddr,
     port: u16,
     portal_dir: std::path::PathBuf,
+    /// Serve the API only, never a portal build (development).
+    no_portal: bool,
     data_dir: std::path::PathBuf,
     /// Believe `X-Forwarded-For` for client addresses.
     trust_proxy: bool,
@@ -138,6 +153,7 @@ impl Args {
             bind: std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
             port: DEFAULT_PORT,
             portal_dir: portal::default_directory(),
+            no_portal: false,
             data_dir: std::path::PathBuf::from(DEFAULT_DATA_DIR),
             trust_proxy: false,
         };
@@ -167,6 +183,7 @@ impl Args {
                     args.data_dir = std::path::PathBuf::from(value);
                 }
                 "--trust-proxy" => args.trust_proxy = true,
+                "--no-portal" => args.no_portal = true,
                 other => return Err(format!("unrecognised argument '{other}'")),
             }
         }
@@ -183,6 +200,7 @@ impl Args {
         println!("  --bind <ip>          interface to listen on (default: 127.0.0.1)");
         println!("  --port <number>      port to listen on (default: {DEFAULT_PORT})");
         println!("  --portal-dir <path>  where the built portal lives");
+        println!("  --no-portal          serve the API only, never a portal build");
         println!("  --data-dir <path>    where the cloud keeps its data");
         println!("                       (default: {DEFAULT_DATA_DIR})");
         println!("  --trust-proxy        believe X-Forwarded-For (only behind a proxy");
@@ -246,6 +264,12 @@ mod tests {
         assert!(parse(&["--port", "not-a-number"]).is_err());
         assert!(parse(&["--port"]).is_err(), "a flag with no value");
         assert!(parse(&["--nonsense"]).is_err());
+    }
+
+    #[test]
+    fn the_portal_is_served_unless_turned_off() {
+        assert!(!parse(&[]).expect("parses").expect("args").no_portal);
+        assert!(parse(&["--no-portal"]).expect("parses").expect("args").no_portal);
     }
 
     #[test]

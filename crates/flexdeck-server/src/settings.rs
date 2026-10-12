@@ -35,6 +35,9 @@ pub const WEB_ACCESS_OFF: &str = "off";
 /// The port a fresh installation listens on.
 pub const DEFAULT_PORT: u16 = 7878;
 
+/// The portal a fresh installation reaches when web access is switched on.
+pub const DEFAULT_PORTAL_URL: &str = "wss://app.flex-deck.com/tunnel";
+
 #[derive(Debug, thiserror::Error)]
 pub enum SettingsError {
     #[error(transparent)]
@@ -79,9 +82,11 @@ pub struct Settings {
 
     /// The portal this desktop connects to when web access is on.
     ///
-    /// `None` means this installation has no portal to talk to. That is not a
-    /// failure — a purely local agent is a perfectly good agent — it just means
-    /// web access is not *offered*, rather than offered and then broken.
+    /// A fresh installation points at [`DEFAULT_PORTAL_URL`], and so does a blob
+    /// that stored no address — older builds saved `null` here before there was
+    /// a default. `None` is still meaningful in memory (an agent started with no
+    /// portal): web access is then not *offered*, rather than offered and broken.
+    #[serde(deserialize_with = "portal_or_default")]
     pub cloud_url: Option<String>,
 }
 
@@ -91,9 +96,18 @@ impl Default for Settings {
             port: DEFAULT_PORT,
             bind_address: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
             advertised_host: None,
-            cloud_url: None,
+            cloud_url: Some(DEFAULT_PORTAL_URL.to_string()),
         }
     }
+}
+
+/// A stored `null` portal reads as the default one.
+fn portal_or_default<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let url = Option::<String>::deserialize(deserializer)?;
+    Ok(url.or_else(|| Some(DEFAULT_PORTAL_URL.to_string())))
 }
 
 impl Settings {
@@ -217,6 +231,19 @@ mod tests {
         assert_eq!(settings.bind_address, IpAddr::V4(Ipv4Addr::UNSPECIFIED));
         assert_eq!(settings.advertised_host, None);
         assert!(!settings.host_is_overridden());
+        assert_eq!(settings.cloud_url.as_deref(), Some(DEFAULT_PORTAL_URL));
+    }
+
+    #[test]
+    fn a_stored_null_portal_reads_as_the_default() {
+        // Builds before the default saved `null` whenever any setting changed.
+        let store = store();
+        store
+            .set_meta(SETTINGS_KEY, r#"{"port": 9000, "cloud_url": null}"#)
+            .expect("writes");
+
+        let settings = Settings::load(&store).expect("loads");
+        assert_eq!(settings.cloud_url.as_deref(), Some(DEFAULT_PORTAL_URL));
     }
 
     #[test]

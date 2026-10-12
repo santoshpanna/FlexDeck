@@ -214,3 +214,10 @@ export interface Status {
   browserPairing: BrowserPairing | null;
   approvals: ApprovalRequest[];
 }
+
+/** How the window starts and closes. `autostart` is read from the OS each time. */
+export interface WindowPrefs {
+  startMinimized: boolean;
+  closeToTray: boolean;
+  autostart: boolean;
+}

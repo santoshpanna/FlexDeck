@@ -45,3 +45,8 @@ test("a source's run arrives with its outcome", () => {
     status: { ok: false, error: "x: timed out", updated: 0 },
   });
 });
+
+test("a pushed state keeps a slider's value", () => {
+  const message = parseLive(JSON.stringify({ state: { widgetId: "w", ok: true, value: 42, label: "Mic" } }));
+  assert.deepEqual(message, { kind: "state", widgetId: "w", state: { value: 42, label: "Mic" } });
+});

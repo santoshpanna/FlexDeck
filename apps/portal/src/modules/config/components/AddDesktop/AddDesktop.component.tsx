@@ -4,6 +4,7 @@ import { cn } from "@flexdeck/ui";
 
 import { Button } from "../../../../common/components/Button/Button.component.tsx";
 import { describeError } from "../../../../services/api/errors.ts";
+import { formatCode } from "../../lib/code.lib.ts";
 
 export interface AddDesktopProps {
   /** Pair with the desktop showing a code. Resolves to its name and must throw on failure. */
@@ -59,13 +60,13 @@ export function AddDesktop({ pair, centered = false }: AddDesktopProps) {
       >
         <input
           value={code}
-          onChange={(event) => setCode(event.target.value.toUpperCase())}
+          onChange={(event) => setCode(formatCode(event.target.value))}
           placeholder="XXXX-XXXX"
           autoComplete="off"
           spellCheck={false}
-          maxLength={11}
+          maxLength={9}
           aria-label="Code shown by the desktop app"
-          className="h-10 w-48 rounded-[10px] border border-line bg-well px-3 font-mono text-sm tracking-[0.2em] uppercase shadow-well outline-none placeholder:text-faint focus:outline-2 focus:outline-signal"
+          className="h-10 w-48 rounded-[10px] border border-line bg-well px-3 font-mono text-sm tracking-[0.2em] uppercase text-center shadow-well outline-none placeholder:text-faint focus:outline-2 focus:outline-signal"
         />
         <Button type="submit" disabled={busy}>
           {busy ? "Connecting…" : "Connect"}

@@ -36,6 +36,10 @@ export interface Device {
   id: string;
   name: string;
   created_at: number;
+  /** Absent from desktops older than the type column. */
+  kind?: "tablet" | "browser-local" | "browser-remote";
+  /** This browser's own entry. Absent from older desktops. */
+  current?: boolean;
 }
 
 export interface PairingInfo {
@@ -373,6 +377,8 @@ export interface WidgetPreview {
     problem?: string;
     /** Zones of its strip whose `when` holds: they show their other icon. */
     zonesOn?: string[];
+    /** A slider's current value, from its variable. Absent: unknown. */
+    value?: number;
   };
   /** Why it cannot work, in the agent's words. */
   error?: string;
@@ -798,20 +804,27 @@ export class Api {
     if (token) {
       headers.authorization = `Bearer ${token}`;
     }
-    const response = await fetch(`${this.#base}${path}`, {
-      method,
-      // No cookies: there is no session, and none should be sent anywhere.
-      credentials: "omit",
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${this.#base}${path}`, {
+        method,
+        // No cookies: there is no session, and none should be sent anywhere.
+        credentials: "omit",
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch {
+      throw new ApiError(0, "the flexdeck server could not be reached");
+    }
 
-    const text = await response.text();
-    const parsed: unknown = text ? JSON.parse(text) : null;
+    const parsed = parseBody(await response.text());
 
     if (!response.ok) {
-      const message = extractError(parsed) ?? `${response.status} ${response.statusText}`;
+      const message = extractError(parsed) ?? unreachable(response.status) ?? `${response.status} ${response.statusText}`;
       throw new ApiError(response.status, message);
+    }
+    if (parsed === undefined) {
+      throw new ApiError(response.status, "the flexdeck server sent an answer this page cannot read");
     }
 
     return parsed as T;
@@ -841,7 +854,7 @@ export class Api {
       method: "POST",
       credentials: "omit",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, clientId: browserId() }),
     });
     const parsed: unknown = await response.json().catch(() => null);
     if (!response.ok) {
@@ -856,7 +869,7 @@ export class Api {
    * The desktop checks the code and issues the token; the cloud only finds it.
    */
   pair(code: string, name: string): Promise<PairResult> {
-    return this.request("POST", "/api/pair", { code, name });
+    return this.request("POST", "/api/pair", { code, name, clientId: browserId() });
   }
 
   /** Which of these desktops are connected to the cloud right now. */
@@ -894,12 +907,18 @@ export class Api {
       if (text) {
         headers["content-type"] = "application/json";
       }
-      const response = await fetch(`${this.#local}${path}`, {
-        method,
-        credentials: "omit",
-        headers,
-        body: text || undefined,
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${this.#local}${path}`, {
+          method,
+          credentials: "omit",
+          headers,
+          body: text || undefined,
+        });
+      } catch {
+        // Nothing listening: the desktop app was closed.
+        throw new ApiError(0, "the desktop app on this computer is not running");
+      }
       status = response.status;
       answer = await response.text();
       if (status === 401) {
@@ -916,13 +935,17 @@ export class Api {
       answer = relayed.body;
     }
 
-    const parsed: unknown = answer ? JSON.parse(answer) : null;
+    const parsed = parseBody(answer);
 
     if (status === 409 && isConsent(parsed)) {
       throw new ConsentError(parsed);
     }
     if (status < 200 || status >= 300) {
-      throw new ApiError(status, extractError(parsed) ?? `the desktop refused (${status})`);
+      throw new ApiError(status, extractError(parsed) ?? unreachable(status) ?? `the desktop refused (${status})`);
+    }
+    if (parsed === undefined) {
+      // A desktop going away mid-answer can leave half a body.
+      throw new ApiError(status, "the desktop's answer was cut off — it may have just closed");
     }
 
     return parsed as T;
@@ -1279,6 +1302,11 @@ export class Api {
     return this.relay(desktopId, "POST", "/api/devices/revoke", { deviceId });
   }
 
+  /** Remove every device but this browser. */
+  revokeAllDevices(desktopId: string): Promise<{ revoked: number }> {
+    return this.relay(desktopId, "POST", "/api/devices/revoke-all", {});
+  }
+
   // -- reactive layer -----------------------------------------------------
 
   /**
@@ -1335,10 +1363,50 @@ function isConsent(parsed: unknown): parsed is InstallAnswer {
   return typeof parsed === "object" && parsed !== null && (parsed as { needsConsent?: unknown }).needsConsent === true;
 }
 
+/**
+ * A response body as JSON: `null` when empty, `undefined` when it is not JSON
+ * at all — a proxy's error page, or a body cut short by a desktop closing.
+ */
+function parseBody(text: string): unknown {
+  if (!text) {
+    return null;
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The gateway statuses a proxy answers with when the desktop behind it is gone. */
+function unreachable(status: number): string | null {
+  return status === 502 || status === 503 || status === 504 ? "that desktop is not connected" : null;
+}
+
 function extractError(parsed: unknown): string | null {
   if (typeof parsed !== "object" || parsed === null) {
     return null;
   }
   const candidate = (parsed as { error?: unknown }).error;
   return typeof candidate === "string" ? candidate : null;
+}
+
+const BROWSER_ID_KEY = "flexdeck.browserId";
+
+/**
+ * An id this browser makes up once and keeps, sent when it connects or pairs so
+ * the desktop replaces this browser's earlier entry instead of adding another.
+ * Not a secret. Without storage it is fresh each time, which only means the
+ * old entry stays — "Remove all others" still clears those.
+ */
+function browserId(): string {
+  try {
+    const known = localStorage.getItem(BROWSER_ID_KEY);
+    if (known) return known;
+    const made = crypto.randomUUID();
+    localStorage.setItem(BROWSER_ID_KEY, made);
+    return made;
+  } catch {
+    return crypto.randomUUID();
+  }
 }

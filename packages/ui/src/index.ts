@@ -1,4 +1,6 @@
 export { cn } from "./lib/cn.ts";
+export { paginate, type Paged } from "./lib/paginate.ts";
+export { useSteadyHeight } from "./hooks/useSteadyHeight.ts";
 export { STAGGER, duration, ease, item, list, screen, spring } from "./motion.ts";
 
 export { Key } from "./components/Key/Key.component.tsx";
@@ -23,6 +25,8 @@ export type { GlyphName } from "./components/Icon/Glyph.component.tsx";
 export { TabBar } from "./components/TabBar/TabBar.component.tsx";
 export type { TabBarItem } from "./components/TabBar/TabBar.component.tsx";
 export { Notice, NoticeSlot } from "./components/Notice/Notice.component.tsx";
+export { Pager, type PagerProps } from "./components/Pager/Pager.component.tsx";
+export { Pill } from "./components/Pill/Pill.component.tsx";
 export { CropMarks } from "./components/CropMarks/CropMarks.component.tsx";
 export { Mark } from "./components/Mark/Mark.component.tsx";
 export type { MarkProps } from "./components/Mark/Mark.component.tsx";

@@ -19,6 +19,7 @@ import type {
   RepoPreview,
   Repository,
   Status,
+  WindowPrefs,
 } from "../../modules/shell/lib/types.ts";
 import { previewShell } from "./preview.ts";
 
@@ -51,6 +52,15 @@ const tauriShell = {
   setPortal: (url: string) => invoke<Status>("set_portal", { url }),
 
   revokeDevice: (deviceId: string) => invoke<void>("revoke_device", { deviceId }),
+
+  /** Remove every paired tablet and browser. */
+  revokeAllDevices: () => invoke<void>("revoke_all_devices"),
+
+  /** How the window starts and closes. */
+  windowPrefs: () => invoke<WindowPrefs>("window_prefs"),
+
+  /** Change any of them; whatever is left out stays as it was. */
+  setWindowPrefs: (patch: Partial<WindowPrefs>) => invoke<WindowPrefs>("set_window_prefs", patch),
 
   /** Open a web page in this computer's browser: the window has none of its own. */
   openLink: (url: string) => invoke<void>("open_link", { url }),

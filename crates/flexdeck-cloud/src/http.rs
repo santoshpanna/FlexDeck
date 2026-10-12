@@ -166,6 +166,10 @@ struct PairRequest {
     /// What to call this browser in the desktop's device list.
     #[serde(default)]
     name: String,
+    /// The browser's own id, passed through so the desktop replaces an earlier
+    /// pairing from the same browser instead of listing it twice.
+    #[serde(default, rename = "clientId")]
+    client_id: String,
 }
 
 /// Pair this browser with whichever desktop is showing `code`.
@@ -198,7 +202,12 @@ async fn pair(
         .route(&hash, now_secs())
         .ok_or_else(|| ApiError::not_found("no desktop is showing that code right now"))?;
 
-    let body = json!({ "code": code, "name": request.name.trim() }).to_string();
+    let body = json!({
+        "code": code,
+        "name": request.name.trim(),
+        "clientId": request.client_id.trim(),
+    })
+    .to_string();
     let response = cloud
         .hub()
         .request(&fingerprint, "POST", REDEEM_PATH, body, "")

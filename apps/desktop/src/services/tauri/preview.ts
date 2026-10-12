@@ -17,6 +17,7 @@ import type {
   PackageInfo,
   Repository,
   Status,
+  WindowPrefs,
 } from "../../modules/shell/lib/types.ts";
 import type { Shell } from "./client.ts";
 
@@ -64,6 +65,7 @@ function entry(id: string, name: string, patch: Partial<CatalogEntry> = {}): Cat
 export function previewShell(): Shell {
   const params = new URLSearchParams(location.search);
   const scene = params.get("scene") ?? "live";
+  let windowPrefs: WindowPrefs = { startMinimized: false, closeToTray: true, autostart: false };
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((listener) => listener());
 
@@ -136,8 +138,9 @@ export function previewShell(): Shell {
     beginPairing: async () => {
       await wait();
       pairing = { pin: String(1000 + Math.floor(Math.random() * 9000)), expiresAt: now() + 300 };
-      // A tablet "types" it a little later.
+      // A tablet "types" it a little later, which uses the code up — as the agent does.
       setTimeout(() => {
+        pairing = null;
         devices = [...devices, { id: `t${Date.now()}`, name: "Kitchen Tab", created_at: now(), online: true, kind: "tablet" }];
         emit();
       }, 7000);
@@ -171,7 +174,18 @@ export function previewShell(): Shell {
       return status();
     },
     setPortal: async () => (await wait(), status()),
+    windowPrefs: async () => (await wait(), { ...windowPrefs }),
+    setWindowPrefs: async (patch) => {
+      await wait();
+      windowPrefs = { ...windowPrefs, ...patch };
+      return { ...windowPrefs };
+    },
     openLink: async (url) => void window.open(url, "_blank", "noopener"),
+    revokeAllDevices: async () => {
+      await wait();
+      devices = [];
+      emit();
+    },
     revokeDevice: async (deviceId) => {
       await wait();
       devices = devices.filter((device) => device.id !== deviceId);

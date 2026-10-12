@@ -17,6 +17,7 @@ pub const STATE_EVENT: &str = "shell://state";
 pub fn spawn(app: AppHandle, agent: Arc<Agent>, web_access: Arc<WebAccess>) {
     forward_config(app.clone(), Arc::clone(&agent));
     forward_presence(app.clone(), Arc::clone(&agent));
+    forward_devices(app.clone(), Arc::clone(&agent));
     forward_plugins(app.clone(), Arc::clone(&agent));
     forward_approvals(app.clone(), Arc::clone(&agent));
     forward_tunnel(app, web_access);
@@ -70,6 +71,19 @@ fn forward_plugins(app: AppHandle, agent: Arc<Agent>) {
 /// A tablet connecting or going away.
 fn forward_presence(app: AppHandle, agent: Arc<Agent>) {
     let mut changes = agent.presence().changed();
+
+    tauri::async_runtime::spawn(async move {
+        while let Ok(_) | Err(RecvError::Lagged(_)) = changes.recv().await {
+            announce(&app);
+        }
+    });
+}
+
+/// A tablet or browser paired or revoked. Pairing is what closes the code on
+/// the Pair tab, and a new tablet need not connect its socket straight away, so
+/// presence alone cannot be relied on to say so.
+fn forward_devices(app: AppHandle, agent: Arc<Agent>) {
+    let mut changes = agent.subscribe_devices();
 
     tauri::async_runtime::spawn(async move {
         while let Ok(_) | Err(RecvError::Lagged(_)) = changes.recv().await {

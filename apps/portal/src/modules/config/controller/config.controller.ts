@@ -46,6 +46,7 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     select,
     refresh: refreshDesktops,
     pair,
+    forgetDesktop,
     error: desktopError,
     reconnects,
   } = useDesktops();
@@ -321,12 +322,21 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     onRetryDesktops: () => void refreshDesktops(),
     error,
     onRetry: () => void refresh(),
+    onForgetDesktop: () => {
+      if (desktopId) forgetDesktop(desktopId);
+    },
 
     status: facts.status,
     devices: facts.devices,
     revokeDevice: (deviceId: string) => {
       void act(async () => {
         await facts.revoke(deviceId);
+        await refresh();
+      });
+    },
+    revokeAllDevices: () => {
+      void act(async () => {
+        await facts.revokeAll();
         await refresh();
       });
     },

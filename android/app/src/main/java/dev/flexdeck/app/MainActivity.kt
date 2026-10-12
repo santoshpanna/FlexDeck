@@ -379,14 +379,19 @@ class MainActivity : Activity(), AgentClient.Listener {
 
     /**
      * Forget this PC on the tablet: the token and the pinned certificate, as a
-     * refusal drops them. The address stays, so the pairing form can offer it
-     * back as the last PC.
+     * refusal drops them. The PC is asked to drop this tablet first, while the
+     * token and pin still work for that one call. The address stays, so the
+     * pairing form can offer it back as the last PC.
      */
     private fun disconnect() {
         leaveDeck()
-        Tls.forget(preferences)
-        prefs().edit().remove(KEY_TOKEN).apply()
-        showPairing()
+        client.forgetMe(host(), port(), token()) {
+            runOnUiThread {
+                Tls.forget(preferences)
+                prefs().edit().remove(KEY_TOKEN).apply()
+                showPairing()
+            }
+        }
     }
 
     private fun connect() {

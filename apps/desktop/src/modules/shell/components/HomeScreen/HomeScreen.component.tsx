@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { Glyph, HoldToConfirm, Key, Label, Led, Notice, Plate, Readout, item, list } from "@flexdeck/ui";
+import { Glyph, HoldToConfirm, Key, Label, Led, Notice, Pager, Pill, Plate, Readout, item, list, paginate, useSteadyHeight } from "@flexdeck/ui";
 import { AsciiScene, render } from "@flexdeck/ui/ascii";
 
 import type { DeviceKind } from "../../lib/types.ts";
@@ -10,16 +10,23 @@ import type { Tab } from "../../view/tabs.ts";
 
 const KIND: Record<DeviceKind, string> = {
   tablet: "Tablet",
-  "browser-local": "Browser here",
-  "browser-remote": "Browser elsewhere",
+  "browser-local": "Browser",
+  "browser-remote": "Browser",
 };
 
 /**
  * Where the window opens: three lights for the state of things, then the one
  * thing worth doing next, then who is connected. Everything else is a tab away.
  */
+/** A short page: the window is narrow and the readouts sit above the list. */
+const DEVICES_PER_PAGE = 6;
+
 export function HomeScreen({ p, go }: { p: ShellViewProps; go: (tab: Tab) => void }) {
   const attention = p.rows.filter((row) => row.tone === "warn" && row.label === "Needs attention");
+  const [page, setPage] = useState(0);
+  const newest = useMemo(() => [...p.devices].sort((a, b) => b.created_at - a.created_at), [p.devices]);
+  const paged = paginate(newest, page, DEVICES_PER_PAGE);
+  const steady = useSteadyHeight<HTMLUListElement>(paged.pages);
 
   return (
     <motion.div variants={list} initial="initial" animate="animate" className="flex flex-col gap-3.5">
@@ -58,16 +65,31 @@ export function HomeScreen({ p, go }: { p: ShellViewProps; go: (tab: Tab) => voi
       <motion.section variants={item} className="flex flex-col gap-1.5" aria-label="Devices">
         <div className="flex items-center justify-between px-0.5 pb-1">
           <Label>Devices · {p.devices.length}</Label>
-          <button type="button" onClick={() => go("pair")} className="lbl cursor-pointer hover:text-ink">
-            + Add
-          </button>
+          <div className="flex items-center gap-2">
+            {p.devices.length > 1 ? (
+              <HoldToConfirm size="sm" tone="danger" disabled={p.busy} onConfirm={p.onRevokeAll}>
+                Remove all
+              </HoldToConfirm>
+            ) : null}
+            <button type="button" onClick={() => go("pair")} className="lbl cursor-pointer hover:text-ink">
+              + Add
+            </button>
+          </div>
         </div>
         {p.devices.length === 0 ? (
           <p className="px-0.5 text-[13px] text-muted">No tablets or browsers yet.</p>
         ) : (
-          <ul className="flex flex-col gap-1.5">
+          // A page change swaps the rows outright: no fade, no rows animating in or
+          // out, so nothing moves. The steady height keeps a short last page from
+          // pulling the pager up.
+          <ul
+            key={paged.page}
+            ref={steady.ref}
+            style={steady.style}
+            className="flex flex-col gap-1.5"
+          >
             <AnimatePresence initial={false}>
-              {p.devices.map((device) => (
+              {paged.items.map((device) => (
                 <motion.li
                   key={device.id}
                   layout
@@ -82,10 +104,14 @@ export function HomeScreen({ p, go }: { p: ShellViewProps; go: (tab: Tab) => voi
                     label={device.kind === "tablet" ? (device.online ? "Connected" : "Not connected") : undefined}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm">{device.name}</div>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-sm">{device.name}</span>
+                      <Pill>{KIND[device.kind] ?? "Device"}</Pill>
+                    </div>
                     {/* Not "last seen": the agent records when a device paired, not when it was last here. */}
                     <Readout className="text-[10px] tracking-[0.08em]">
-                      {KIND[device.kind] ?? "Device"} · added {new Date(device.created_at * 1000).toLocaleDateString()}
+                      Added {new Date(device.created_at * 1000).toLocaleDateString()}
+                      {device.online ? <span className="text-ink"> · connected</span> : null}
                     </Readout>
                   </div>
                   <HoldToConfirm size="sm" tone="danger" disabled={p.busy} onConfirm={() => p.onRevoke(device.id)}>
@@ -96,6 +122,7 @@ export function HomeScreen({ p, go }: { p: ShellViewProps; go: (tab: Tab) => voi
             </AnimatePresence>
           </ul>
         )}
+        <Pager {...paged} total={p.devices.length} onPage={setPage} className="pt-1" />
       </motion.section>
     </motion.div>
   );

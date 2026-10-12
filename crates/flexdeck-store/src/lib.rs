@@ -163,7 +163,8 @@ CREATE TABLE IF NOT EXISTS device (
     token_hash TEXT NOT NULL UNIQUE,
     created_at INTEGER NOT NULL,
     revoked    INTEGER NOT NULL DEFAULT 0,
-    kind       TEXT NOT NULL DEFAULT 'tablet'
+    kind       TEXT NOT NULL DEFAULT 'tablet',
+    client     TEXT
 );
 "#;
 
@@ -186,6 +187,7 @@ impl ConfigStore {
         conn.execute_batch(SCHEMA_SQL)?;
         migrate(&conn)?;
         migrate_device_kind(&conn)?;
+        migrate_device_client(&conn)?;
         Ok(Self { conn })
     }
 
@@ -476,6 +478,36 @@ impl ConfigStore {
         Ok(())
     }
 
+    /// Register a credential for a client that says who it is, revoking any
+    /// earlier credential the same client was given. A tablet re-paired, or a
+    /// browser that connected again, replaces its old row rather than piling
+    /// up beside it. Returns how many old rows were revoked.
+    ///
+    /// `client` is an id the client made up and keeps — not a secret, and not
+    /// proof of anything: a client claiming another's id only revokes that
+    /// one, and it already holds a working credential of its own to do that.
+    pub fn add_device_for_client(
+        &self,
+        id: &str,
+        name: &str,
+        token_hash: &str,
+        kind: DeviceKind,
+        client: &str,
+    ) -> StoreResult<usize> {
+        let tx = self.conn.unchecked_transaction()?;
+        let revoked = tx.execute(
+            "UPDATE device SET revoked = 1 WHERE client = ?1 AND kind = ?2 AND revoked = 0",
+            params![client, kind.as_str()],
+        )?;
+        tx.execute(
+            "INSERT INTO device (id, name, token_hash, created_at, revoked, kind, client)
+             VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6)",
+            params![id, name, token_hash, now_secs(), kind.as_str(), client],
+        )?;
+        tx.commit()?;
+        Ok(revoked)
+    }
+
     /// Look up a live device by the hash of the token it presented.
     ///
     /// Returns `None` for unknown *and* for revoked devices, so a revoked
@@ -518,6 +550,16 @@ impl ConfigStore {
             params![id],
         )?;
         Ok(changed > 0)
+    }
+
+    /// Revoke every live device except `keep` (the one asking, so it is not
+    /// locked out by its own request). Returns how many were revoked.
+    pub fn revoke_all_devices(&self, keep: Option<&str>) -> StoreResult<usize> {
+        let changed = self.conn.execute(
+            "UPDATE device SET revoked = 1 WHERE revoked = 0 AND id IS NOT ?1",
+            params![keep],
+        )?;
+        Ok(changed)
     }
 
     pub fn rename_device(&self, id: &str, name: &str) -> StoreResult<bool> {
@@ -599,6 +641,20 @@ fn migrate_device_kind(conn: &Connection) -> rusqlite::Result<()> {
     )?;
     if !has_kind {
         conn.execute_batch("ALTER TABLE device ADD COLUMN kind TEXT NOT NULL DEFAULT 'tablet';")?;
+    }
+    Ok(())
+}
+
+/// Give a database from before client ids its `client` column. Old rows have
+/// none, so they are never matched — "Remove all" is how those are cleared.
+fn migrate_device_client(conn: &Connection) -> rusqlite::Result<()> {
+    let has_client: bool = conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM pragma_table_info('device') WHERE name = 'client')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_client {
+        conn.execute_batch("ALTER TABLE device ADD COLUMN client TEXT;")?;
     }
     Ok(())
 }
@@ -900,6 +956,39 @@ mod tests {
             store.authenticate("hash-w").unwrap().unwrap().kind,
             DeviceKind::BrowserRemote
         );
+    }
+
+    #[test]
+    fn a_client_pairing_again_replaces_its_old_row() {
+        let store = store();
+        store
+            .add_device_for_client("a", "Tablet", "hash-a", DeviceKind::Tablet, "install-1")
+            .unwrap();
+        store
+            .add_device_for_client("b", "Other", "hash-b", DeviceKind::Tablet, "install-2")
+            .unwrap();
+        let revoked = store
+            .add_device_for_client("c", "Tablet", "hash-c", DeviceKind::Tablet, "install-1")
+            .unwrap();
+
+        assert_eq!(revoked, 1);
+        assert_eq!(store.authenticate("hash-a").unwrap(), None);
+        let listed: Vec<_> = store.devices().unwrap().into_iter().map(|d| d.id).collect();
+        assert_eq!(listed, ["b", "c"]);
+    }
+
+    #[test]
+    fn revoking_all_keeps_the_one_asking() {
+        let store = store();
+        store.add_device("a", "A", "hash-a").unwrap();
+        store.add_device("b", "B", "hash-b").unwrap();
+        store.add_device("c", "C", "hash-c").unwrap();
+
+        assert_eq!(store.revoke_all_devices(Some("b")).unwrap(), 2);
+        let listed: Vec<_> = store.devices().unwrap().into_iter().map(|d| d.id).collect();
+        assert_eq!(listed, ["b"]);
+        assert_eq!(store.revoke_all_devices(None).unwrap(), 1);
+        assert!(store.devices().unwrap().is_empty());
     }
 
     #[test]

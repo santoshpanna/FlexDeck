@@ -34,7 +34,15 @@ android {
   }
 
   buildTypes {
+    // A debug build installs beside the release one: its own package, its own
+    // launcher name, and the debug key, which the release package would reject.
+    debug {
+      applicationIdSuffix = ".dev"
+      versionNameSuffix = "-dev"
+      resValue("string", "app_name", "flexdeck dev")
+    }
     release {
+      resValue("string", "app_name", "flexdeck")
       signingConfig = signingConfigs.findByName("release")
       // Turning these on is what makes a release build worth shipping: an
       // unshrunk APK is more code to load, more to verify, and more surface for

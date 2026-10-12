@@ -198,6 +198,14 @@ async fn pump(
     let (generation, mut frames) = cloud.hub().attach_generation(&fingerprint);
     cloud.hub().observe_name(&fingerprint, &name);
 
+    // One deadline, pushed back only by what the DESKTOP sends. A timeout
+    // re-armed every pass would also be reset by frames going down — and a
+    // watching browser relays one every few seconds, so a dead tunnel behind a
+    // proxy that never closed it would stay "online" for as long as anyone
+    // looked at it.
+    let idle = tokio::time::sleep(IDLE_TIMEOUT);
+    tokio::pin!(idle);
+
     loop {
         tokio::select! {
             // Something to send down: a relayed request.
@@ -212,9 +220,13 @@ async fn pump(
                 }
             }
 
-            // Something the desktop sent, or nothing for too long.
-            incoming = tokio::time::timeout(IDLE_TIMEOUT, stream.next()) => {
-                let Ok(Some(Ok(message))) = incoming else { break };
+            // Nothing from the desktop for too long: it is gone.
+            () = &mut idle => break,
+
+            // Something the desktop sent.
+            incoming = stream.next() => {
+                let Some(Ok(message)) = incoming else { break };
+                idle.as_mut().reset(tokio::time::Instant::now() + IDLE_TIMEOUT);
 
                 let Ok(text) = message.to_text() else { continue };
                 let Ok(frame) = decode(text) else {

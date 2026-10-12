@@ -109,7 +109,7 @@ export function automate(t: number, cols = 46, rows = 13): Frame {
   const period = 5.2;
   const round = Math.floor(t / period);
   const s = t - round * period;
-  const run = RUNS[round % RUNS.length]!;
+  const run = RUNS[((round % RUNS.length) + RUNS.length) % RUNS.length]!;
   const passes = !run.fails;
 
   const mid = Math.floor(rows / 2);
@@ -821,7 +821,9 @@ export function install(t: number, cols = 58, rows = 18): Frame {
   const period = 5.8;
   const round = Math.floor(t / period);
   const s = t - round * period;
-  const plugin = PIECES[round % PIECES.length]!;
+  // Wrapped both ways: a time before zero (a scene asked for its past) is a
+  // negative round, and `%` keeps the sign.
+  const plugin = PIECES[((round % PIECES.length) + PIECES.length) % PIECES.length]!;
 
   const ARRIVE = 0.8;
   const ASK = ARRIVE + 0.15;

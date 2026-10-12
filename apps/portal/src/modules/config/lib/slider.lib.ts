@@ -45,6 +45,29 @@ export interface Step {
   args: Record<string, string>;
 }
 
+/** Where a slider's thumb sits and the number beside its name, as the tablet draws them. */
+export interface SliderReading {
+  value: number;
+  /** 0 to 1 along the track. */
+  fraction: number;
+  text: string;
+}
+
+/**
+ * Read a slider the way the tablet does: the agent's live value, clamped into
+ * range and onto a step; the bottom of the range while the value is unknown.
+ */
+export function sliderReading(slider: WireSlider | undefined, live: number | undefined): SliderReading {
+  const min = slider?.min ?? 0;
+  const max = slider?.max ?? 100;
+  const step = slider?.step ?? 0;
+  let value = live === undefined || Number.isNaN(live) ? min : Math.min(max, Math.max(min, live));
+  if (step > 0) value = Math.min(max, min + Math.round((value - min) / step) * step);
+  const fraction = max > min ? (value - min) / (max - min) : 0;
+  const text = Number.isInteger(value) ? String(value) : value.toFixed(1);
+  return { value, fraction, text };
+}
+
 /** Whether this widget is a slider. */
 export function isSlider(widget: WireWidget): boolean {
   return widget.type === SLIDER_TYPE;

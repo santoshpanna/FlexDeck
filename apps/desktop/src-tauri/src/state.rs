@@ -19,13 +19,6 @@ pub struct ShellState {
     /// handle whether or not one is configured yet.
     pub web_access: Arc<WebAccess>,
 
-    /// The pairing code currently on show.
-    ///
-    /// Minted on demand and remembered here rather than minted per request: a
-    /// window that polls `status` must see the *same* code, because minting one
-    /// per poll would invalidate the code the user is halfway through typing.
-    pub pairing: Mutex<Option<(String, i64)>>,
-
     /// Why the listener is not up, if it is not.
     ///
     /// The agent can be perfectly healthy — the window reads it in-process —
@@ -46,7 +39,6 @@ impl ShellState {
             settings: parts.settings,
             bind: parts.bind,
             web_access,
-            pairing: Mutex::new(None),
             server_error,
         }
     }

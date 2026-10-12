@@ -14,19 +14,29 @@ import { backgroundCss, faceColors } from "../../lib/face.lib.ts";
 import { usePictureUrl } from "../../../../hooks/usePictureUrl/usePictureUrl.hook.ts";
 import { emptyCells } from "../../lib/interaction.lib.ts";
 import { layoutFor } from "../../lib/orientation.lib.ts";
+import { sliderReading } from "../../lib/slider.lib.ts";
 import type { WidgetState } from "../../lib/state.lib.ts";
 
 /**
  * A slider as the tablet draws it: name on top, a recessed track filled to the
- * value in signal orange, a machined thumb. The editor has no live value, so it
- * shows the middle of the range.
+ * value in signal orange, a machined thumb. The value is the agent's live one —
+ * the same the tablet shows, pushed as it changes.
  */
-function SliderFace({ widget, name, vertical, fontSize }: { widget: WireWidget; name: string; vertical: boolean; fontSize: number }) {
-  const min = widget.slider?.min ?? 0;
-  const max = widget.slider?.max ?? 100;
-  const step = widget.slider?.step || 1;
-  const value = min + Math.round((max - min) / 2 / step) * step;
-  const percent = `${(max > min ? (value - min) / (max - min) : 0) * 100}%`;
+function SliderFace({
+  widget,
+  name,
+  vertical,
+  fontSize,
+  live,
+}: {
+  widget: WireWidget;
+  name: string;
+  vertical: boolean;
+  fontSize: number;
+  live: number | undefined;
+}) {
+  const reading = sliderReading(widget.slider, live);
+  const percent = `${reading.fraction * 100}%`;
   return (
     <div className="absolute inset-0 flex flex-col gap-[0.5em] p-[0.6em] text-[var(--fd-deck-ink)]" style={{ fontSize }}>
       <span className="flex items-center justify-between gap-[0.4em]">
@@ -34,7 +44,7 @@ function SliderFace({ widget, name, vertical, fontSize }: { widget: WireWidget; 
           {widget.props?.icon ? <Icon name={widget.props.icon} size={fontSize * 1.1} decorative /> : null}
           <span className="truncate">{name}</span>
         </span>
-        <span className="font-mono text-[0.85em] text-[#ff8a5c]">{value}</span>
+        <span className="font-mono text-[0.85em] text-[#ff8a5c]">{reading.text}</span>
       </span>
       <span
         aria-hidden="true"
@@ -291,7 +301,13 @@ export function GridPreview({ profile, page, orientation, onOrientation, caption
                       }}
                     >
                       {widget.type === "WIDGET_TYPE_SLIDER" ? (
-                        <SliderFace widget={widget} name={name} vertical={sliderIsVertical(widget, rect)} fontSize={labelSize} />
+                        <SliderFace
+                          widget={widget}
+                          name={name}
+                          vertical={sliderIsVertical(widget, rect)}
+                          fontSize={labelSize}
+                          live={previews?.[widget.id]?.state?.value}
+                        />
                       ) : (
                         <FaceView
                           widget={widget}

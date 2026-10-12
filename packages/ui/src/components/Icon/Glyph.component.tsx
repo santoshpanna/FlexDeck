@@ -15,6 +15,8 @@ const GLYPHS = {
   check: ["M5 13l4 4L19 7"],
   refresh: ["M20 11a8 8 0 1 0-2.3 5.7", "M20 4v7h-7"],
   chevronDown: ["M6 9l6 6 6-6"],
+  chevronLeft: ["M15 6l-6 6 6 6"],
+  chevronRight: ["M9 6l6 6-6 6"],
   copy: ["M9 9h11v11H9z", "M5 15H4V4h11v1"],
   file: ["M6 2h8l4 4v16H6z", "M14 2v4h4"],
   folder: ["M3 6h6l2 2h10v11H3z"],

@@ -7,7 +7,7 @@
   <uses-permission android:name="android.permission.INTERNET" />
 
   <application
-    android:label="flexdeck"
+    android:label="@string/app_name"
     android:allowBackup="false"
     android:icon="@mipmap/ic_launcher"
     android:theme="@style/Theme.Flexdeck">

@@ -11,7 +11,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test test/cn.test.ts test/ascii.test.ts"
+    "test": "node --test test/cn.test.ts test/ascii.test.ts test/paginate.test.ts"
   },
   "peerDependencies": {
     "react": "^19.3.0",

@@ -116,6 +116,7 @@ fn api_router(agent: Arc<Agent>) -> Router {
         .route("/api/undo", post(undo))
         .route("/api/redo", post(redo))
         .route("/api/devices/revoke", post(revoke_device))
+        .route("/api/devices/revoke-all", post(revoke_all_devices))
         .route_layer(middleware::from_fn_with_state(
             Arc::clone(&agent),
             require_configurator,
@@ -127,6 +128,9 @@ fn api_router(agent: Arc<Agent>) -> Router {
         // it shares the path — see `replace_config`.
         .route("/api/config", get(config).put(replace_config))
         .route("/api/devices", get(devices))
+        // A tablet or browser removing ITSELF, when its person forgets this
+        // PC there. Any credential may drop its own row, and only its own.
+        .route("/api/devices/forget-me", post(forget_me))
         // The page on screen: read to follow it, written to move every tablet.
         // The write needs a configurator, inline — see `put_page`.
         .route("/api/page", get(get_page).put(put_page))
@@ -470,8 +474,16 @@ async fn put_page(
     Ok(Json(json!({ "pageId": request.page_id })))
 }
 
-async fn devices(State(agent): State<Arc<Agent>>) -> Result<Json<Value>, ApiError> {
+async fn devices(
+    State(agent): State<Arc<Agent>>,
+    Extension(authority): Extension<Authority>,
+) -> Result<Json<Value>, ApiError> {
     let presence = agent.presence();
+    // The device making this request, so a list can say "this one".
+    let caller = match &authority {
+        Authority::Browser(device) | Authority::Tablet(device) => Some(device.id.clone()),
+        Authority::Admin => None,
+    };
 
     let devices: Vec<Value> = agent
         .devices()?
@@ -489,6 +501,10 @@ async fn devices(State(agent): State<Arc<Agent>>) -> Result<Json<Value>, ApiErro
                 // Whether a socket is open *now*. A paired device that is
                 // switched off is `false`, not absent.
                 "online": online,
+                // A tablet, a browser on this computer, or a browser elsewhere.
+                "kind": device.kind,
+                // Whether this is the device asking.
+                "current": caller.as_deref() == Some(device.id.as_str()),
             })
         })
         .collect();
@@ -1344,6 +1360,35 @@ async fn revoke_device(
     Ok(Json(json!({ "revoked": true })))
 }
 
+/// Revoke every paired device but the one asking — a browser clearing out a
+/// list it no longer recognises must not lock itself out doing it.
+async fn revoke_all_devices(
+    State(agent): State<Arc<Agent>>,
+    Extension(authority): Extension<Authority>,
+) -> Result<Json<Value>, ApiError> {
+    let keep = match &authority {
+        Authority::Browser(device) | Authority::Tablet(device) => Some(device.id.as_str()),
+        Authority::Admin => None,
+    };
+    let revoked = agent.revoke_all_devices(keep)?;
+    Ok(Json(json!({ "revoked": revoked })))
+}
+
+/// The caller revoking its own credential: a tablet told to forget this PC.
+async fn forget_me(
+    State(agent): State<Arc<Agent>>,
+    Extension(authority): Extension<Authority>,
+) -> Result<Json<Value>, ApiError> {
+    let device = match &authority {
+        Authority::Browser(device) | Authority::Tablet(device) => device,
+        Authority::Admin => {
+            return Err(ApiError::bad_request("the admin credential is not a device"))
+        }
+    };
+    agent.revoke_device(&device.id)?;
+    Ok(Json(json!({ "revoked": true })))
+}
+
 async fn begin_pairing(
     State(agent): State<Arc<Agent>>,
     Extension(authority): Extension<Authority>,
@@ -1412,7 +1457,14 @@ async fn redeem_pairing(
 
             // Recording the device here is what makes the token meaningful.
             // Only its hash is stored.
-            agent.add_device(&device_id, name, &flexdeck_pairing::hash_token(&token))?;
+            // A tablet that paired before replaces its old row.
+            agent.add_device_for_client(
+                &device_id,
+                name,
+                &flexdeck_pairing::hash_token(&token),
+                DeviceKind::Tablet,
+                Some(&request.client_id),
+            )?;
 
             PairResponse {
                 ok: true,
@@ -1461,6 +1513,9 @@ struct BrowserRedeemRequest {
     code: String,
     #[serde(default)]
     name: String,
+    /// The browser's own id, so pairing again replaces its old row.
+    #[serde(default)]
+    client_id: String,
 }
 
 /// Trade a code shown at the desktop for a remote browser's credential.
@@ -1482,7 +1537,11 @@ async fn redeem_browser_pairing(
                 "" => "Browser",
                 trimmed => trimmed,
             };
-            let (token, device) = agent.issue_credential(name, DeviceKind::BrowserRemote)?;
+            let (token, device) = agent.issue_credential_for(
+                name,
+                DeviceKind::BrowserRemote,
+                Some(&redeem.client_id),
+            )?;
             Ok(Json(json!({
                 "token": token,
                 "deviceId": device.id,
@@ -1743,6 +1802,72 @@ mod tests {
         let (status, body) = send(Arc::clone(&agent), post("/api/redo", json!({}))).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["rev"], 2);
+    }
+
+    /// Pair through the PIN flow carrying a client id; returns the token.
+    async fn pair_as(agent: Arc<Agent>, name: &str, client: &str) -> String {
+        let (_, begun) = send(Arc::clone(&agent), post("/api/pairing/begin", json!({}))).await;
+        let pin = begun["pin"].as_str().expect("a pin").to_string();
+        let (_, redeemed) = send(
+            agent,
+            post(
+                "/api/pairing/redeem",
+                json!({"pin": pin, "deviceName": name, "clientId": client}),
+            ),
+        )
+        .await;
+        redeemed["token"].as_str().expect("a token").to_string()
+    }
+
+    #[tokio::test]
+    async fn a_tablet_pairing_again_replaces_its_old_entry() {
+        let agent = agent();
+        let old = pair_as(Arc::clone(&agent), "Tablet", "install-1").await;
+        pair_as(Arc::clone(&agent), "Other", "install-2").await;
+        pair_as(Arc::clone(&agent), "Tablet", "install-1").await;
+
+        let names: Vec<_> = agent.devices().unwrap().into_iter().map(|d| d.name).collect();
+        assert_eq!(names, ["Other", "Tablet"]);
+        assert_eq!(agent.authenticate(&old).unwrap(), None, "the old token is dead");
+    }
+
+    #[tokio::test]
+    async fn a_device_can_forget_itself_and_only_itself() {
+        let agent = agent();
+        let kitchen = pair_a_device(Arc::clone(&agent), "Kitchen").await;
+        pair_a_device(Arc::clone(&agent), "Studio").await;
+
+        let (status, _) =
+            send_with(Arc::clone(&agent), post("/api/devices/forget-me", json!({})), Some(&kitchen)).await;
+        assert_eq!(status, StatusCode::OK);
+
+        let names: Vec<_> = agent.devices().unwrap().into_iter().map(|d| d.name).collect();
+        assert_eq!(names, ["Studio"]);
+    }
+
+    #[tokio::test]
+    async fn the_device_list_marks_the_one_asking() {
+        let agent = agent();
+        let kitchen = pair_a_device(Arc::clone(&agent), "Kitchen").await;
+        pair_a_device(Arc::clone(&agent), "Studio").await;
+
+        let (_, body) = send_with(Arc::clone(&agent), get("/api/devices"), Some(&kitchen)).await;
+        let rows = body["devices"].as_array().expect("a list");
+        let current: Vec<_> = rows.iter().filter(|row| row["current"] == true).map(|row| row["name"].clone()).collect();
+        assert_eq!(current, [json!("Kitchen")]);
+        assert!(rows.iter().all(|row| row["kind"] == "tablet"));
+    }
+
+    #[tokio::test]
+    async fn revoking_all_clears_every_device() {
+        let agent = agent();
+        pair_a_device(Arc::clone(&agent), "A").await;
+        pair_a_device(Arc::clone(&agent), "B").await;
+
+        let (status, body) = send(Arc::clone(&agent), post("/api/devices/revoke-all", json!({}))).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["revoked"], 2);
+        assert!(agent.devices().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -2031,6 +2156,7 @@ mod tests {
             post("/api/undo", json!({})),
             post("/api/redo", json!({})),
             post("/api/devices/revoke", json!({"deviceId": "anyone"})),
+            post("/api/devices/revoke-all", json!({})),
             // A repository decides what can be installed; reading the catalog
             // makes this machine fetch from the addresses in them.
             post(

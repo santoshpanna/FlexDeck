@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { AppLink } from "../../../common/components/AppLink/AppLink.component.tsx";
 import { SITE_HREF } from "../../../common/site/site.ts";
 
-import { Key, Label, Led, Mark, Notice, NoticeSlot, Plate, ease, spring } from "@flexdeck/ui";
+import { HoldToConfirm, Key, Label, Led, Mark, Notice, NoticeSlot, Plate, ease, spring } from "@flexdeck/ui";
 import { AsciiScene, render, rings, scan } from "@flexdeck/ui/ascii";
 
 import { Tabs } from "../../../common/components/Tabs/Tabs.component.tsx";
@@ -78,11 +78,15 @@ export interface ConfigViewProps {
   error: string | null;
   /** Re-read everything, for the state where this desktop cannot be reached. */
   onRetry: () => void;
+  /** Drop the selected desktop from this browser — for one that removed this browser. */
+  onForgetDesktop: () => void;
 
   // What the agent reports about itself.
   status: Status | null;
   devices: Device[];
   revokeDevice: (deviceId: string) => void;
+  /** Remove every device but this browser. */
+  revokeAllDevices: () => void;
 
   // Pairing a new tablet.
   pairing: PairingBegin | null;
@@ -214,9 +218,11 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
     onRetryDesktops = NEVER,
     error = null,
     onRetry = NEVER,
+    onForgetDesktop = NEVER,
     status = null,
     devices = [],
     revokeDevice = NEVER,
+    revokeAllDevices = NEVER,
     pairing = null,
     beginPairing = NEVER,
     cancelPairing = NEVER,
@@ -522,7 +528,7 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
                       onBegin={beginPairing}
                       onCancel={cancelPairing}
                     />
-                    <DevicesCard devices={devices} onRevoke={revokeDevice} />
+                    <DevicesCard devices={devices} onRevoke={revokeDevice} onRevokeAll={revokeAllDevices} />
                   </div>
                   <div className="flex flex-col gap-5">
                     <AgentCard status={status} />
@@ -560,8 +566,17 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
           <EmptyState
             scene="scan"
             title={`${desktop.name} isn’t answering.`}
-            body="Its deck could not be read, and nothing here has changed. On that computer, start the FlexDeck app and switch web access on, then try again."
-            action={<Key tone="signal" onClick={onRetry}>Try again</Key>}
+            body="Its deck could not be read, and nothing here has changed. On that computer, start the FlexDeck app and switch web access on, then try again. If this browser was removed there, forget it here and connect again."
+            action={
+              <div className="flex flex-wrap justify-center gap-2">
+                <Key tone="signal" onClick={onRetry}>
+                  Try again
+                </Key>
+                <HoldToConfirm tone="danger" onConfirm={onForgetDesktop}>
+                  Forget this desktop
+                </HoldToConfirm>
+              </div>
+            }
           />
         ) : desktop && documentStatus === "empty" ? (
           // The machine ANSWERED and has nothing saved: distinct from both above.

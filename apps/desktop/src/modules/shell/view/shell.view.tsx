@@ -23,6 +23,7 @@ import type {
   RepoPreview,
   Repository,
   TunnelState,
+  WindowPrefs,
 } from "../lib/types.ts";
 import { TABS, tabIndex, type Tab } from "./tabs.ts";
 
@@ -55,6 +56,9 @@ export interface ShellViewProps {
   approvals: ApprovalRequest[];
   fingerprint: string;
   tunnel: TunnelState;
+  /** How the window starts and closes; null until first read. */
+  windowPrefs: WindowPrefs | null;
+  onSetWindowPrefs: (patch: Partial<WindowPrefs>) => void;
   error: string | null;
   busy: boolean;
   loading: boolean;
@@ -64,6 +68,8 @@ export interface ShellViewProps {
   onCancelBrowserCode: () => void;
   onAnswer: (id: number, allow: boolean) => void;
   onRevoke: (deviceId: string) => void;
+  /** Remove every paired tablet and browser. */
+  onRevokeAll: () => void;
   onToggleWebAccess: (enabled: boolean) => void;
   onSetPortal: (url: string) => void;
   /** Open a web page in this computer's browser. */
@@ -111,6 +117,8 @@ const DEFAULTS: ShellViewProps = {
   approvals: [],
   fingerprint: "",
   tunnel: { enabled: false, running: false, refused: null, lastError: null, portal: null },
+  windowPrefs: null,
+  onSetWindowPrefs: noop,
   error: null,
   busy: false,
   loading: false,
@@ -120,6 +128,7 @@ const DEFAULTS: ShellViewProps = {
   onCancelBrowserCode: noop,
   onAnswer: noop,
   onRevoke: noop,
+  onRevokeAll: noop,
   onToggleWebAccess: noop,
   onSetPortal: noop,
   onOpenLink: noop,

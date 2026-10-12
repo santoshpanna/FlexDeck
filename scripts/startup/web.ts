@@ -1,6 +1,9 @@
 /**
  * Development: the web app — the portal UI and the cloud API behind it.
  *
+ * `dev:server` (`--api-only`) brings up the cloud API alone — for running the
+ * portal some other way, or for working on the API and the tunnel.
+ *
  * `dev:web` brings up BOTH halves, because the portal on its own is a UI whose
  * every call fails. Vite serves the UI on 127.0.0.1:5173 and proxies `/api` to
  * the cloud on 127.0.0.1:8787, so with nothing behind that proxy the browser gets
@@ -65,9 +68,12 @@ const UI_READY_TIMEOUT_MS = 60_000;
  */
 const REQUEST_TIMEOUT_MS = 2000;
 
+/** `dev:server`: the cloud API without the portal UI. */
+const API_ONLY = process.argv.includes("--api-only");
+
 async function main(): Promise<void> {
   await assertFree(API_PORT, "the cloud API");
-  await assertFree(UI_PORT, "the portal UI");
+  if (!API_ONLY) await assertFree(UI_PORT, "the portal UI");
 
   const children: ChildProcess[] = [];
   let stopping = false;
@@ -107,6 +113,11 @@ async function main(): Promise<void> {
     fail(describe(error));
   }
 
+  if (API_ONLY) {
+    report();
+    return;
+  }
+
   const ui = startUi();
   children.push(ui);
   ui.on("exit", (code) => shutdown(code));
@@ -121,9 +132,13 @@ async function main(): Promise<void> {
   report();
 }
 
-/** The cloud: the API, the tunnel endpoint, and (in a deployment) the built portal. */
+/**
+ * The cloud: the API and the tunnel endpoint. Never the built portal here:
+ * the portal is Vite's, live, and a build left in `apps/portal/dist` would be
+ * served on the API's port as an old copy that looks exactly like the real one.
+ */
 function startApi(): ChildProcess {
-  const child = spawn("cargo", ["run", "-p", "flexdeck-cloud"], {
+  const child = spawn("cargo", ["run", "-p", "flexdeck-cloud", "--", "--no-portal"], {
     cwd: repoRoot,
     stdio: "inherit",
   });
@@ -234,8 +249,8 @@ function waitForUi(child: ChildProcess): Promise<void> {
 
 function report(): void {
   console.log();
-  console.log("flexdeck web");
-  console.log(`  portal   ${UI_URL}`);
+  console.log(API_ONLY ? "flexdeck server" : "flexdeck web");
+  if (!API_ONLY) console.log(`  portal   ${UI_URL}`);
   console.log(`  api      ${API_URL}`);
   console.log();
   console.log("  The cloud never dials a desktop — a desktop dials out to it.");

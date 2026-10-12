@@ -9,10 +9,10 @@ import type {
   CatalogEntry,
   Consent,
   InstallOutcome,
-  PairingPin,
   RepoPreview,
   Status,
   TunnelState,
+  WindowPrefs,
 } from "../lib/types.ts";
 import type { ShellViewProps } from "../view/shell.view.tsx";
 
@@ -26,13 +26,13 @@ export interface ShellControllerProps {
  */
 export function ShellController({ children }: ShellControllerProps) {
   const [status, setStatus] = useState<Status | null>(null);
-  const [pairing, setPairing] = useState<PairingPin | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [consent, setConsent] = useState<Consent | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [preview, setPreview] = useState<RepoPreview | null>(null);
   const [logs, setLogs] = useState<Record<string, string[]>>({});
+  const [windowPrefs, setWindowPrefs] = useState<WindowPrefs | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -61,6 +61,12 @@ export function ShellController({ children }: ShellControllerProps) {
   useEffect(() => {
     void loadCatalog();
   }, [loadCatalog]);
+
+  // The window's own preferences: nothing the agent does changes them, so they
+  // are read once rather than on every state event.
+  useEffect(() => {
+    shell.windowPrefs().then(setWindowPrefs, (caught) => setError(describe(caught)));
+  }, []);
 
   useEffect(() => {
     void load();
@@ -147,31 +153,29 @@ export function ShellController({ children }: ShellControllerProps) {
     fetchedAt,
     preview,
     logs,
-    // The PIN this window opened, or else one the agent already has open — so a
-    // window reopened mid-pairing still shows the code being typed.
-    pairing: pairing ?? status?.pairing ?? null,
+    // The agent's own offer: it disappears the moment a tablet uses it.
+    pairing: status?.pairing ?? null,
     browserPairing: status?.browserPairing ?? null,
     approvals: status?.approvals ?? [],
     fingerprint: status?.fingerprint ?? "",
     tunnel,
+    windowPrefs,
     error,
     busy,
     loading: status === null && error === null,
-    onNewPin: () =>
-      void act(async () => {
-        setPairing(await shell.beginPairing());
-      }),
-    onCancelPin: () =>
-      void act(async () => {
-        await shell.cancelPairing();
-        setPairing(null);
-      }),
+    onNewPin: () => void act(() => shell.beginPairing()),
+    onCancelPin: () => void act(() => shell.cancelPairing()),
     onNewBrowserCode: () => void act(() => shell.beginBrowserPairing()),
     onCancelBrowserCode: () => void act(() => shell.cancelBrowserPairing()),
     onAnswer: (id: number, allow: boolean) => void act(() => shell.answerApproval(id, allow)),
     onRevoke: (deviceId: string) => void act(() => shell.revokeDevice(deviceId)),
+    onRevokeAll: () => void act(() => shell.revokeAllDevices()),
     onToggleWebAccess: (enabled: boolean) => void act(() => shell.setWebAccess(enabled)),
     onSetPortal: (url: string) => void act(() => shell.setPortal(url)),
+    onSetWindowPrefs: (patch: Partial<WindowPrefs>) =>
+      void act(async () => {
+        setWindowPrefs(await shell.setWindowPrefs(patch));
+      }),
     onOpenLink: (url: string) => void act(() => shell.openLink(url)),
     onChooseFile: (file: File) =>
       void act(async () => {

@@ -7,14 +7,19 @@
 //! is a regenerated identity, after which every paired tablet rejects the agent
 //! while the agent itself looks perfectly healthy.
 //!
-//! The console is deliberately kept. There is no `windows_subsystem` attribute
-//! here because the banner names the address, the fingerprint and any start-up
-//! warning, and a control surface that silently failed to bind would otherwise
-//! look exactly like a window with nothing in it.
+//! Release builds are a GUI-subsystem program on Windows: a double-clicked app
+//! must not drag a console window along with it. Debug builds keep the console,
+//! because there the banner — address, fingerprint, any start-up warning — is
+//! the quickest way to see a control surface that silently failed to bind. When
+//! a release build is started from a terminal it attaches to that terminal, so
+//! `verify-plugin` and a mistyped flag still print where the user is looking.
+
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
 mod events;
 mod plugins;
+mod startup;
 mod state;
 
 use std::path::PathBuf;
@@ -28,6 +33,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{Manager, WindowEvent};
 
 fn main() {
+    attach_parent_console();
     // `flexdeck verify-plugin …`: the plugin SDKs ask the installed app whether
     // a plugin will work in it. No window for that.
     let raw: Vec<String> = std::env::args().skip(1).collect();
@@ -46,6 +52,7 @@ fn main() {
     };
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::status,
             commands::begin_pairing,
@@ -56,7 +63,10 @@ fn main() {
             commands::set_web_access,
             commands::set_portal,
             commands::revoke_device,
+            commands::revoke_all_devices,
             commands::open_link,
+            startup::window_prefs,
+            startup::set_window_prefs,
             plugins::plugin_inspect,
             plugins::plugin_install_file,
             plugins::plugin_install_repo,
@@ -152,20 +162,67 @@ fn main() {
             });
 
             build_tray(app)?;
+
+            // The window is created hidden, so starting to the tray never
+            // flashes it on screen first.
+            let prefs = startup::load(app.handle());
+            app.manage(startup::PrefsState(std::sync::Mutex::new(prefs)));
+            if !prefs.start_minimized {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                // Closing the window hides it rather than ending the process: the
-                // agent is serving tablets, and exiting because someone tidied a
-                // window away would take their deck down. Quitting is the tray's
-                // explicit, separate action.
-                api.prevent_close();
-                let _ = window.hide();
+                // By default closing the window hides it rather than ending the
+                // process: the agent is serving tablets, and exiting because
+                // someone tidied a window away would take their deck down.
+                // Quitting is the tray's explicit, separate action — unless the
+                // person turned "close to tray" off, in which case close means quit.
+                let close_to_tray = window
+                    .try_state::<startup::PrefsState>()
+                    .is_none_or(|prefs| prefs.get().close_to_tray);
+                if close_to_tray {
+                    api.prevent_close();
+                    let _ = window.hide();
+                } else {
+                    window.app_handle().exit(0);
+                }
             }
         })
-        .run(tauri::generate_context!())
+        .run(context())
         .expect("the window could not start");
+}
+
+/// Debug builds are their own app, so `pnpm dev:desktop` runs beside an
+/// installed release instead of fighting it: a different identifier (its own
+/// WebView profile and app-data folder), a name that says "dev" in the title
+/// bar and tray, and its own port. Release builds keep `tauri.conf.json` as is.
+const DEV_BUILD: bool = cfg!(debug_assertions);
+
+/// The dev build's port, one above the release default so both can listen.
+const DEV_PORT: u16 = flexdeck_server::settings::DEFAULT_PORT + 1;
+
+/// What the window calls itself: the product name, marked in a dev build.
+const APP_NAME: &str = if DEV_BUILD { "flexdeck dev" } else { "flexdeck" };
+
+fn context() -> tauri::Context<tauri::Wry> {
+    let mut context = tauri::generate_context!();
+
+    if DEV_BUILD {
+        let config = context.config_mut();
+        config.identifier.push_str(".dev");
+        config.product_name = Some(APP_NAME.to_string());
+        for window in &mut config.app.windows {
+            window.title = APP_NAME.to_string();
+        }
+        context.package_info_mut().name = APP_NAME.to_string();
+    }
+
+    context
 }
 
 /// The flags the window honours.
@@ -181,6 +238,9 @@ fn main() {
 /// same rule the command-line binary applies.
 fn options() -> Result<Options, String> {
     let mut options = Options::default();
+    if DEV_BUILD {
+        options.port = Some(DEV_PORT);
+    }
     let mut args = std::env::args().skip(1);
 
     while let Some(argument) = args.next() {
@@ -226,11 +286,12 @@ fn explain(error: &str, bind: std::net::SocketAddr) -> String {
 }
 
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "Show flexdeck", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", format!("Show {APP_NAME}"), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
 
     let mut tray = TrayIconBuilder::new()
+        .tooltip(APP_NAME)
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {
@@ -253,3 +314,23 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     tray.build(app)?;
     Ok(())
 }
+
+/// A GUI-subsystem process starts with no console. If it was launched from a
+/// terminal, borrow that one so `eprintln!` and the banner still reach it;
+/// launched from Explorer there is no parent console and this does nothing.
+#[cfg(all(windows, not(debug_assertions)))]
+fn attach_parent_console() {
+    const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn AttachConsole(process_id: u32) -> i32;
+    }
+    // SAFETY: AttachConsole takes a plain integer and fails harmlessly when
+    // there is no parent console or one is already attached.
+    unsafe {
+        AttachConsole(ATTACH_PARENT_PROCESS);
+    }
+}
+
+#[cfg(not(all(windows, not(debug_assertions))))]
+fn attach_parent_console() {}

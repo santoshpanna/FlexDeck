@@ -72,10 +72,8 @@ function TabletPairing({ p, go }: { p: ShellViewProps; go: (tab: Tab) => void })
   // tablet that just used it.
   const before = useRef<string[] | null>(null);
   const [paired, setPaired] = useState<DeviceRow | null>(null);
-  useEffect(() => {
-    if (live && before.current === null) before.current = p.devices.map((device) => device.id);
-    if (!live) before.current = null;
-  }, [live, p.devices]);
+  // Detect first, then reset: the read that brings the new tablet is the same
+  // one that withdraws the used code, so the order of these two matters.
   useEffect(() => {
     if (before.current === null) return;
     const fresh = newTablet(before.current, p.devices);
@@ -84,6 +82,10 @@ function TabletPairing({ p, go }: { p: ShellViewProps; go: (tab: Tab) => void })
       before.current = null;
     }
   }, [p.devices]);
+  useEffect(() => {
+    if (live && before.current === null) before.current = p.devices.map((device) => device.id);
+    if (!live) before.current = null;
+  }, [live, p.devices]);
 
   const drawPulse = useCallback((t: number) => pulse(t, 46, 11), []);
   const drawScan = useCallback((t: number) => scan(t, 52, 3), []);

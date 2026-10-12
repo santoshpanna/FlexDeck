@@ -183,9 +183,14 @@ async fn hello(State(door): State<Arc<Door>>) -> Json<serde_json::Value> {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ConnectRequest {
     #[serde(default)]
     name: String,
+    /// The browser's own id, so connecting again replaces its old row rather
+    /// than adding one per visit.
+    #[serde(default)]
+    client_id: String,
 }
 
 /// Issue this browser a local credential.
@@ -212,7 +217,7 @@ async fn connect(
     };
     let (token, device) = door
         .agent
-        .issue_credential(name, DeviceKind::BrowserLocal)?;
+        .issue_credential_for(name, DeviceKind::BrowserLocal, Some(&request.client_id))?;
 
     Ok(Json(json!({
         "token": token,

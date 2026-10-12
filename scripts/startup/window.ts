@@ -21,8 +21,11 @@ import { fail, isPortTaken, pnpmCommand, repoRoot, stop } from "./env.ts";
 /** Where the window's UI is served. Must match `build.devUrl` in tauri.conf.json. */
 const DEV_URL = "http://127.0.0.1:5174";
 
-/** The agent's default port, from `Settings` in flexdeck-server. */
-const AGENT_PORT = 7878;
+/**
+ * The port a debug build of the window listens on: `DEV_PORT` in the desktop's
+ * main.rs, one above the release default so an installed flexdeck keeps 7878.
+ */
+const AGENT_PORT = 7879;
 
 /**
  * The portal the window dials, from `DEFAULT_PORT` in flexdeck-cloud.
@@ -89,7 +92,7 @@ async function assertPortFree(): Promise<void> {
     fail(
       [
         `Something is already using port ${AGENT_PORT}, so the window's tablet listener could not start.`,
-        "The usual cause is the headless agent still running in another terminal —",
+        "The usual cause is `pnpm dev:agent` still running in another terminal —",
         `stop it (Ctrl+C) and run this again.`,
       ].join("\n"),
     );

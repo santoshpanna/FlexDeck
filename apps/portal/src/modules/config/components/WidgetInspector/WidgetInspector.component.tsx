@@ -13,7 +13,7 @@ import { FaceView } from "../FaceView/FaceView.component.tsx";
 import { KeySource } from "../KeySource/KeySource.component.tsx";
 import { IconPicker } from "../IconPicker/IconPicker.component.tsx";
 import { KeyGallery } from "../KeyGallery/KeyGallery.component.tsx";
-import { isBlankKey, suggestedActions } from "../../lib/presets.lib.ts";
+import { suggestedActions } from "../../lib/presets.lib.ts";
 import { LooksEditor } from "../LooksEditor/LooksEditor.component.tsx";
 import { ZonesEditor } from "../ZonesEditor/ZonesEditor.component.tsx";
 import type { LoadChoices } from "../../hooks/useArgumentChoices/useArgumentChoices.hook.ts";
@@ -87,8 +87,7 @@ const SLOTS: readonly { slot: Slot; label: string; hint: string }[] = [
  */
 export function WidgetInspector(p: WidgetInspectorProps) {
   const slider = isSlider(p.widget);
-  // A key with nothing on it yet opens on the gallery: most start from one.
-  const first = (): Tab => (slider ? "slider" : isBlankKey(p.widget) ? "gallery" : "does");
+  const first = (): Tab => (slider ? "slider" : "does");
   const [tab, setTab] = useState<Tab>(first);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => setTab(first()), [p.widget.id, slider]);
@@ -97,24 +96,23 @@ export function WidgetInspector(p: WidgetInspectorProps) {
     <FlowProvider catalogue={p.catalogue} variables={p.variables} loadChoices={p.loadChoices}>
       <div className="flex min-h-0 flex-1 flex-col">
         <Header {...p} slider={slider} />
-        <div className="px-5 pb-3">
+        {/* What the key does sits on the left — picking it by hand or from the
+            gallery; how it looks is its own pill on the right. */}
+        <div className="flex items-center justify-between gap-2 px-5 pb-3">
           <Segmented
-            label="Inspector"
+            label="Behaviour"
             value={tab}
             onChange={setTab}
             options={
               slider
-                ? [
-                    { value: "slider", label: "Slider" },
-                    { value: "looks", label: "Looks" },
-                  ]
+                ? [{ value: "slider", label: "Slider" }]
                 : [
                     { value: "does", label: "Does" },
-                    { value: "looks", label: "Looks" },
                     { value: "gallery", label: "Gallery" },
                   ]
             }
           />
+          <Segmented label="Appearance" value={tab} onChange={setTab} options={[{ value: "looks", label: "Looks" }]} />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
           <AnimatePresence mode="wait" initial={false}>

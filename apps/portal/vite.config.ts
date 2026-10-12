@@ -39,10 +39,11 @@ export default defineConfig({
     // earlier target here was the *agent*, which served this bundle before the
     // cloud existed; the portal no longer talks to an agent directly.
     //
-    // There is no `/ws` entry because the portal opens no WebSocket. Only the
-    // desktop dials one, and it dials the cloud itself, not through this server.
+    // `ws: true` because the portal's live socket (`/api/live`) comes through
+    // here too. Without it the upgrade is never passed on: requests work, and
+    // nothing the desktop pushes — slider values, looks, pages — ever arrives.
     proxy: {
-      "/api": { target: "http://127.0.0.1:8787" },
+      "/api": { target: "http://127.0.0.1:8787", ws: true },
     },
   },
 });

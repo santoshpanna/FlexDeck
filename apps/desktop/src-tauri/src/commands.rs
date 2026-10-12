@@ -55,12 +55,11 @@ pub async fn status(state: State<'_, ShellState>) -> Result<Value, String> {
         })
         .collect();
 
-    let pairing = state
-        .pairing
-        .lock()
-        .expect("the pairing lock is not poisoned")
-        .as_ref()
-        .map(|(pin, expires_at)| json!({ "pin": pin, "expiresAt": expires_at }));
+    // The agent's own offer, not a copy: once a tablet uses the code it is
+    // gone, and the window must stop showing it.
+    let pairing = agent
+        .pairing_offer_now()
+        .map(|offer| json!({ "pin": offer.pin, "expiresAt": offer.expires_at }));
 
     let server_error = state
         .server_error
@@ -124,19 +123,10 @@ pub async fn answer_approval(
     }
 }
 
-/// Open a pairing window and remember the code.
+/// Open a pairing window.
 #[tauri::command]
 pub async fn begin_pairing(state: State<'_, ShellState>) -> Result<Value, String> {
     let offer = state.agent.begin_pairing_now();
-
-    {
-        let mut pairing = state
-            .pairing
-            .lock()
-            .expect("the pairing lock is not poisoned");
-        *pairing = Some((offer.pin.clone(), offer.expires_at));
-    }
-
     Ok(json!({ "pin": offer.pin, "expiresAt": offer.expires_at }))
 }
 
@@ -144,10 +134,6 @@ pub async fn begin_pairing(state: State<'_, ShellState>) -> Result<Value, String
 #[tauri::command]
 pub async fn cancel_pairing(state: State<'_, ShellState>) -> Result<(), String> {
     state.agent.cancel_pairing();
-    *state
-        .pairing
-        .lock()
-        .expect("the pairing lock is not poisoned") = None;
     Ok(())
 }
 
@@ -168,7 +154,7 @@ pub async fn set_web_access(state: State<'_, ShellState>, enabled: bool) -> Resu
     status(state).await
 }
 
-/// Point this installation at a portal, or clear it with a blank address.
+/// Point this installation at a portal; a blank address restores the default.
 ///
 /// The portal address is the one thing the window could not change, and a wrong
 /// or missing one is indistinguishable from a portal that is switched off — so
@@ -185,11 +171,11 @@ pub async fn set_portal(state: State<'_, ShellState>, url: String) -> Result<Val
     let mut settings = state.settings.clone();
     let url = url.trim();
 
-    settings.cloud_url = if url.is_empty() {
-        None
+    settings.cloud_url = Some(if url.is_empty() {
+        flexdeck_server::settings::DEFAULT_PORTAL_URL.to_string()
     } else {
-        Some(url.to_string())
-    };
+        url.to_string()
+    });
 
     state
         .agent
@@ -218,6 +204,17 @@ pub async fn revoke_device(state: State<'_, ShellState>, device_id: String) -> R
 
     // The tablet's open socket is closed within one probe interval by the socket
     // loop itself, which re-checks its token — so its dot goes out on its own.
+    Ok(())
+}
+
+/// Revoke every paired tablet and browser. The window is not a device itself,
+/// so nothing is kept back.
+#[tauri::command]
+pub async fn revoke_all_devices(state: State<'_, ShellState>) -> Result<(), String> {
+    state
+        .agent
+        .revoke_all_devices(None)
+        .map_err(|error| error.to_string())?;
     Ok(())
 }
 

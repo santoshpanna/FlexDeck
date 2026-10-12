@@ -29,6 +29,10 @@ message PairRequest {
 
   // PIN flow: read by the human off the agent window, typed on the tablet.
   string pin = 5;
+
+  // An id this install made up once and keeps. Pairing again with the same id
+  // replaces the earlier pairing instead of adding a second one. Optional.
+  string client_id = 6;
 }
 
 message PairResponse {

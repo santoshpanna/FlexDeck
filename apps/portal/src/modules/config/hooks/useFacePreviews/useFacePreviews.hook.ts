@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { useLive } from "../../../../hooks/useLive/useLive.hook.ts";
 import { ApiContext } from "../../../../providers/ApiProvider/ApiProvider.provider.tsx";
@@ -20,6 +20,9 @@ export function useFacePreviews(desktopId: string | null, widgets: readonly Wire
   // has no previews.
   const api = useContext(ApiContext);
   const [previews, setPreviews] = useState<Record<string, WidgetPreview>>({});
+  // What the agent pushed since the last ask. Kept apart, and laid over the
+  // answer: a push can land before the answer does, and is the newer of the two.
+  const [pushed, setPushed] = useState<Record<string, NonNullable<WidgetPreview["state"]>>>({});
   // Bumped by a (re)opened socket: what was read before it may be stale.
   const [opened, setOpened] = useState(0);
   const key = JSON.stringify(widgets);
@@ -31,6 +34,8 @@ export function useFacePreviews(desktopId: string | null, widgets: readonly Wire
     }
     let live = true;
     const first = setTimeout(() => {
+      // From here on, only pushes newer than this ask count.
+      setPushed({});
       api
         .facePreviews(desktopId, [...widgets])
         .then((answer) => live && setPreviews(answer))
@@ -51,13 +56,19 @@ export function useFacePreviews(desktopId: string | null, widgets: readonly Wire
       return;
     }
     if (message.kind !== "state") return;
-    setPreviews((current) => {
-      // Only keys this page shows; the agent pushes every live key's look.
-      if (!(message.widgetId in current)) return current;
-      return { ...current, [message.widgetId]: { ...current[message.widgetId], state: message.state } };
-    });
+    setPushed((current) => ({ ...current, [message.widgetId]: message.state }));
   }, []);
   useLive(desktopId, hear);
 
-  return previews;
+  return useMemo(() => {
+    const merged: Record<string, WidgetPreview> = { ...previews };
+    // Only keys this page shows; the agent pushes every live key's look.
+    for (const widget of widgets) {
+      const state = pushed[widget.id];
+      if (state) merged[widget.id] = { ...merged[widget.id], state };
+    }
+    return merged;
+    // `key` stands for `widgets`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previews, pushed, key]);
 }

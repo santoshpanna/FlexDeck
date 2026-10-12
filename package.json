@@ -14,6 +14,7 @@
     "dev:desktop": "node scripts/startup/window.ts",
     "dev:agent": "node scripts/startup/desktop.ts",
     "dev:web": "node scripts/startup/web.ts",
+    "dev:server": "node scripts/startup/web.ts --api-only",
     "dev:android": "node scripts/startup/android.ts",
     "desktop:dev": "pnpm --filter @flexdeck/desktop dev",
     "desktop:build": "pnpm --filter @flexdeck/desktop build",

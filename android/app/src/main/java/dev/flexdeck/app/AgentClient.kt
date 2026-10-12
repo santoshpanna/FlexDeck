@@ -143,6 +143,9 @@ class AgentClient(
         val payload = buildJsonObject {
             put("pin", pin)
             put("deviceName", deviceName)
+            // Pairing again from this install replaces its old entry on the PC
+            // rather than adding a second one.
+            put("clientId", installId())
         }.toString().toRequestBody(JSON)
 
         val request = Request.Builder()
@@ -183,6 +186,38 @@ class AgentClient(
             },
         )
     }
+
+    /**
+     * Ask the PC to drop this tablet from its device list, before the tablet
+     * forgets the PC. Best effort: a PC that is off or unreachable keeps the
+     * entry, and its owner can remove it there. [done] runs either way, on
+     * OkHttp's thread.
+     */
+    fun forgetMe(host: String, port: Int, token: String, done: () -> Unit) {
+        if (host.isBlank() || token.isBlank()) return done()
+        val request = runCatching {
+            Request.Builder()
+                .url("https://$host:$port/api/devices/forget-me")
+                .header("Authorization", "Bearer $token")
+                .post("{}".toRequestBody(JSON))
+                .build()
+        }.getOrElse { return done() }
+        val call = http.newCall(request)
+        call.timeout().timeout(FORGET_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) = done()
+            override fun onResponse(call: Call, response: Response) {
+                response.close()
+                done()
+            }
+        })
+    }
+
+    /** An id this install made up once and keeps. Not a secret. */
+    private fun installId(): String =
+        preferences.getString(KEY_INSTALL_ID, null) ?: java.util.UUID.randomUUID().toString().also {
+            preferences.edit().putString(KEY_INSTALL_ID, it).apply()
+        }
 
     /**
      * Open the socket and say hello.
@@ -352,5 +387,10 @@ class AgentClient(
 
         /** How long the one pairing call may take, end to end. */
         const val PAIR_TIMEOUT_SECONDS = 15L
+
+        /** Disconnecting waits this long for the PC at most, then goes anyway. */
+        const val FORGET_TIMEOUT_SECONDS = 4L
+
+        const val KEY_INSTALL_ID = "installId"
     }
 }

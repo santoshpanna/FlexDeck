@@ -47,7 +47,8 @@ export function parseLive(text: string): LiveMessage | Refusal | null {
   if (revision) return { kind: "revision", rev: Number(revision.rev ?? 0) };
   const state = body("state");
   if (state) {
-    const { widgetId, ok: _ok, error: _error, value: _value, ...look } = state;
+    // `value` stays: it is where a slider's thumb sits.
+    const { widgetId, ok: _ok, error: _error, ...look } = state;
     return { kind: "state", widgetId: String(widgetId ?? ""), state: look as NonNullable<WidgetPreview["state"]> };
   }
   const page = body("page");

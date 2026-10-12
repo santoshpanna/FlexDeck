@@ -16,9 +16,11 @@
         "title": "flexdeck",
         "width": 380,
         "height": 560,
-        "minWidth": 340,
-        "minHeight": 420,
-        "resizable": true
+        "minWidth": 360,
+        "maxWidth": 560,
+        "minHeight": 480,
+        "resizable": true,
+        "visible": false
       }
     ],
     "security": {

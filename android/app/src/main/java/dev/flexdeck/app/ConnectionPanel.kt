@@ -103,7 +103,7 @@ class ConnectionPanel(
         card.addView(disconnect, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48f)).apply { topMargin = dp(10f) })
         card.addView(
             TextView(context).apply {
-                text = "Disconnecting forgets this PC on the tablet. To remove the tablet from the PC too, revoke it in the FlexDeck app."
+                text = "Disconnecting forgets this PC here and removes this tablet from the PC. If the PC is off, remove it there later."
                 textSize = 12f
                 setTextColor(MUTED)
                 setLineSpacing(0f, 1.25f)

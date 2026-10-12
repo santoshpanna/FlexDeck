@@ -38,6 +38,16 @@ pub fn router(directory: impl AsRef<Path>) -> Router {
     Router::new().fallback_service(ServeDir::new(&directory).fallback(ServeFile::new(&index)))
 }
 
+/// No portal at all: what `--no-portal` serves at every page path.
+///
+/// For development, where the portal runs on its own dev server and a build
+/// left in its folder would otherwise be served here — an old copy that looks
+/// exactly like the real one and silently lacks every change since.
+pub fn api_only() -> Router {
+    const PAGE: &str = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">         <title>flexdeck API</title></head>         <body style=\"font-family: system-ui, sans-serif; max-width: 42rem;          margin: 4rem auto; line-height: 1.5\">         <h1>This is the flexdeck API</h1>         <p>It was started without the portal. In development the portal runs on          its own: <code>pnpm dev:web</code> serves it at          <a href=\"http://127.0.0.1:5173\">127.0.0.1:5173</a>.</p>         </body></html>";
+    Router::new().fallback(|| async { axum::response::Html(PAGE) })
+}
+
 /// A page saying the portal has not been built.
 ///
 /// A bare 404 at `/` reads as a bug in the server rather than a missing build

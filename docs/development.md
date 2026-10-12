@@ -29,6 +29,8 @@ pnpm verify:node                    # typecheck + tests for the TypeScript packa
 pnpm verify:rust                    # fmt, clippy, tests for the Rust workspace
 pnpm verify:android                 # the app plus the pure-JVM Kotlin tests
 pnpm dev:web                        # the portal UI AND the cloud API behind it
+pnpm dev:server                     # just the cloud API, on 127.0.0.1:8787
+pnpm portal:dev                     # just the portal UI, on 127.0.0.1:5173
 pnpm dev:desktop                     # the desktop app (opens the window)
 pnpm dev:agent                       # the headless agent, no window
 pnpm desktop:dev                    # just the window's UI, on 127.0.0.1:5174
@@ -114,8 +116,14 @@ port **5174**, not the portal's 5173, so both can run at once.
 The Tauri CLI is not required. A debug build loads `devUrl`, so `cargo run` is
 enough; importing `@tauri-apps/cli` would only rename these steps to `tauri dev`.
 
-One agent per port: `dev:desktop` and `dev:agent` both serve the tablets, so run
-one or the other. `dev:desktop` checks the port first and says so rather than
+Dev builds run beside an installed release. A debug desktop build is "flexdeck
+dev" (identifier `dev.flexdeck.desktop.dev`, its own WebView profile) and
+listens on **7879**, keeping 7878 for the installed app; a debug APK is package
+`dev.flexdeck.dev`, labelled "flexdeck dev". Pair a dev tablet by QR, or type
+the address with `:7879`.
+
+One agent per port: `dev:desktop` and `dev:agent` both serve the tablets on
+7879, so run one or the other. `dev:desktop` checks the port first and says so rather than
 opening a window that cannot reach anything.
 
 Two checks the ordinary suites cannot make:

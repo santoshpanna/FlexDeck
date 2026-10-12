@@ -8,6 +8,7 @@ export interface AgentFactsValue {
   devices: Device[];
   reload: () => Promise<void>;
   revoke: (deviceId: string) => Promise<void>;
+  revokeAll: () => Promise<void>;
 }
 
 /**
@@ -47,5 +48,11 @@ export function useAgentFacts(desktopId: string | null): AgentFactsValue {
     [api, desktopId],
   );
 
-  return { status, devices, reload, revoke };
+  const revokeAll = useCallback(async () => {
+    if (desktopId) {
+      await api.revokeAllDevices(desktopId);
+    }
+  }, [api, desktopId]);
+
+  return { status, devices, reload, revoke, revokeAll };
 }
