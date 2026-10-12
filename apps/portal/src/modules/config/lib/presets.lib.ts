@@ -1,6 +1,6 @@
 import type { Block, Gesture, WireConfig, WireFlow, WireWidget } from "../../../services/api/api.ts";
 import { gridSpecOf, profileOf } from "./config.lib.ts";
-import { findPage, findWidget, firstFreeCell, nextWidgetId, resizeWidget, spansOf, withPage, withWidget } from "./editing.lib.ts";
+import { findPage, findWidget, firstFreeCell, nextWidgetId, widgetIdsOf, resizeWidget, spansOf, withPage, withWidget } from "./editing.lib.ts";
 import { CONFIG_SCHEMA } from "../../../services/api/api.ts";
 
 /**
@@ -481,7 +481,7 @@ export function placePreset(config: WireConfig, pageId: string, preset: Preset):
   for (const [w, h] of sizes) {
     const cell = firstFreeCell(spec, spans, w, h);
     if (!cell) continue;
-    const id = nextWidgetId(spans.map((span) => span.id));
+    const id = nextWidgetId(widgetIdsOf(config));
     const widget: WireWidget = { ...structuredClone(preset.widget), id, type: "WIDGET_TYPE_BUTTON", col: cell.col, row: cell.row, w, h };
     if (!widget.props) widget.props = { label: preset.name };
     else if (!widget.props.label) widget.props = { ...widget.props, label: preset.name };

@@ -195,6 +195,18 @@ test("a new widget id does not collide with one already in use", () => {
   assert.equal(nextWidgetId(["widget-1", "widget-2", "widget-3"]), "widget-4");
 });
 
+test("a widget added to a new page gets an id no other page uses", () => {
+  const base = configWith([button("widget-1", 0, 0)]);
+  const config: WireConfig = {
+    ...base,
+    profiles: [{ ...base.profiles![0]!, pages: [...base.profiles![0]!.pages!, { id: "media", widgets: [] }] }],
+  };
+
+  const after = addWidget(config, { type: "WIDGET_TYPE_BUTTON" }, "media");
+
+  assert.equal(after.profiles?.[0]?.pages?.[1]?.widgets?.[0]?.id, "widget-2");
+});
+
 test("a label is trimmed before it is stored", () => {
   const config = configWith([button("a", 0, 0)]);
 

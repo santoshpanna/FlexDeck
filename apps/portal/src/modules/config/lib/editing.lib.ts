@@ -602,7 +602,7 @@ export function addWidget(
 
   const placed: WireWidget = {
     ...widget,
-    id: nextWidgetId(spans.map((span) => span.id)),
+    id: nextWidgetId(widgetIdsOf(config)),
     col: cell.col,
     row: cell.row,
     w: limits.minW,
@@ -620,6 +620,14 @@ export function addWidget(
 /// Sequential rather than random: an id a human can recognise makes the raw JSON
 /// and the diffs readable, and uniqueness only has to hold within a
 /// configuration.
+/// Every widget id in the document, across all profiles and pages — the set a
+/// new id must avoid, since the desktop refuses a configuration that repeats one.
+export function widgetIdsOf(config: WireConfig): string[] {
+  return (config.profiles ?? []).flatMap((profile) =>
+    (profile.pages ?? []).flatMap((page) => (page.widgets ?? []).map((widget) => widget.id)),
+  );
+}
+
 export function nextWidgetId(existing: readonly string[]): string {
   for (let n = 1; ; n += 1) {
     const candidate = `widget-${n}`;
@@ -661,7 +669,7 @@ export function addWidgetAt(
 
   const placed: WireWidget = {
     ...widget,
-    id: nextWidgetId(spans.map((span) => span.id)),
+    id: nextWidgetId(widgetIdsOf(config)),
     col,
     row,
     w: limits.minW,
@@ -854,9 +862,7 @@ export function duplicatePage(config: WireConfig, pageId: string, newPageId: str
   }
 
   const pages = profile.pages ?? [];
-  const taken = pages.flatMap((candidate) =>
-    (candidate.widgets ?? []).map((widget) => widget.id),
-  );
+  const taken = widgetIdsOf(config);
 
   const widgets = (page.widgets ?? []).map((widget) => {
     const id = nextWidgetId(taken);
@@ -908,7 +914,7 @@ export function duplicateWidget(config: WireConfig, widgetId: string): WireConfi
 
   const copy: WireWidget = {
     ...found.widget,
-    id: nextWidgetId(spans.map((span) => span.id)),
+    id: nextWidgetId(widgetIdsOf(config)),
     col: cell.col,
     row: cell.row,
     w,
