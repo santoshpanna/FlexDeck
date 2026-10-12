@@ -2,6 +2,19 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
+## v0.1.0-rc.5 — 2026-10-13
+
+**Publish the plugin SDKs and move official plugins to their own repo**
+
+### Added
+
+- **plugins** Publish @flexdeck/plugin-sdk and create-flexdeck-plugin on npm, flexdeck-plugin-abi and flexdeck-plugin-sdk on crates.io, and flexdeck on PyPI.
+- **desktop** A "Minimize to tray" setting that hides the minimized window from the taskbar.
+
+### Fixed
+
+- **plugins** Load the official and vetted plugin lists from Questory-Labs/FlexDeck-Plugins.
+
 ## v0.1.0-rc.4 — 2026-10-12
 
 **Allocate widget ids across the whole configuration**

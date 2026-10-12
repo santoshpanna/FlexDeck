@@ -2,6 +2,40 @@
   "next": [],
   "releases": [
     {
+      "version": "v0.1.0-rc.5",
+      "platforms": [
+        "desktop"
+      ],
+      "hash": "2f63ef2befd83bf3352f04f1a5a2f5e8657f4786",
+      "date": "2026-10-13",
+      "title": "Publish the plugin SDKs and move official plugins to their own repo",
+      "blurb": "",
+      "groups": [
+        {
+          "name": "Added",
+          "items": [
+            {
+              "area": "PLUGINS",
+              "text": "Publish @flexdeck/plugin-sdk and create-flexdeck-plugin on npm, flexdeck-plugin-abi and flexdeck-plugin-sdk on crates.io, and flexdeck on PyPI."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "A \"Minimize to tray\" setting that hides the minimized window from the taskbar."
+            }
+          ]
+        },
+        {
+          "name": "Fixed",
+          "items": [
+            {
+              "area": "PLUGINS",
+              "text": "Load the official and vetted plugin lists from Questory-Labs/FlexDeck-Plugins."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.1.0-rc.4",
       "platforms": [
         "server"
