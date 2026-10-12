@@ -209,6 +209,11 @@ jobs:
         with:
           packages-dir: packages/plugin-sdk-python/dist
           skip-existing: true
+          # PyPI checks an attestation against the top-level workflow
+          # (pipeline.yml) but the token against this one, so they never agree
+          # when sdk.yml is called. Drop them until PyPI supports reusable
+          # workflows: https://github.com/pypa/gh-action-pypi-publish/issues/166
+          attestations: false
 
   tag:
     name: Tag the release

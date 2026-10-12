@@ -2,7 +2,7 @@ name: Pipeline
 
 # Everything that happens after a push to main, in order:
 #
-#   changelog ──┬── web       public pages → Vercel                 every push
+#   changelog ──┬── web       public pages → Vercel                 when what they're built from changed
 #               ├── server    editor + API → Docker Hub → Easypanel    when its code changed, or a release names it
 #               ├── desktop ──┐                                      on a release commit naming it
 #               ├── android ──┴── publish   GitHub release + notes   on a release commit
@@ -45,6 +45,7 @@ jobs:
       android: ${{ steps.release.outputs.android }}
       server: ${{ steps.release.outputs.server == 'true' || steps.changes.outputs.server == 'true' }}
       server_release: ${{ steps.release.outputs.server }}
+      web: ${{ steps.changes.outputs.web }}
       sdks: ${{ steps.sdks.outputs.base }}
       sdk_dependents: ${{ steps.sdks.outputs.dependents }}
     steps:
@@ -109,9 +110,10 @@ jobs:
           echo "base=$(node -p 'JSON.stringify(JSON.parse(process.env.PENDING).base)')" >> "$GITHUB_OUTPUT"
           echo "dependents=$(node -p 'JSON.stringify(JSON.parse(process.env.PENDING).dependents)')" >> "$GITHUB_OUTPUT"
 
-      # Restarting the server drops every live editor session, so it only
-      # happens when something it serves changed.
-      - name: Does the server need a deploy
+      # Restarting the server drops every live editor session, and the public
+      # pages needn't redeploy for a push that leaves them as they were, so
+      # each deploys only when something it serves changed.
+      - name: What needs a deploy
         id: changes
         run: |
           before="${{ github.event.before }}"
@@ -122,10 +124,19 @@ jobs:
           else
             echo "server=false" >> "$GITHUB_OUTPUT"
           fi
+          # The public pages, against HEAD so a regenerated changelog counts.
+          if [ "${{ github.event_name }}" != "push" ] || [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+            echo "web=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$before" HEAD | grep -qE '^(apps/portal/|packages/(face|grid|tokens|ui)/|contract/|docs/|package\.json$|pnpm-(lock|workspace)\.yaml$|\.github/workflows/web\.yml$)'; then
+            echo "web=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "web=false" >> "$GITHUB_OUTPUT"
+          fi
 
   web:
     name: Web
     needs: changelog
+    if: needs.changelog.outputs.web == 'true'
     uses: ./.github/workflows/web.yml
     with:
       ref: ${{ needs.changelog.outputs.sha }}
