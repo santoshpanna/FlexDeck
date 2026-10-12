@@ -2,6 +2,27 @@
   "next": [],
   "releases": [
     {
+      "version": "v0.1.0-rc.4",
+      "platforms": [
+        "server"
+      ],
+      "hash": "a26538be5bd0bb2b90de7788c15f6937f468d5d0",
+      "date": "2026-10-12",
+      "title": "Allocate widget ids across the whole configuration",
+      "blurb": "",
+      "groups": [
+        {
+          "name": "Fixed",
+          "items": [
+            {
+              "area": "EDITOR",
+              "text": "Derive next widget id from every profile and page."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.1.0-rc.3",
       "platforms": [
         "desktop",

@@ -2,6 +2,14 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
+## v0.1.0-rc.4 — 2026-10-12
+
+**Allocate widget ids across the whole configuration**
+
+### Fixed
+
+- **editor** Derive next widget id from every profile and page.
+
 ## v0.1.0-rc.3 — 2026-10-12
 
 **Replace re-paired devices and ship window prefs with side-by-side dev**
