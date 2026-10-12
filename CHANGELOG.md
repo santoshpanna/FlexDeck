@@ -2,6 +2,12 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
+## Next
+
+### Fixed
+
+- **general** Cla workflow.
+
 ## v0.1.0-rc.5 — 2026-10-13
 
 **Publish the plugin SDKs and move official plugins to their own repo**

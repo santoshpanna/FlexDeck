@@ -1,5 +1,15 @@
 {
-  "next": [],
+  "next": [
+    {
+      "name": "Fixed",
+      "items": [
+        {
+          "area": "GENERAL",
+          "text": "Cla workflow."
+        }
+      ]
+    }
+  ],
   "releases": [
     {
       "version": "v0.1.0-rc.5",
