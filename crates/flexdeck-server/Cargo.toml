@@ -38,7 +38,7 @@ url = "2"
 # second provider (ureq's default is ring) makes rustls refuse to pick either.
 ureq = { version = "3", default-features = false, features = ["json", "gzip", "rustls-no-provider", "rustls-webpki-roots"] }
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
 # Uploaded pictures are decoded, checked and written again, never kept as sent.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 
