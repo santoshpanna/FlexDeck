@@ -62,6 +62,8 @@ export function stamp(sdk: string, version: string, requires?: string) {
     }
     case "rust-abi":
       edit("crates/flexdeck-plugin-abi/Cargo.toml", (text, path) => replaceVersion(path, text, ownVersion, version));
+      // Cargo resolves the whole workspace, so the SDK's requirement must admit the new version too.
+      edit("crates/flexdeck-plugin-sdk/Cargo.toml", (text, path) => replaceVersion(path, text, abiDependency, version));
       return;
     case "rust-sdk": {
       const abi = needs("rust-abi");
