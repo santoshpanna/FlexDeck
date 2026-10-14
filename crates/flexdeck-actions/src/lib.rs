@@ -140,6 +140,31 @@ pub struct ActionSpec {
     pub arguments: &'static [ArgumentSpec],
     /// Set when a slider widget can drive this action.
     pub slider: Option<SliderSpec>,
+    /// Set when a key running it can show whether it is in effect.
+    pub active: Option<ActiveSpec>,
+}
+
+/// When a key running an action is lit — the static form of the ABI's
+/// `ActiveDto`. `variable` may hold `{{argument}}` placeholders.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ActiveSpec {
+    pub variable: &'static str,
+    /// Lit while the variable holds this argument's value.
+    pub equals: Option<&'static str>,
+    /// Lit while the variable holds this value; `"true"` when neither is set.
+    pub is: Option<&'static str>,
+}
+
+impl ActiveSpec {
+    /// Lit while a true/false `variable` is true.
+    pub const fn while_true(variable: &'static str) -> Self {
+        Self { variable, equals: None, is: None }
+    }
+
+    /// Lit while `variable` holds what the `argument` was set to.
+    pub const fn equals(variable: &'static str, argument: &'static str) -> Self {
+        Self { variable, equals: Some(argument), is: None }
+    }
 }
 
 /// How a slider drives an action — the static form of the ABI's `SliderDto`.
@@ -205,6 +230,7 @@ pub const CORE_ACTIONS: &[ActionSpec] = &[
             "ctrl+shift+m",
         )],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: CORE_PLUGIN,
@@ -212,6 +238,7 @@ pub const CORE_ACTIONS: &[ActionSpec] = &[
         description: "Type some text",
         arguments: &[ArgumentSpec::text("text", "The text to type", "hello")],
         slider: None,
+        active: None,
     },
 ];
 

@@ -3,7 +3,7 @@ import { Children, cloneElement, useCallback, useEffect, useRef, useState, type 
 
 import { useDesktops } from "../../../hooks/useDesktops/useDesktops.hook.ts";
 import { useLive } from "../../../hooks/useLive/useLive.hook.ts";
-import type { AutomationDocument, Run, WireConfig } from "../../../services/api/api.ts";
+import { ApiError, type AutomationDocument, type Run, type WireConfig } from "../../../services/api/api.ts";
 import type { LiveMessage } from "../../../services/api/live.ts";
 import { describeError } from "../../../services/api/errors.ts";
 import { useActionCatalogue } from "../hooks/useActionCatalogue/useActionCatalogue.hook.ts";
@@ -144,6 +144,8 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     }
   }, []);
 
+  const refusedWrite = useRef<string | null>(null);
+
   /// Commit a document, then re-read everything.
   ///
   /// The re-read is not only for the editor: an edit changes the agent's
@@ -152,12 +154,31 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
   const write = useCallback(
     (next: WireConfig) => {
       void act(async () => {
-        await document.put(next);
+        try {
+          await document.put(next);
+        } catch (cause) {
+          // Only the agent saying no to what was written — 400, or 500 from an
+          // agent older than that — not who is asking (401, 403), a consent it
+          // needs (409), or a relay that could not reach it (502–504).
+          const refused = cause instanceof ApiError && [400, 422, 500].includes(cause.status);
+          refusedWrite.current = refused ? describeError(cause) : null;
+          throw cause;
+        }
+        refusedWrite.current = null;
         await refreshDeck();
       });
     },
     [act, document.put, refreshDeck],
   );
+
+  // A refused save is about the text that was refused; once the field is back
+  // to what is saved, it no longer applies. Other failures are left standing.
+  const settleRefusedWrite = useCallback(() => {
+    const refused = refusedWrite.current;
+    if (refused === null) return;
+    refusedWrite.current = null;
+    setError((current) => (current === refused ? null : current));
+  }, []);
 
   // The document moved somewhere else — another browser, a tablet, an undo
   // elsewhere — or the socket reopened after a gap: read it again. The agent
@@ -201,6 +222,7 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     write,
     currentPageId,
     onPageCreated: choosePage,
+    onUnchanged: settleRefusedWrite,
     // A widget just added is the one about to be set up: open it.
     onWidgetCreated: () => {
       setPreviewState("idle");

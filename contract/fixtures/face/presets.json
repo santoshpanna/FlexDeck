@@ -872,7 +872,7 @@
       "id": "weather",
       "name": "Weather",
       "category": "Web",
-      "description": "Temperature and sky now, today's temperatures behind. Set its place in Its own data.",
+      "description": "Temperature and sky now, today's temperatures behind. Set its place in its source.",
       "w": 2,
       "h": 1,
       "needs": {
@@ -880,26 +880,21 @@
         "id": "weather"
       },
       "widget": {
-        "sources": [
-          {
-            "source": "weather"
-          }
-        ],
         "face": {
           "layout": "FACE_LAYOUT_SPLIT",
           "background": {
-            "graph": "this.today",
+            "graph": "src.weather.today",
             "graphColor": "#38bdf8"
           },
           "elements": [
             {
               "slot": "SLOT_VISUAL",
               "kind": "ELEMENT_KIND_ICON",
-              "template": "{{this.icon}}"
+              "template": "{{src.weather.icon}}"
             },
             {
               "slot": "SLOT_TITLE",
-              "template": "{{ this.temp | temp }}",
+              "template": "{{ src.weather.temp | temp }}",
               "text": {
                 "size": "TEXT_SIZE_XL",
                 "bold": true
@@ -907,7 +902,7 @@
             },
             {
               "slot": "SLOT_CAPTION",
-              "template": "{{this.sky}} · {{ this.wind | round }} km/h"
+              "template": "{{src.weather.sky}} · {{ src.weather.wind | round }} km/h"
             }
           ]
         }
@@ -917,7 +912,7 @@
       "id": "crypto",
       "name": "Crypto ticker",
       "category": "Web",
-      "description": "A coin's price, green or red with its change over a day. Set the coin in Its own data.",
+      "description": "A coin's price, green or red with its change over a day. Set the coin in its source.",
       "w": 2,
       "h": 1,
       "needs": {
@@ -925,16 +920,11 @@
         "id": "crypto"
       },
       "widget": {
-        "sources": [
-          {
-            "source": "crypto"
-          }
-        ],
         "face": {
           "layout": "FACE_LAYOUT_VALUE",
           "rules": [
             {
-              "when": "this.change < -5",
+              "when": "src.crypto.change < -5",
               "color": "#7f1d1d",
               "pulse": true
             }
@@ -946,21 +936,21 @@
             },
             {
               "slot": "SLOT_VALUE",
-              "template": "{{ this.price | currency }}",
+              "template": "{{ src.crypto.price | currency }}",
               "text": {
                 "font": "FONT_MONO"
               }
             },
             {
               "slot": "SLOT_CAPTION",
-              "template": "{{ this.change | round(2) | sign }}% today",
+              "template": "{{ src.crypto.change | round(2) | sign }}% today",
               "rules": [
                 {
-                  "when": "this.change < 0",
+                  "when": "src.crypto.change < 0",
                   "color": "#ef4444"
                 },
                 {
-                  "when": "this.change >= 0",
+                  "when": "src.crypto.change >= 0",
                   "color": "#4ade80"
                 }
               ]

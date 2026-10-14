@@ -45,6 +45,7 @@ static EXAMPLE_ACTIONS: &[ActionSpec] = &[
             ArgumentSpec::choice("mode", "Which way to count", "add", &["add", "subtract"]),
         ],
         slider: None,
+        active: None,
     },
     // Reports which look a widget should show — the "provider" half of the
     // contract, which a widget whose looks come from an action relies on.
@@ -54,6 +55,7 @@ static EXAMPLE_ACTIONS: &[ActionSpec] = &[
         description: "Flip a switch, and report which way it now faces",
         arguments: &[],
         slider: None,
+        active: None,
     },
 ];
 

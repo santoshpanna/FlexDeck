@@ -125,7 +125,7 @@ test("a widget is bound to live values and unbound by clearing them", () => {
 
   const unbound = setWidgetBinding(bound, "rec", { stateVariable: "", labelTemplate: "  " });
   const after = unbound.profiles?.[0]?.pages?.[0]?.widgets?.[0];
-  assert.deepEqual(after?.props, { label: "Record" });
+  assert.deepEqual(after?.props, { label: "Record", noAutoLight: true }, "a light cleared by hand stays cleared");
   assert.equal(after?.states, undefined);
 
   // States this editor did not make are not its to remove.

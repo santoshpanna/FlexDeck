@@ -39,6 +39,7 @@ import {
   type FeedDto,
   MAX_SERIES_POINTS,
   type PresetDto,
+  type ActiveDto,
   type EventDto,
   IMAGE_MIMES,
   type ImageMime,
@@ -120,11 +121,15 @@ export interface ActionSpec<Args extends string = string> {
   /** A slider can drive this action. */
   slider?: SliderSpec<Args>;
   /**
-   * What this action picks can be seen to be picked: a key that runs it is lit
-   * while `variable` holds the value of argument `equals`. OBS's `set_scene`
-   * is active while `obs.scene` is its scene.
+   * What this action does can be seen to be in effect: a key that runs it is
+   * lit while `variable` holds the value of argument `equals` — OBS's
+   * `set_scene` is active while `obs.scene` is its scene — or the value `is`,
+   * `"true"` when neither is given: Discord's `toggle_mute` is active while
+   * `discord.voice.mute` is true. `variable` may hold `{{argument}}`
+   * placeholders: `"discord.user.{{user}}.muted"`. Only `equals` with a plain
+   * variable reaches an agent that predates these; the rest is left out there.
    */
-  active?: { variable: string; equals: Args };
+  active?: { variable: string; equals: Args } | { variable: string; is?: string };
   /**
    * Refuse a value before anything runs: return a reason, or nothing if it is
    * fine. Called when an automation is saved and before every press.
@@ -320,11 +325,27 @@ function validate(definition: PluginDefinition): void {
       check(min < max && step > 0, `${name}.slider: needs min < max and step > 0`);
     }
     if (action.active) {
-      const { variable, equals } = action.active;
-      check(equals in (action.arguments ?? {}), `${name}.active: '${equals}' is not one of its arguments`);
+      const { variable } = action.active;
+      const named = [...placeholders(variable), ...("equals" in action.active ? [action.active.equals] : [])];
+      check(!("equals" in action.active && "is" in action.active), `${name}.active: takes equals or is, not both`);
+      for (const argument of named) {
+        check(argument in (action.arguments ?? {}), `${name}.active: '${argument}' is not one of its arguments`);
+      }
       check(variable.startsWith(prefix), `${name}.active: variable '${variable}' must start with '${prefix}'`);
     }
   }
+}
+
+function placeholders(template: string): string[] {
+  return [...template.matchAll(/\{\{\s*([^{}\s]+)\s*\}\}/g)].map((match) => match[1]!);
+}
+
+/** The wire form of `active`, and whether only an agent offering `toggles` reads it. */
+function activeDto(active: NonNullable<ActionSpec["active"]>): { dto: ActiveDto; toggles: boolean } {
+  if ("equals" in active) {
+    return { dto: { variable: active.variable, equals: active.equals }, toggles: placeholders(active.variable).length > 0 };
+  }
+  return { dto: active.is === undefined ? { variable: active.variable } : { variable: active.variable, is: active.is }, toggles: true };
 }
 
 function argumentDtos(args: Record<string, ArgumentSpec> | undefined): ArgumentDto[] {
@@ -338,7 +359,12 @@ function argumentDtos(args: Record<string, ArgumentSpec> | undefined): ArgumentD
   }));
 }
 
-function manifestOf(definition: PluginDefinition, abi: number = ABI_VERSION): ManifestDto {
+function manifestOf(
+  definition: PluginDefinition,
+  abi: number = ABI_VERSION,
+  offered: readonly string[] = Object.values(Capability),
+): ManifestDto {
+  let toggles = false;
   const actions: ActionDto[] = Object.entries(definition.actions).map(([action, spec]) => {
     const dto: ActionDto = {
       action,
@@ -360,7 +386,15 @@ function manifestOf(definition: PluginDefinition, abi: number = ABI_VERSION): Ma
       if (mute !== undefined) slider.mute = mute.feedback === undefined ? { action: mute.action } : { ...mute };
       dto.slider = slider;
     }
-    if (abi >= 4 && spec.active) dto.active = { variable: spec.active.variable, equals: spec.active.equals };
+    if (abi >= 4 && spec.active) {
+      const active = activeDto(spec.active);
+      // An agent that does not offer `toggles` refuses the whole manifest over
+      // one it cannot read, so that key goes unlit there instead.
+      if (!active.toggles || offered.includes(Capability.toggles)) {
+        dto.active = active.dto;
+        toggles ||= active.toggles;
+      }
+    }
     return dto;
   });
   const settings: SettingDto[] = Object.entries(definition.settings ?? {}).map(([key, setting]) => ({
@@ -417,6 +451,7 @@ function manifestOf(definition: PluginDefinition, abi: number = ABI_VERSION): Ma
         }),
       );
     }
+    if (toggles) uses.push(Capability.toggles);
     manifest.uses = uses;
   }
   return manifest;
@@ -615,7 +650,8 @@ export function definePlugin(definition: PluginDefinition): Plugin {
         }
         abi = body.abi;
         plugin.configure((body.settings as Record<string, string>) ?? {}, (body.dataDir as string | null) ?? null);
-        const answer = { manifest: manifestOf(definition, abi), variables: plugin.variables() };
+        const offered = Array.isArray(body.hostCapabilities) ? (body.hostCapabilities as string[]) : [];
+        const answer = { manifest: manifestOf(definition, abi, offered), variables: plugin.variables() };
         // Start after the answer is on its way, so a slow connect does not
         // count against the initialize deadline.
         setImmediate(() => {

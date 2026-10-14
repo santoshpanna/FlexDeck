@@ -174,6 +174,11 @@ message WidgetProps {
   // An icon that follows a value: "{{media.spotify.art}}" shows the album art
   // as it changes. A value is a bundled icon's name or `img:<sha256>`.
   string icon_template = 7;
+  // No light in the corner while it is lit; its look still changes. Schema 5.
+  bool hide_dot = 8;
+  // Its light was cleared by hand: the editor does not give it one again on
+  // its own. Only the editor reads it. Schema 5.
+  bool no_auto_light = 9;
 }
 
 // How a person touched a widget. The tablet tells them apart, because only
@@ -237,7 +242,32 @@ message WidgetStates {
     VariableSource variable = 3;
     // An action in one of the widget's flows reports which look applies.
     ProviderSource provider = 4;
+    // The last gesture on the key picks the look: a tap one, a long press
+    // another; a hold one until the finger lifts. Schema 5.
+    GestureSource gesture = 5;
   }
+  // Looks a value picks, tried in order before `source`: "while obs.recording
+  // is true, show Recording". The first that holds wins; none: `source`.
+  // Schema 5.
+  repeated StateRule rules = 6;
+}
+
+message GestureSource {
+  repeated GestureLook looks = 1;
+}
+
+// "After this gesture, show look `state`." HOLD_START shows while held,
+// until HOLD_END's look (or, without one, the look from before the hold).
+message GestureLook {
+  Gesture gesture = 1;
+  string state = 2;
+}
+
+message StateRule {
+  string variable = 1;
+  CompareOp op = 2;
+  string value = 3;
+  string state = 4;
 }
 
 // One look. Empty fields fall back to the widget's `props`.

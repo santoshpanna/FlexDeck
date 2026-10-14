@@ -1,4 +1,5 @@
 import { CONFIG_SCHEMA, type Block, type DataSource, type WireConfig, type WirePage, type WireWidget } from "../../../services/api/api.ts";
+import { withSchemaFor } from "./config.lib.ts";
 import { nextPageId, nextWidgetId } from "./editing.lib.ts";
 
 /**
@@ -74,7 +75,7 @@ export function exportPage(page: WirePage | null | undefined, schema: number | u
   const sources = yours
     .filter((source) => wanted.has(source.id))
     .map((source) => ({ ...source, args: source.args?.map((arg) => (arg.secret ? { ...arg, default: "" } : arg)) }));
-  const bundle: Bundle = { fddeck: FDDECK_VERSION, schema: schema ?? CONFIG_SCHEMA, page: structuredClone(page) };
+  const bundle: Bundle = { fddeck: FDDECK_VERSION, schema: schema ?? withSchemaFor({ profiles: [{ id: "", pages: [page] }] }).schema!, page: structuredClone(page) };
   if (sources.length > 0) bundle.sources = sources;
   return bundle;
 }

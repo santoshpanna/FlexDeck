@@ -154,6 +154,14 @@ class FramesTest {
         assertEquals("#7f1d1d", message.background)
         assertTrue(message.pulse)
         assertEquals("img:ab", message.backgroundImage)
+        assertEquals("", message.unavailable)
+    }
+
+    @Test
+    fun `a key whose plugin lost its action says why`() {
+        val frame = """{"state":{"widgetId":"mute","unavailable":"discord no longer has \"toggle_mute\""}}"""
+        val message = Frames.parseServerMessage(frame) as ServerMessage.State
+        assertEquals("discord no longer has \"toggle_mute\"", message.unavailable)
     }
 
     @Test

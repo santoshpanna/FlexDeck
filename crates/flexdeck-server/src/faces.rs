@@ -602,6 +602,7 @@ mod tests {
                     },
                 ],
                 source: None,
+                rules: vec![],
             }),
             ..Default::default()
         };

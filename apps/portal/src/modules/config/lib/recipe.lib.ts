@@ -53,20 +53,19 @@ export function recipeFiles(source: DataSource, meta: RecipeMeta): { plugin: Rec
   if (!shared.args?.length) delete shared.args;
   const [first, second] = fields;
   const elements: Record<string, unknown>[] = [{ slot: "SLOT_TOP", template: meta.name }];
-  if (first) elements.push({ slot: "SLOT_VALUE", template: `{{this.${first.name}}}` });
-  if (second) elements.push({ slot: "SLOT_CAPTION", template: `{{this.${second.name}}}` });
+  if (first) elements.push({ slot: "SLOT_VALUE", template: `{{src.${meta.id}.${first.name}}}` });
+  if (second) elements.push({ slot: "SLOT_CAPTION", template: `{{src.${meta.id}.${second.name}}}` });
   const preset = {
     id: "value",
     name: meta.name,
     category: "Web",
-    description: meta.description || `What ${meta.name} reads. Set its settings under Its own data.`,
+    description: meta.description || `What ${meta.name} reads.`,
     w: 1,
     h: 1,
     widget: {
-      sources: [{ source: meta.id }],
       face: {
         layout: "FACE_LAYOUT_VALUE",
-        ...(graph ? { background: { graph: `this.${graph.name}` } } : {}),
+        ...(graph ? { background: { graph: `src.${meta.id}.${graph.name}` } } : {}),
         elements,
       },
     },

@@ -111,6 +111,8 @@ export interface EditorOptions {
   onPageCreated?: (pageId: string) => void;
   /** Called with the new id after a widget is added or duplicated, so the caller can open it. */
   onWidgetCreated?: (widgetId: string) => void;
+  /** An edit came to nothing: what is saved is what the field now says. */
+  onUnchanged?: () => void;
 }
 
 /** How long a refused edit's explanation stays up. */
@@ -129,6 +131,7 @@ export function useEditor({
   currentPageId,
   onPageCreated,
   onWidgetCreated,
+  onUnchanged,
 }: EditorOptions): EditorValue {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState("");
@@ -269,6 +272,7 @@ export function useEditor({
       stateVariableOf(selected.widget) === binding.stateVariable.trim() &&
       (props.labelTemplate ?? "") === binding.labelTemplate.trim()
     ) {
+      onUnchanged?.();
       return;
     }
     setRefusal(null);
@@ -285,6 +289,7 @@ export function useEditor({
     const next = transform(config, selectedId);
     // Unchanged is not a refusal here: re-choosing what is already chosen.
     if (next === config) {
+      onUnchanged?.();
       return;
     }
     setRefusal(null);
@@ -297,6 +302,7 @@ export function useEditor({
     }
     const next = transform(config, currentPageId);
     if (next === config) {
+      onUnchanged?.();
       return;
     }
     setRefusal(null);
@@ -309,6 +315,7 @@ export function useEditor({
     }
     // An unchanged icon must not spend a revision.
     if ((selected.widget.props?.icon ?? "") === (icon ?? "")) {
+      onUnchanged?.();
       return;
     }
     const next = setWidgetIcon(config, selectedId, icon);

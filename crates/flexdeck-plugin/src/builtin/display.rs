@@ -48,6 +48,7 @@ static DISPLAY_ACTIONS: &[ActionSpec] = &[
             "percent",
             "display.monitor.{{monitor}}.brightness",
         )),
+        active: None,
     },
     ActionSpec {
         plugin: DISPLAY_PLUGIN,
@@ -58,6 +59,7 @@ static DISPLAY_ACTIONS: &[ActionSpec] = &[
             ArgumentSpec::number("step", "How many percent to add", "10"),
         ],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: DISPLAY_PLUGIN,
@@ -68,6 +70,7 @@ static DISPLAY_ACTIONS: &[ActionSpec] = &[
             ArgumentSpec::number("step", "How many percent to remove", "10"),
         ],
         slider: None,
+        active: None,
     },
 ];
 

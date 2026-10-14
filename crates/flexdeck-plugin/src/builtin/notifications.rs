@@ -24,6 +24,7 @@ static NOTIFICATIONS_ACTIONS: &[ActionSpec] = &[ActionSpec {
         ArgumentSpec::text("body", "The message", "CPU load is high"),
     ],
     slider: None,
+    active: None,
 }];
 
 static NOTIFICATIONS_MANIFEST: PluginManifest = PluginManifest {

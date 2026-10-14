@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use flexdeck_actions::{ActionSpec, ArgumentSpec};
+use flexdeck_actions::{ActionSpec, ActiveSpec, ArgumentSpec};
 use flexdeck_vars::{is_user_name, Value, VariableSpec, USER_PREFIX};
 
 use crate::{argument, Ctx, Outcome, Plugin, PluginError, PluginManifest};
@@ -24,6 +24,7 @@ static VARS_ACTIONS: &[ActionSpec] = &[
             ArgumentSpec::text("value", "A number, on/off, or text", "Gaming"),
         ],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: VARS_PLUGIN,
@@ -34,6 +35,7 @@ static VARS_ACTIONS: &[ActionSpec] = &[
             ArgumentSpec::number("by", "How much", "1"),
         ],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: VARS_PLUGIN,
@@ -41,6 +43,7 @@ static VARS_ACTIONS: &[ActionSpec] = &[
         description: "Turn an on/off value of your own the other way",
         arguments: &[ArgumentSpec::text("name", "Its name, after vars.", "focus")],
         slider: None,
+        active: Some(ActiveSpec::while_true("vars.{{name}}")),
     },
 ];
 
@@ -145,6 +148,13 @@ impl Plugin for Vars {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_manifest_and_its_lights_are_valid() {
+        let manifest = VARS_MANIFEST.to_dto();
+        manifest.validate().expect("valid");
+        assert!(manifest.uses(crate::abi::capability::TOGGLES), "its toggles light up");
+    }
     use crate::RecordingNotifier;
     use flexdeck_actions::RecordingExecutor;
     use flexdeck_vars::VariableStore;

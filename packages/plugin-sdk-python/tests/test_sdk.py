@@ -57,6 +57,24 @@ class DefinitionTest(unittest.TestCase):
         )
         self.assertEqual(manifest["uses"], ["series"])
 
+    def test_a_toggle_light_reaches_only_a_host_that_offers_toggles(self):
+        plugin = Plugin(id="lights", name="Lights", version="1.0.0")
+        plugin.variable("lights.room.desk.on", "bool")
+        plugin.action("toggle", "Toggle", {"room": arg("text", "desk")}, active={"variable": "lights.room.{{room}}.on"})(lambda args, ctx: None)
+        plugin.action("pick", "Pick", {"scene": arg("text", "a")}, active={"variable": "lights.room.desk.on", "equals": "scene"})(lambda args, ctx: None)
+
+        newer = plugin.handle("initialize", {"abi": 4, "hostCapabilities": ["series", "toggles"]})["manifest"]
+        self.assertEqual([a.get("active") for a in newer["actions"]], [{"variable": "lights.room.{{room}}.on"}, {"variable": "lights.room.desk.on", "equals": "scene"}])
+        self.assertIn("toggles", newer["uses"])
+        older = plugin.handle("initialize", {"abi": 4, "hostCapabilities": ["series"]})["manifest"]
+        self.assertEqual([a.get("active") for a in older["actions"]], [None, {"variable": "lights.room.desk.on", "equals": "scene"}])
+        self.assertNotIn("toggles", older["uses"])
+
+        with self.assertRaisesRegex(PluginError, "'place' is not one of its arguments"):
+            plugin.action("bad", "Bad", {}, active={"variable": "lights.{{place}}.on"})
+        with self.assertRaisesRegex(PluginError, "must start with 'lights.'"):
+            plugin.action("bad", "Bad", {}, active={"variable": "obs.on"})
+
 
 class ProtocolTest(unittest.TestCase):
     def test_actions_values_events_and_failures_as_the_host_sees_them(self):

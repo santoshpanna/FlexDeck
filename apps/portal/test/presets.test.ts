@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { PRESETS_FILE, presetsJson } from "../scripts/gen-presets.ts";
 import type { WireConfig, WireWidget } from "../src/services/api/api.ts";
-import { PRESETS, applyPresetLook, applyWholePreset, isBlankKey, isLookPreset, placePreset, presetFits, presetHalves, suggestedActions, type Preset } from "../src/modules/config/lib/presets.lib.ts";
+import { PRESETS, applyPresetLook, applyWholePreset, isBlankKey, isLookPreset, placePreset, presetFits, presetHalves, sharedReads, suggestedActions, type Preset } from "../src/modules/config/lib/presets.lib.ts";
 import { STARTERS } from "../src/modules/config/lib/sources.lib.ts";
 
 function deck(cols = 5, rows = 3): WireConfig {
@@ -80,9 +80,17 @@ test("a look goes on a key and keeps what it does: its press, its scene light, i
   assert.equal(after.props?.label, "CS2");
 });
 
-test("a look brings the data it reads; an icon-only look sets just the icon", () => {
+test("a look reads the shared source, not a run of its own; an icon-only look sets just the icon", () => {
   const weather = keyOf(applyPresetLook(sceneDeck(), "w1", preset("weather")));
-  assert.deepEqual(weather.sources, [{ source: "weather" }]);
+  assert.equal(weather.sources, undefined);
+  assert.ok(JSON.stringify(weather.face).includes("src.weather.temp"));
+  const plugin = sharedReads({ sources: [{ source: "crypto" }], face: { elements: [{ template: "{{ this.price | currency }}" }], rules: [{ when: "this.change < 0" }] } });
+  assert.equal(plugin.sources, undefined);
+  assert.equal(plugin.face?.elements?.[0]?.template, "{{ src.crypto.price | currency }}");
+  assert.equal(plugin.face?.rules?.[0]?.when, "src.crypto.change < 0");
+  const feed = sharedReads({ sources: [{ source: "spotify/now" }], props: { labelTemplate: "{{this.title}}" } });
+  assert.deepEqual(feed.sources, [{ source: "spotify/now" }], "a plugin's feed is the key's own");
+  assert.equal(feed.props?.labelTemplate, "{{this.title}}");
   const icon = keyOf(applyPresetLook(sceneDeck(), "w1", preset("media-next")));
   assert.equal(icon.face, undefined);
   assert.deepEqual(icon.props, { label: "CS2", icon: "skip-forward" });

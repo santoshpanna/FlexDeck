@@ -19,6 +19,8 @@ import {
   removeWidget,
   resizeWidget,
   setActiveLight,
+  setHideDot,
+  stateVariableOf,
   setWidgetAction,
   setWidgetBinding,
   setWidgetLabel,
@@ -389,6 +391,41 @@ test("a scene key lights while its scene is live, and stops when it no longer sw
   assert.equal(findWidget(setActiveLight(moved, "a", null, {}), "a")?.widget.states, undefined);
 });
 
+test("a toggle key lights while what it toggles is on, and reads as its 'lights up while'", () => {
+  const toggleMute: ActionDefinition = {
+    plugin: "discord",
+    action: "toggle_mute",
+    description: "Mute or unmute your microphone",
+    arguments: [],
+    active: { variable: "discord.voice.mute" },
+  };
+  const lit = setActiveLight(configWith([button("a", 0, 0)]), "a", toggleMute, {});
+  const widget = findWidget(lit, "a")!.widget;
+  assert.deepEqual(widget.states?.variable, { variable: "discord.voice.mute", cases: [{ value: "true", state: "on" }], otherwise: "off" });
+  assert.equal(stateVariableOf(widget), "discord.voice.mute");
+  assert.equal(findWidget(setActiveLight(lit, "a", null, {}), "a")?.widget.states, undefined, "a tap that no longer toggles loses it");
+});
+
+test("a toggle's placeholders are filled from its arguments, and a blank one lights nothing", () => {
+  const toggleUserMute: ActionDefinition = {
+    plugin: "discord",
+    action: "toggle_user_mute",
+    description: "",
+    arguments: [{ name: "user", description: "", example: "1" }],
+    active: { variable: "discord.user.{{user}}.muted" },
+  };
+  const config = configWith([button("a", 0, 0)]);
+  const lit = setActiveLight(config, "a", toggleUserMute, { user: "42" });
+  assert.equal(findWidget(lit, "a")?.widget.states?.variable?.variable, "discord.user.42.muted");
+  assert.equal(findWidget(setActiveLight(config, "a", toggleUserMute, { user: " " }), "a")?.widget.states, undefined);
+
+  const own: ActionDefinition = { ...toggleUserMute, arguments: [{ name: "name", description: "", example: "focus" }], active: { variable: "vars.{{name}}" } };
+  assert.equal(findWidget(setActiveLight(config, "a", own, { name: "vars.focus" }), "a")?.widget.states?.variable?.variable, "vars.focus", "named in full");
+
+  const mode: ActionDefinition = { ...toggleUserMute, arguments: [], active: { variable: "discord.voice.mode", is: "PUSH_TO_TALK" } };
+  assert.equal(findWidget(setActiveLight(config, "a", mode, {}), "a")?.widget.states?.variable?.cases?.[0]?.value, "PUSH_TO_TALK");
+});
+
 test("a key's own states are never replaced by the active light", () => {
   const bound = setWidgetBinding(configWith([button("a", 0, 0)]), "a", { stateVariable: "obs.recording", labelTemplate: "" });
   const after = setActiveLight(bound, "a", setScene, { scene: "CS2" });
@@ -415,4 +452,34 @@ test("changing a scene key's tap by hand moves its light with it", () => {
   // Not yet named: no light, and no "on" for an empty scene.
   const unnamed = relightActive(setWidgetAction(moved, "a", { plugin: "obs", action: "set_scene", args: {} }), "a", [setScene]);
   assert.equal(findWidget(unnamed, "a")?.widget.states, undefined);
+});
+
+test("a key whose states were left empty still gets its toggle's light", () => {
+  const toggleMute: ActionDefinition = { plugin: "discord", action: "toggle_mute", description: "", arguments: [], active: { variable: "discord.voice.mute" } };
+  const config = configWith([{ ...button("a", 0, 0), states: { looks: [] }, flows: [{ trigger: { gesture: "GESTURE_SHORT_PRESS" }, blocks: [{ block: "doAction", plugin: "discord", action: "toggle_mute", args: {} }] }] }]);
+  assert.equal(findWidget(lightActiveKeys(config, [toggleMute]), "a")?.widget.states?.variable?.variable, "discord.voice.mute");
+});
+
+test("a light cleared by hand is not given back on load, and a new tap that lights clears the mark", () => {
+  const toggleMute: ActionDefinition = { plugin: "discord", action: "toggle_mute", description: "", arguments: [], active: { variable: "discord.voice.mute" } };
+  const press = { trigger: { gesture: "GESTURE_SHORT_PRESS" as const }, blocks: [{ block: "doAction" as const, plugin: "discord", action: "toggle_mute", args: {} }] };
+  const lit = lightActiveKeys(configWith([{ ...button("a", 0, 0), flows: [press] }]), [toggleMute]);
+  const cleared = setWidgetBinding(lit, "a", { stateVariable: "", labelTemplate: "" });
+  assert.equal(findWidget(cleared, "a")?.widget.states, undefined);
+  assert.equal(findWidget(cleared, "a")?.widget.props?.noAutoLight, true);
+  assert.equal(lightActiveKeys(cleared, [toggleMute]), cleared, "not lit again");
+  const relit = setActiveLight(cleared, "a", toggleMute, {});
+  assert.equal(findWidget(relit, "a")?.widget.props?.noAutoLight, undefined);
+  const bound = setWidgetBinding(cleared, "a", { stateVariable: "obs.recording", labelTemplate: "" });
+  assert.equal(findWidget(bound, "a")?.widget.props?.noAutoLight, undefined);
+});
+
+test("a key's corner dot can be hidden without touching its light", () => {
+  const lit = setActiveLight(configWith([button("a", 0, 0)]), "a", setScene, { scene: "CS2" });
+  const hidden = setHideDot(lit, "a", true);
+  assert.equal(findWidget(hidden, "a")?.widget.props?.hideDot, true);
+  assert.deepEqual(findWidget(hidden, "a")?.widget.states, findWidget(lit, "a")?.widget.states, "still lights");
+  assert.equal(hidden.schema, 5, "an agent that would drop it refuses the deck by name");
+  assert.equal(setHideDot(hidden, "a", true), hidden, "unchanged is no change");
+  assert.equal(findWidget(setHideDot(hidden, "a", false), "a")?.widget.props?.hideDot, undefined);
 });

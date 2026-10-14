@@ -38,7 +38,25 @@ class DeckTest {
         assertEquals("#1e40af", widget.background)
         assertEquals(1, widget.span.col)
         assertEquals(2, widget.span.row)
+        assertEquals(false, widget.hideDot, "a lit key shows its dot unless told not to")
         assertEquals(2, widget.span.w)
+    }
+
+    @Test
+    fun `a key can hide its corner dot`() {
+        val deck = DeckReader.read(
+            config(
+                """
+                {"schema":5,"rev":1,"profiles":[{"id":"tab1",
+                  "grid":{"cols":4,"rows":3,"gapX":8,"gapY":8,"usableW":800,"usableH":600},
+                  "pages":[{"id":"home","widgets":[
+                    {"id":"scene","type":"WIDGET_TYPE_BUTTON","col":0,"row":0,"w":1,"h":1,"props":{"label":"Live","hideDot":true}}
+                  ]}]
+                }]}
+                """.trimIndent(),
+            ),
+        )!!
+        assertEquals(true, deck.widgets.single().hideDot)
     }
 
     @Test

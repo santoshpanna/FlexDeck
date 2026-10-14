@@ -72,7 +72,11 @@ pub mod capability {
     /// Manifest `feeds` and `feed/watch`: values per key, with that key's
     /// arguments (a weather key per city).
     pub const FEEDS: &str = "feeds";
-    pub const ALL: &[&str] = &[SERIES, PRESETS, FEEDS];
+    /// An action's `active` may name a fixed value (`is`) rather than an
+    /// argument, and its variable may hold `{{argument}}` placeholders: a
+    /// toggle lit while `discord.voice.mute` is true.
+    pub const TOGGLES: &str = "toggles";
+    pub const ALL: &[&str] = &[SERIES, PRESETS, FEEDS, TOGGLES];
 }
 
 /// The most points a `series/set` may carry.
@@ -324,14 +328,42 @@ pub struct ActionDto {
 }
 
 /// When a key running an action shows as active: while `variable` holds the
-/// value of the action's `equals` argument. OBS's `set_scene` is active while
-/// `obs.scene` is the scene it switches to.
+/// value of the action's `equals` argument — OBS's `set_scene` is active while
+/// `obs.scene` is the scene it switches to — or, with [`capability::TOGGLES`],
+/// the fixed value `is` (`"true"` when neither is given): Discord's
+/// `toggle_mute` is active while `discord.voice.mute` is true.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ActiveDto {
+    /// May hold `{{argument}}` placeholders under [`capability::TOGGLES`].
     pub variable: String,
     /// One of the action's own arguments.
-    pub equals: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub equals: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is: Option<String>,
+}
+
+impl ActiveDto {
+    /// The ABI 4 form every host reads: a plain variable of the plugin's own
+    /// (under `prefix`) matched to an argument. Anything else needs
+    /// [`capability::TOGGLES`], under which a light may also watch another
+    /// plugin's variable — a light only reads.
+    pub fn is_plain(&self, prefix: &str) -> bool {
+        self.equals.is_some()
+            && self.is.is_none()
+            && !self.variable.contains("{{")
+            && self.variable.starts_with(prefix)
+    }
+
+    /// The names inside the variable's `{{…}}` placeholders.
+    pub fn placeholders(&self) -> Vec<&str> {
+        self.variable
+            .split("{{")
+            .skip(1)
+            .filter_map(|rest| rest.split_once("}}").map(|(name, _)| name.trim()))
+            .collect()
+    }
 }
 
 /// How a slider drives an action: which argument takes its value, over what
@@ -488,14 +520,30 @@ impl ManifestDto {
                 if self.abi < 4 {
                     return Err(AbiError::Invalid(format!("{}.active needs plugin ABI 4", action.action)));
                 }
-                if !action.arguments.iter().any(|a| a.name == active.equals) {
-                    return Err(AbiError::Unknown {
-                        what: "active argument",
-                        value: active.equals.clone(),
-                        expected: &["one of the action's own arguments"],
-                    });
+                let toggles = self.uses(capability::TOGGLES);
+                if !active.is_plain(&self.variable_prefix()) && !toggles && active.variable.starts_with(&self.variable_prefix()) {
+                    return Err(AbiError::Invalid(format!(
+                        "{}.active with `is` or placeholders needs `uses: [\"toggles\"]`",
+                        action.action
+                    )));
                 }
-                if !active.variable.starts_with(&self.variable_prefix()) {
+                if active.equals.is_some() && active.is.is_some() {
+                    return Err(AbiError::Invalid(format!(
+                        "{}.active takes `equals` or `is`, not both",
+                        action.action
+                    )));
+                }
+                let named = active.equals.as_deref().into_iter().chain(active.placeholders());
+                for argument in named {
+                    if !action.arguments.iter().any(|a| a.name == argument) {
+                        return Err(AbiError::Unknown {
+                            what: "active argument",
+                            value: argument.to_string(),
+                            expected: &["one of the action's own arguments"],
+                        });
+                    }
+                }
+                if !toggles && !active.variable.starts_with(&self.variable_prefix()) {
                     return Err(AbiError::Namespace {
                         name: active.variable.clone(),
                         prefix: self.variable_prefix(),
@@ -1229,6 +1277,66 @@ mod tests {
         let mut package = package();
         package.abi = 2;
         package.validate().expect("v2 packages still install");
+    }
+
+    fn active_manifest(active: ActiveDto, uses: &[&str]) -> ManifestDto {
+        let mut manifest = sample_manifest();
+        manifest.actions = vec![ActionDto {
+            action: "toggle_mute".into(),
+            description: String::new(),
+            arguments: vec![ArgumentDto {
+                name: "input".into(),
+                description: String::new(),
+                example: "Mic".into(),
+                kind: kind::TEXT.into(),
+                choices: vec![],
+                optional: false,
+            }],
+            slider: None,
+            active: Some(active),
+        }];
+        manifest.uses = uses.iter().map(|used| used.to_string()).collect();
+        manifest
+    }
+
+    fn active(variable: &str, equals: Option<&str>, is: Option<&str>) -> ActiveDto {
+        ActiveDto {
+            variable: variable.into(),
+            equals: equals.map(str::to_string),
+            is: is.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn a_plain_active_needs_no_capability() {
+        active_manifest(active("obs.scene", Some("input"), None), &[]).validate().expect("plain");
+        let text = serde_json::to_string(&active("obs.scene", Some("input"), None)).expect("serialise");
+        assert_eq!(text, r#"{"variable":"obs.scene","equals":"input"}"#, "what an older host reads");
+    }
+
+    #[test]
+    fn a_toggle_active_needs_the_toggles_capability() {
+        let toggle = active("obs.muted", None, None);
+        assert!(active_manifest(toggle.clone(), &[]).validate().is_err());
+        active_manifest(toggle, &[capability::TOGGLES]).validate().expect("with toggles");
+        active_manifest(active("obs.mode", None, Some("ptt")), &[capability::TOGGLES]).validate().expect("is");
+        let templated = active("obs.input.{{input}}.muted", None, None);
+        assert!(active_manifest(templated.clone(), &[]).validate().is_err());
+        active_manifest(templated, &[capability::TOGGLES]).validate().expect("placeholder of an argument");
+    }
+
+    #[test]
+    fn a_toggle_active_is_refused_when_it_names_what_is_not_there() {
+        let both = active("obs.muted", Some("input"), Some("true"));
+        assert!(active_manifest(both, &[capability::TOGGLES]).validate().is_err());
+        let stray = active("obs.input.{{device}}.muted", None, None);
+        assert!(matches!(
+            active_manifest(stray, &[capability::TOGGLES]).validate(),
+            Err(AbiError::Unknown { .. })
+        ));
+        let elsewhere = active("system.audio.muted", None, None);
+        assert!(matches!(active_manifest(elsewhere.clone(), &[]).validate(), Err(AbiError::Namespace { .. })));
+        active_manifest(elsewhere, &[capability::TOGGLES]).validate().expect("a light may watch another plugin's value");
     }
 
     fn slider_action() -> ActionDto {

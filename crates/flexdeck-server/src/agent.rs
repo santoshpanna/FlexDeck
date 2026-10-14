@@ -215,6 +215,7 @@ pub struct Agent {
 impl Agent {
     pub fn new(store: ConfigStore, identity: Identity, host: String, port: u16) -> Self {
         let (changes, _) = broadcast::channel(CHANGE_BUFFER);
+        run_upgrades(&store);
         let store = Arc::new(Mutex::new(store));
         let variables = Arc::new(VariableStore::new());
 
@@ -1066,6 +1067,30 @@ impl Agent {
 /// A document that is not a JSON object is passed through untouched: the store
 /// rejects it a moment later with a clearer error than anything this could
 /// invent.
+/// Run the deck upgrades this agent brings and the store has not had yet,
+/// each a revision of its own. One that cannot be applied is reported and
+/// not tried again: the deck as it is still loads, and the editor can fix it.
+fn run_upgrades(store: &ConfigStore) {
+    let done = store.meta(crate::upgrade::UPGRADES_KEY).ok().flatten().and_then(|n| n.parse::<u32>().ok()).unwrap_or(0);
+    if done >= crate::upgrade::LATEST {
+        return;
+    }
+    let apply = || -> Result<(), AgentError> {
+        let Some((_, json)) = store.snapshot()? else { return Ok(()) };
+        let Some(upgraded) = crate::upgrade::shared_sources(&json) else { return Ok(()) };
+        crate::widgets::validate(&upgraded, &Limits::default())?;
+        let stamped = stamp_rev(&upgraded, store.next_rev()?)?;
+        store.commit(&stamped)?;
+        Ok(())
+    };
+    if let Err(error) = apply() {
+        eprintln!("agent: could not move keys onto shared data sources: {error}");
+    }
+    if let Err(error) = store.set_meta(crate::upgrade::UPGRADES_KEY, &crate::upgrade::LATEST.to_string()) {
+        eprintln!("agent: could not note the deck upgrades: {error}");
+    }
+}
+
 fn stamp_rev(json: &str, rev: u64) -> Result<String, AgentError> {
     let mut document: serde_json::Value = serde_json::from_str(json)?;
 
@@ -1092,6 +1117,27 @@ mod tests {
         let store = ConfigStore::open_in_memory().expect("store opens");
         let identity = Identity::generate(vec!["localhost".to_string()]).expect("identity");
         Agent::new(store, identity, host.to_string(), 7878)
+    }
+
+    #[test]
+    fn the_first_start_of_a_new_agent_moves_keys_onto_shared_sources_once() {
+        let store = ConfigStore::open_in_memory().expect("store opens");
+        let deck = serde_json::json!({"schema": 5, "rev": 1, "profiles": [{"id": "p", "pages": [{"id": "home", "widgets": [
+            {"id": "w", "sources": [{"source": "weather"}], "props": {"labelTemplate": "{{this.temp}}"}}
+        ]}]}]});
+        store.commit(&deck.to_string()).expect("commits");
+        let identity = Identity::generate(vec!["localhost".to_string()]).expect("identity");
+        let agent = Agent::new(store, identity, "localhost".to_string(), 7878);
+
+        let (rev, json) = agent.config().expect("reads").expect("exists");
+        assert_eq!(rev, 2, "a revision of its own, so it can be undone");
+        assert!(json.contains("{{src.weather.temp}}") && !json.contains("\"sources\""), "{json}");
+        assert_eq!(agent.store().meta(crate::upgrade::UPGRADES_KEY).unwrap().as_deref(), Some("1"));
+
+        // Put back by hand (an undo): not done again on the next start.
+        agent.store().commit(&deck.to_string()).expect("commits");
+        run_upgrades(&agent.store());
+        assert_eq!(agent.config().unwrap().unwrap().0, 3);
     }
 
     #[test]

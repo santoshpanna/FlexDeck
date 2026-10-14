@@ -83,6 +83,8 @@ data class DeckWidget(
     val thisBase: String? = null,
     /** Buttons along its bottom strip, each pressed on its own. */
     val zones: List<ZoneSpec> = emptyList(),
+    /** No light in the corner while it is lit; its look still changes. */
+    val hideDot: Boolean = false,
 ) {
     /** A variable as the agent names it: `this.today` → `src.weather.@w12.today`. */
     fun resolve(name: String): String =
@@ -196,6 +198,7 @@ object DeckReader {
                 }
             },
             derived = widget["face"] == null,
+            hideDot = props.string("hideDot") == "true",
             zones = FaceReader.zones(widget["face"] as? JsonObject),
             thisBase = ((widget["sources"] as? JsonArray)?.firstOrNull() as? JsonObject)
                 ?.string("source")?.takeIf { it.isNotBlank() }

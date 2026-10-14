@@ -1,20 +1,21 @@
 import { derive, faceFor, type Background, type Face, type FaceElement, type FaceLayout, type Zone } from "@flexdeck/face";
 
-import { CONFIG_SCHEMA, type ScreenCare, type CaseOp, type WireCase, type WireConfig, type WireLook, type WireWidget } from "../../../services/api/api.ts";
+import { type ScreenCare, type CaseOp, type WireCase, type WireConfig, type WireGestureLook, type WireRule, type WireLook, type WireWidget } from "../../../services/api/api.ts";
+import { withSchemaFor } from "./config.lib.ts";
 import { findWidget, setWidgetColors, withPage, withWidget } from "./editing.lib.ts";
 import { toBackground, type Fill } from "./fill.lib.ts";
 
 /**
  * Editing faces, looks and page backgrounds.
  *
- * Every edit here may write something only schema 4 reads, so each one
- * raises the document to it: an agent that reads faces is then the one that
+ * Every edit here may write something only schema 4 (faces) or 5 (gesture
+ * states, value rules) reads, so each one raises the document to what it holds: an agent that reads faces is then the one that
  * gets them, and an older one refuses the deck by name rather than dropping
  * them unread.
  */
 
 function current(config: WireConfig): WireConfig {
-  return (config.schema ?? 0) >= CONFIG_SCHEMA ? config : { ...config, schema: CONFIG_SCHEMA };
+  return withSchemaFor(config);
 }
 
 function editWidget(config: WireConfig, widgetId: string, update: (widget: WireWidget) => WireWidget): WireConfig {
@@ -159,7 +160,8 @@ export function starterElement(kind: NonNullable<FaceElement["kind"]>, layout: F
 export type LookSource =
   | { kind: "none" }
   | { kind: "cycle" }
-  | { kind: "variable"; variable: string; cases: WireCase[]; otherwise: string };
+  | { kind: "variable"; variable: string; cases: WireCase[]; otherwise: string }
+  | { kind: "gesture"; picks: WireGestureLook[] };
 
 export function lookSourceOf(widget: WireWidget): LookSource {
   const states = widget.states;
@@ -172,6 +174,7 @@ export function lookSourceOf(widget: WireWidget): LookSource {
       otherwise: states.variable.otherwise ?? "",
     };
   }
+  if (states?.gesture) return { kind: "gesture", picks: states.gesture.looks ?? [] };
   return { kind: "none" };
 }
 
@@ -222,6 +225,12 @@ export function removeLook(config: WireConfig, widgetId: string, lookId: string)
       return next;
     }
     const states = { ...widget.states, looks };
+    if (states.gesture) states.gesture = { looks: (states.gesture.looks ?? []).filter((pick) => pick.state !== lookId) };
+    if (states.rules) {
+      const rules = states.rules.filter((rule) => rule.state !== lookId);
+      if (rules.length) states.rules = rules;
+      else delete states.rules;
+    }
     if (states.variable) {
       states.variable = {
         ...states.variable,
@@ -233,12 +242,46 @@ export function removeLook(config: WireConfig, widgetId: string, lookId: string)
   });
 }
 
-/** Choose what picks the look. The looks themselves are kept. */
+/**
+ * Set the looks a value picks ahead of the source: "while obs.recording is
+ * true, show Recording". Blank rows are kept out; none left removes them.
+ */
+export function setLookRules(config: WireConfig, widgetId: string, rules: readonly WireRule[]): WireConfig {
+  const kept = rules
+    .filter((rule) => rule.variable?.trim() && rule.state)
+    .map((rule) => {
+      const out: WireRule = { variable: rule.variable!.trim(), value: rule.value ?? "", state: rule.state! };
+      if (rule.op && rule.op !== "COMPARE_OP_EQ") out.op = rule.op;
+      return out;
+    });
+  // A row still being filled in changes nothing, and must not spend a revision.
+  const before = findWidget(config, widgetId)?.widget.states?.rules ?? [];
+  if (JSON.stringify(before) === JSON.stringify(kept)) return config;
+  return editWidget(config, widgetId, (widget) => {
+    const states = { ...widget.states, looks: widget.states?.looks ?? [] };
+    if (kept.length) states.rules = kept;
+    else delete states.rules;
+    return { ...widget, states };
+  });
+}
+
+/** Choose what picks the look. The looks themselves, and the rules, are kept. */
 export function setLookSource(config: WireConfig, widgetId: string, source: LookSource): WireConfig {
+  const found = findWidget(config, widgetId)?.widget;
+  if (found && !found.states) return config;
   return editWidget(config, widgetId, (widget) => {
     const looks = widget.states?.looks ?? [];
+    // Nothing to pick between: no states at all, rather than an empty set the
+    // agent reads as a choice with nothing to choose.
+    if (looks.length === 0) {
+      const next = { ...widget };
+      delete next.states;
+      return next;
+    }
     const states: NonNullable<WireWidget["states"]> = { looks };
+    if (widget.states?.rules?.length) states.rules = widget.states.rules;
     if (source.kind === "cycle") states.cycle = {};
+    if (source.kind === "gesture") states.gesture = { looks: source.picks.filter((pick) => pick.gesture && pick.state) };
     if (source.kind === "variable") {
       states.variable = {
         variable: source.variable.trim(),
@@ -277,23 +320,6 @@ export function setPageBackground(config: WireConfig, pageId: string, background
 }
 
 // ---- A key's own run of a data source ---------------------------------------
-
-/**
- * Give a key its own run of a data source, with its own settings — or none.
- * Its templates then read that run as `{{this.<field>}}`.
- */
-export function setKeySource(config: WireConfig, widgetId: string, use: { source: string; args: Record<string, string> } | null): WireConfig {
-  return editWidget(config, widgetId, (widget) => {
-    const next = { ...widget };
-    if (use && use.source.trim()) {
-      const args = Object.fromEntries(Object.entries(use.args).filter(([, value]) => value.trim() !== ""));
-      next.sources = [{ source: use.source.trim(), ...(Object.keys(args).length > 0 ? { args } : {}) }];
-    } else {
-      delete next.sources;
-    }
-    return next;
-  });
-}
 
 // ---- A face's strip of zones ---------------------------------------------------
 

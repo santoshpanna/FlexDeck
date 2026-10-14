@@ -42,10 +42,11 @@ use flexdeck_vars::{Value, VariableStore};
 use crate::faces::{plan_faces, FacePlan, VarLookup};
 
 /// The configuration schema this agent writes, and the newest it reads.
-pub const CONFIG_SCHEMA: u32 = 4;
+pub const CONFIG_SCHEMA: u32 = 5;
 
-/// The oldest schema this agent still reads. Schemas 3 and 4 only *added*
-/// (sliders, holds and value flows; faces), so an older deck means the same.
+/// The oldest schema this agent still reads. Schemas 3, 4 and 5 only *added*
+/// (sliders, holds and value flows; faces; gesture states and value rules),
+/// so an older deck means the same.
 pub const OLDEST_CONFIG_SCHEMA: u32 = 2;
 
 /// How often a slider's flow may run while it is dragged, unless it says.
@@ -106,6 +107,15 @@ pub enum StateSource {
     /// An action in the widget's flows reports it: the `flow`-th flow, and the
     /// path down to the action (see [`block_at`]).
     Provider { flow: usize, path: Vec<usize> },
+    /// The last gesture on the key picks it.
+    Gesture(BTreeMap<Gesture, String>),
+}
+
+/// "While `variable` is `op` `value`, show `state`", tried before the source.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Rule {
+    pub variable: String,
+    pub case: Case,
 }
 
 /// "When the value is `op` `value`, show `state`."
@@ -156,6 +166,7 @@ pub struct WidgetPlan {
     /// The ids of the widget's looks, in order. Empty: one look, its props.
     pub looks: Vec<String>,
     pub source: Option<StateSource>,
+    pub rules: Vec<Rule>,
     /// Every flow, in the order the configuration lists them — the order a
     /// [`StateSource::Provider`] counts in.
     pub flows: Vec<Vec<Block>>,
@@ -211,6 +222,7 @@ impl WidgetPlan {
         self.label_template.is_some()
             || self.icon_template.is_some()
             || self.source.is_some()
+            || !self.rules.is_empty()
             || self.faces.iter().any(|(_, face)| face.is_live())
             || !self.zones.is_empty()
             || self
@@ -235,6 +247,7 @@ impl WidgetPlan {
         if let Some(StateSource::Variable { variable, .. }) = &self.source {
             names.insert(variable.clone());
         }
+        names.extend(self.rules.iter().map(|rule| rule.variable.clone()));
         if let Some(template) = &self.icon_template {
             names.extend(template_variables(template));
         }
@@ -329,6 +342,13 @@ impl WidgetPlan {
     /// `cycled` is how many times a cycling widget has advanced; `provided` is
     /// the look its providing action last reported.
     pub fn state_id(&self, vars: &VariableStore, cycled: usize, provided: Option<&str>) -> String {
+        let ruled = self.rules.iter().find(|rule| {
+            vars.get(&rule.variable)
+                .is_some_and(|value| matches_case(&value, rule.case.op, &rule.case.value))
+        });
+        if let Some(rule) = ruled {
+            return rule.case.state.clone();
+        }
         match &self.source {
             None => String::new(),
             Some(StateSource::Cycle) => self
@@ -354,7 +374,7 @@ impl WidgetPlan {
             }
             // A look the action no longer reports, or none yet: the widget's
             // own props, rather than a stale or invented state.
-            Some(StateSource::Provider { .. }) => provided
+            Some(StateSource::Provider { .. } | StateSource::Gesture(_)) => provided
                 .filter(|id| self.looks.iter().any(|look| look == id))
                 .map(str::to_string)
                 .unwrap_or_default(),
@@ -391,6 +411,8 @@ impl WidgetPlan {
                 .map(|template| flexdeck_expr::render(template, &lookup, locale))
                 .unwrap_or_default(),
             problem: self.problem(vars),
+            // The plan cannot tell: the behaviour knows the plugins.
+            unavailable: String::new(),
             elements: face.elements,
             background: face.background,
             pulse: face.pulse,
@@ -529,11 +551,13 @@ pub fn preview(
     vars: &VariableStore,
     limits: &Limits,
     locale: &Locale,
+    unavailable: impl Fn(&WidgetPlan) -> String,
 ) -> Result<StateEvent, String> {
     let widget: Widget = serde_json::from_value(widget_json.clone())
         .map_err(|error| format!("the widget is not readable: {error}"))?;
     let plan = plan(&widget, limits)?;
     let mut state = plan.state_in(vars, 0, None, locale);
+    state.unavailable = unavailable(&plan);
     if !look.is_empty() && plan.looks.iter().any(|known| known == look) {
         let this = plan.this_base();
         let lookup = ScopedLookup { vars: VarLookup(vars), this: this.as_deref() };
@@ -681,8 +705,8 @@ fn plan(widget: &Widget, limits: &Limits) -> Result<WidgetPlan, String> {
         flows.push(blocks);
     }
 
-    let (looks, source) = match &widget.states {
-        None => (Vec::new(), None),
+    let (looks, source, rules) = match &widget.states {
+        None => (Vec::new(), None, Vec::new()),
         Some(states) => {
             let mut looks = Vec::with_capacity(states.looks.len());
             for look in &states.looks {
@@ -749,8 +773,45 @@ fn plan(widget: &Widget, limits: &Limits) -> Result<WidgetPlan, String> {
                     }
                     Some(StateSource::Provider { flow, path })
                 }
+                Some(widget_states::Source::Gesture(gesture)) => {
+                    let mut picks = BTreeMap::new();
+                    for pick in &gesture.looks {
+                        let Ok(which) = Gesture::try_from(pick.gesture) else {
+                            return Err("a state follows a gesture it does not know".into());
+                        };
+                        if which == Gesture::Unspecified {
+                            return Err("a state follows a gesture, but not which one".into());
+                        }
+                        if !has(pick.state.trim()) {
+                            return Err(format!("a gesture shows state '{}', which it does not have", pick.state));
+                        }
+                        picks.insert(which, pick.state.trim().to_string());
+                    }
+                    Some(StateSource::Gesture(picks))
+                }
             };
-            (looks, source)
+            if !states.rules.is_empty() && looks.is_empty() {
+                return Err("it says when its states show, but has no states".into());
+            }
+            let mut rules = Vec::with_capacity(states.rules.len());
+            for rule in &states.rules {
+                let variable = rule.variable.trim();
+                if variable.is_empty() {
+                    return Err("a state follows a value, but not which one".into());
+                }
+                if !has(rule.state.trim()) {
+                    return Err(format!("a value shows state '{}', which it does not have", rule.state));
+                }
+                rules.push(Rule {
+                    variable: variable.to_string(),
+                    case: Case {
+                        op: CompareOp::try_from(rule.op).unwrap_or(CompareOp::Eq),
+                        value: rule.value.clone(),
+                        state: rule.state.trim().to_string(),
+                    },
+                });
+            }
+            (looks, source, rules)
         }
     };
 
@@ -821,6 +882,7 @@ fn plan(widget: &Widget, limits: &Limits) -> Result<WidgetPlan, String> {
             .filter(|template| !template.trim().is_empty()),
         looks,
         source,
+        rules,
         flows,
         gestures,
         zone_flows,
@@ -966,13 +1028,13 @@ mod tests {
         assert_eq!(plan.state(&vars, 0, None).icon, address, "not '–', not changed");
     }
     #[test]
-    fn schemas_two_to_four_all_read() {
-        for schema in 2..=4 {
+    fn schemas_two_to_five_all_read() {
+        for schema in 2..=5 {
             let deck = json!({"schema": schema, "profiles": []}).to_string();
             validate(&deck, &Limits::default()).unwrap_or_else(|error| panic!("schema {schema}: {error}"));
         }
-        let five = json!({"schema": 5, "profiles": []}).to_string();
-        let error = validate(&five, &Limits::default()).unwrap_err();
+        let six = json!({"schema": 6, "profiles": []}).to_string();
+        let error = validate(&six, &Limits::default()).unwrap_err();
         assert!(error.to_string().contains("newer agent"), "{error}");
     }
 
@@ -1104,6 +1166,51 @@ mod tests {
         vars.refresh("obs.recording", Value::Bool(false)).unwrap();
         assert_eq!(plan.state_id(&vars, 0, None), "idle");
         assert!(plan.reads("obs.recording"));
+    }
+
+    #[test]
+    fn a_rule_wins_over_the_source_while_it_holds() {
+        let plan = one(json!({"id": "mic", "states": {
+            "looks": [{"id": "a"}, {"id": "b"}, {"id": "rec"}],
+            "cycle": {},
+            "rules": [{"variable": "obs.recording", "value": "true", "state": "rec"}]
+        }}))
+        .unwrap();
+        let vars = vars();
+        assert_eq!(plan.state_id(&vars, 1, None), "b", "no value yet: the source");
+        vars.refresh("obs.recording", Value::Bool(true)).unwrap();
+        assert_eq!(plan.state_id(&vars, 1, None), "rec");
+        assert!(plan.reads("obs.recording"), "a rule's value is watched");
+
+        let stray = one(json!({"id": "mic", "states": {
+            "looks": [{"id": "a"}],
+            "rules": [{"variable": "obs.recording", "value": "true", "state": "nope"}]
+        }}));
+        assert!(stray.is_err(), "a rule must show one of the looks");
+
+        let sourceless = one(json!({"id": "mic", "states": {
+            "looks": [{"id": "a"}, {"id": "rec"}],
+            "rules": [{"variable": "obs.recording", "value": "true", "state": "rec"}]
+        }}))
+        .unwrap();
+        assert!(sourceless.is_live(), "rules alone still need live state");
+    }
+
+    #[test]
+    fn a_gesture_source_names_known_gestures_and_looks() {
+        let plan = one(json!({"id": "w", "states": {
+            "looks": [{"id": "tapped"}, {"id": "held"}],
+            "gesture": {"looks": [
+                {"gesture": "GESTURE_SHORT_PRESS", "state": "tapped"},
+                {"gesture": "GESTURE_HOLD_START", "state": "held"}
+            ]}
+        }}))
+        .unwrap();
+        assert!(matches!(&plan.source, Some(StateSource::Gesture(picks)) if picks.len() == 2));
+        assert_eq!(plan.state_id(&vars(), 0, Some("held")), "held");
+        assert!(one(json!({"id": "w", "states": {"looks": [{"id": "a"}],
+            "gesture": {"looks": [{"gesture": "GESTURE_LONG_PRESS", "state": "b"}]}}}))
+        .is_err());
     }
 
     #[test]

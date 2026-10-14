@@ -235,6 +235,7 @@ static LAUNCHER_ACTIONS: &[ActionSpec] = &[
             "https://example.com",
         )],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: LAUNCHER_PLUGIN,
@@ -246,6 +247,7 @@ static LAUNCHER_ACTIONS: &[ActionSpec] = &[
             "https://example.com",
         )],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: LAUNCHER_PLUGIN,
@@ -257,6 +259,7 @@ static LAUNCHER_ACTIONS: &[ActionSpec] = &[
             "notepad",
         )],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: LAUNCHER_PLUGIN,
@@ -278,6 +281,7 @@ static LAUNCHER_ACTIONS: &[ActionSpec] = &[
             .optional(),
         ],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: LAUNCHER_PLUGIN,
@@ -293,6 +297,7 @@ static LAUNCHER_ACTIONS: &[ActionSpec] = &[
             .optional(),
         ],
         slider: None,
+        active: None,
     },
 ];
 

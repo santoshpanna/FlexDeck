@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use flexdeck_actions::{ActionSpec, ArgumentSpec};
+use flexdeck_actions::{ActionSpec, ActiveSpec, ArgumentSpec};
 use flexdeck_vars::{Kind, Value, VariableSpec, VariableStore};
 
 use crate::{abi, argument, Ctx, Outcome, Plugin, PluginError, PluginManifest};
@@ -30,6 +30,7 @@ static TIMER_ACTIONS: &[ActionSpec] = &[
         description: "Start a timer from the top",
         arguments: &[NAME, ArgumentSpec::number("minutes", "How long, in minutes", "25")],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: TIMER_PLUGIN,
@@ -37,6 +38,7 @@ static TIMER_ACTIONS: &[ActionSpec] = &[
         description: "Start a timer, or pause it, or carry on — one key for all three",
         arguments: &[NAME, ArgumentSpec::number("minutes", "How long, in minutes, when it starts", "25")],
         slider: None,
+        active: Some(ActiveSpec::while_true("timer.{{name}}.running")),
     },
     ActionSpec {
         plugin: TIMER_PLUGIN,
@@ -44,6 +46,7 @@ static TIMER_ACTIONS: &[ActionSpec] = &[
         description: "Pause a timer",
         arguments: &[NAME],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: TIMER_PLUGIN,
@@ -51,6 +54,7 @@ static TIMER_ACTIONS: &[ActionSpec] = &[
         description: "Carry on with a paused timer",
         arguments: &[NAME],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: TIMER_PLUGIN,
@@ -58,6 +62,7 @@ static TIMER_ACTIONS: &[ActionSpec] = &[
         description: "Stop a timer and put it back to its full length",
         arguments: &[NAME],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: TIMER_PLUGIN,
@@ -65,6 +70,7 @@ static TIMER_ACTIONS: &[ActionSpec] = &[
         description: "Give a timer more time (take some away with a minus)",
         arguments: &[NAME, ArgumentSpec::number("minutes", "How many minutes", "5")],
         slider: None,
+        active: None,
     },
 ];
 
@@ -276,6 +282,13 @@ impl Plugin for Timers {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_manifest_and_its_lights_are_valid() {
+        let manifest = TIMER_MANIFEST.to_dto();
+        manifest.validate().expect("valid");
+        assert!(manifest.uses(crate::abi::capability::TOGGLES), "its toggles light up");
+    }
     use crate::RecordingNotifier;
     use flexdeck_actions::RecordingExecutor;
     use std::collections::BTreeMap;

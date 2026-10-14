@@ -39,6 +39,7 @@ pub mod startup;
 pub mod sync;
 pub mod tls;
 pub mod tunnel;
+pub mod upgrade;
 pub mod web_access;
 pub mod verify;
 pub mod widgets;

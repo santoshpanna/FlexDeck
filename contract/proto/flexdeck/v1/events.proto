@@ -104,6 +104,12 @@ message StateEvent {
   string problem = 13;
   // The face's zones whose `when` holds: they show their `icon_on`.
   repeated string zones_on = 14;
+  // Why the key cannot do what it does any more — a plugin update took away
+  // an action it calls, or made one need an argument it does not give — in
+  // words. The tablet draws it disabled with a warning; a press is refused.
+  // Nothing is removed: it comes back when the plugin has it again. Empty:
+  // nothing is wrong.
+  string unavailable = 15;
 }
 
 // One element's live value.

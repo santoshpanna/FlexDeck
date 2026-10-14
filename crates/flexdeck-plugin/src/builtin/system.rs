@@ -26,7 +26,7 @@ use std::collections::HashMap;
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use flexdeck_actions::{ActionSpec, ArgumentSpec, SliderSpec};
+use flexdeck_actions::{ActionSpec, ActiveSpec, ArgumentSpec, SliderSpec};
 use flexdeck_vars::{Kind, Value, VariableSpec};
 
 use super::audio::{AudioBackend, Flow};
@@ -73,6 +73,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
         description: "Set the output volume",
         arguments: &[PERCENT_ARGUMENT],
         slider: Some(SliderSpec::percent("percent", VOLUME).with_mute("toggle_mute", MUTED)),
+        active: None,
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -80,6 +81,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
         description: "Turn the output volume up",
         arguments: &[ArgumentSpec::number("step", "How many percent to add", "5")],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -91,6 +93,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
             "5",
         )],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -103,6 +106,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
             &["true", "false"],
         )],
         slider: None,
+        active: Some(ActiveSpec::equals(MUTED, "muted")),
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -110,6 +114,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
         description: "Mute if unmuted, unmute if muted",
         arguments: &[],
         slider: None,
+        active: Some(ActiveSpec::while_true(MUTED)),
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -121,6 +126,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
             "speaker",
         )],
         slider: None,
+        active: Some(ActiveSpec::equals(OUTPUT_DEVICE, "device")),
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -131,6 +137,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
             SliderSpec::percent("percent", "system.audio.device.{{device}}.volume")
                 .with_mute("toggle_device_mute", "system.audio.device.{{device}}.muted"),
         ),
+        active: None,
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -138,6 +145,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
         description: "Mute one output device if it is live, unmute it if muted",
         arguments: &[DEVICE_ARGUMENT],
         slider: None,
+        active: Some(ActiveSpec::while_true("system.audio.device.{{device}}.muted")),
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -148,6 +156,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
             SliderSpec::percent("percent", "system.audio.app.{{app}}.volume")
                 .with_mute("toggle_app_mute", "system.audio.app.{{app}}.muted"),
         ),
+        active: None,
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -155,6 +164,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
         description: "Mute or unmute one program",
         arguments: &[APP_ARGUMENT, MUTED_ARGUMENT],
         slider: None,
+        active: Some(ActiveSpec::equals("system.audio.app.{{app}}.muted", "muted")),
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -162,6 +172,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
         description: "Mute one program if it is playing, unmute it if muted",
         arguments: &[APP_ARGUMENT],
         slider: None,
+        active: Some(ActiveSpec::while_true("system.audio.app.{{app}}.muted")),
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -171,6 +182,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
         slider: Some(
             SliderSpec::percent("percent", INPUT_VOLUME).with_mute("toggle_input_mute", INPUT_MUTED),
         ),
+        active: None,
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -183,6 +195,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
                 "system.audio.input_device.{{device}}.muted",
             ),
         ),
+        active: None,
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -190,6 +203,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
         description: "Mute one microphone if it is live, unmute it if muted",
         arguments: &[MIC_ARGUMENT],
         slider: None,
+        active: Some(ActiveSpec::while_true("system.audio.input_device.{{device}}.muted")),
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -197,6 +211,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
         description: "Mute the microphone if it is live, unmute it if muted",
         arguments: &[],
         slider: None,
+        active: Some(ActiveSpec::while_true(INPUT_MUTED)),
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -204,6 +219,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
         description: "Mute or unmute the microphone",
         arguments: &[MUTED_ARGUMENT],
         slider: None,
+        active: Some(ActiveSpec::equals(INPUT_MUTED, "muted")),
     },
     ActionSpec {
         plugin: SYSTEM_PLUGIN,
@@ -215,6 +231,7 @@ static SYSTEM_ACTIONS: &[ActionSpec] = &[
             "Microphone",
         )],
         slider: None,
+        active: Some(ActiveSpec::equals(INPUT_DEVICE, "device")),
     },
 ];
 
@@ -687,6 +704,13 @@ impl SystemBackend for RecordingSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_manifest_and_its_lights_are_valid() {
+        let manifest = SYSTEM_MANIFEST.to_dto();
+        manifest.validate().expect("valid");
+        assert!(manifest.uses(crate::abi::capability::TOGGLES), "its toggles light up");
+    }
     use crate::builtin::audio::RecordingAudio;
     use crate::RecordingNotifier;
     use flexdeck_actions::RecordingExecutor;

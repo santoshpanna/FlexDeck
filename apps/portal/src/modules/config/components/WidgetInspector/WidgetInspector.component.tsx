@@ -2,7 +2,7 @@ import type { Orientation, PlacedSpan } from "@flexdeck/grid";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 
-import { Glyph, HoldToConfirm, Key, Label, Notice, Segmented, cn, screen, spring } from "@flexdeck/ui";
+import { Glyph, HoldToConfirm, Key, Label, Notice, Segmented, Switch, cn, screen, spring } from "@flexdeck/ui";
 
 import { Icon } from "../../../../common/components/Icon/Icon.component.tsx";
 import type { ActionDefinition, ArgumentChoices, SliderOrientation, VariableChoice, WidgetPreview, WireConfig, WireWidget } from "../../../../services/api/api.ts";
@@ -10,14 +10,13 @@ import { editFace, hasFace, setCustomFace, setKeyFill } from "../../lib/face.edi
 import { fillOf } from "../../lib/fill.lib.ts";
 import { FaceEditor } from "../FaceEditor/FaceEditor.component.tsx";
 import { FaceView } from "../FaceView/FaceView.component.tsx";
-import { KeySource } from "../KeySource/KeySource.component.tsx";
 import { IconPicker } from "../IconPicker/IconPicker.component.tsx";
 import { KeyGallery } from "../KeyGallery/KeyGallery.component.tsx";
 import { suggestedActions } from "../../lib/presets.lib.ts";
 import { LooksEditor } from "../LooksEditor/LooksEditor.component.tsx";
 import { ZonesEditor } from "../ZonesEditor/ZonesEditor.component.tsx";
 import type { LoadChoices } from "../../hooks/useArgumentChoices/useArgumentChoices.hook.ts";
-import { relightActive, setWidgetColors, stateVariableOf } from "../../lib/editing.lib.ts";
+import { relightActive, setHideDot, setWidgetColors, stateVariableOf } from "../../lib/editing.lib.ts";
 import { INK_SWATCHES, faceColors } from "../../lib/face.lib.ts";
 import { ColorPicker } from "../FillPicker/ColorPicker.component.tsx";
 import { FillPicker } from "../FillPicker/FillPicker.component.tsx";
@@ -114,6 +113,11 @@ export function WidgetInspector(p: WidgetInspectorProps) {
           />
           <Segmented label="Appearance" value={tab} onChange={setTab} options={[{ value: "looks", label: "Looks" }]} />
         </div>
+        {p.preview?.state?.unavailable ? (
+          <div className="px-5 pb-3">
+            <Notice tone="warn">{`Disabled: ${p.preview.state.unavailable}. Pick another action under Does, or update the plugin.`}</Notice>
+          </div>
+        ) : null}
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div key={tab} variants={screen} initial="initial" animate="animate" exit="exit">
@@ -392,7 +396,6 @@ function Looks(p: WidgetInspectorProps) {
           <SimpleLooks {...p} />
         </>
       )}
-      <KeySource widget={widget} onEdit={onEdit} />
       <LooksEditor widget={widget} onEdit={onEdit} variables={variables} previewLook={p.previewLook ?? ""} onPreviewLook={p.onPreviewLook ?? (() => {})} />
       <section className="flex flex-col gap-2.5">
         <Label>Preview as</Label>
@@ -408,16 +411,25 @@ const KEY_FILL_MODES = ["default", "solid", "gradient", "image", "transparent"] 
 /** One label, one icon, two colours: the key as most people want it. */
 function SimpleLooks({ widget, variables, onBinding, onEdit, onIcon, previewState }: WidgetInspectorProps) {
   const bound = stateVariableOf(widget);
+  const lights = (widget.states?.looks ?? []).some((look) => look.id === "on");
   const template = widget.props?.labelTemplate ?? "";
   const iconTemplate = widget.props?.iconTemplate ?? "";
 
   return (
     <div className="flex flex-col gap-5">
       <section className="flex flex-col gap-2.5">
-        <Label>Lights up while</Label>
+        <div className="flex items-center justify-between gap-3">
+          <Label>Lights up while</Label>
+          {lights ? (
+            <span className="flex items-center gap-2 text-[11px] text-faint">
+              Corner dot
+              <Switch size="sm" label="Corner dot" checked={!widget.props?.hideDot} onChange={(show) => onEdit((config, id) => setHideDot(config, id, !show))} />
+            </span>
+          ) : null}
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <LookCard title="Off" active={!bound || previewState !== "on"} label={widget.props?.label} icon={widget.props?.icon} style={keyStyle(widget, false)} />
-          <LookCard title="On" lit active={Boolean(bound) && previewState === "on"} label={widget.props?.label} icon={widget.props?.icon} style={keyStyle(widget, true)} />
+          <LookCard title="On" lit dot={!widget.props?.hideDot} active={Boolean(bound) && previewState === "on"} label={widget.props?.label} icon={widget.props?.icon} style={keyStyle(widget, true)} />
         </div>
         <VariableInput
           label="Light up while"
@@ -426,7 +438,11 @@ function SimpleLooks({ widget, variables, onBinding, onEdit, onIcon, previewStat
           variables={variables}
           onCommit={(stateVariable) => onBinding({ stateVariable, labelTemplate: template })}
         />
-        <p className="m-0 text-[11px] text-faint">{bound ? "Lit whenever this value is true — recording, muted, live." : "Pick a true/false value, e.g. obs.recording. Leave empty for a plain key."}</p>
+        <p className="m-0 text-[11px] text-faint">
+          {bound
+            ? `Lit while this is true: ${variables.find((variable) => variable.name === bound)?.description || bound}.`
+            : "Pick a true/false value, e.g. obs.recording. A tap that toggles something fills this in itself."}
+        </p>
       </section>
 
       <section className="flex flex-col gap-2.5">
@@ -469,7 +485,7 @@ function SimpleLooks({ widget, variables, onBinding, onEdit, onIcon, previewStat
   );
 }
 
-function LookCard({ title, lit, active, label, icon, style }: { title: string; lit?: boolean; active: boolean; label?: string; icon?: string; style?: CSSProperties }) {
+function LookCard({ title, lit, dot = true, active, label, icon, style }: { title: string; lit?: boolean; dot?: boolean; active: boolean; label?: string; icon?: string; style?: CSSProperties }) {
   return (
     <div className={cn("flex flex-col gap-2 rounded-[14px] border p-2.5 transition-colors", active ? (lit ? "border-signal-line bg-signal-soft/50" : "border-line-strong bg-plate-2") : "border-line bg-plate opacity-70")}>
       <span className={cn("lbl", lit && "text-signal")}>{title}</span>
@@ -480,7 +496,7 @@ function LookCard({ title, lit, active, label, icon, style }: { title: string; l
         )}
         style={style}
       >
-        {lit ? <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-signal text-signal led-glow" /> : null}
+        {lit && dot ? <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-signal text-signal led-glow" /> : null}
         {icon ? <Icon name={icon} size={16} decorative /> : null}
         <span className="max-w-full truncate px-1">{label || "Key"}</span>
       </div>

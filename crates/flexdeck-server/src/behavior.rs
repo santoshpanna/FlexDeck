@@ -28,7 +28,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use flexdeck_automation::{
-    parse_document, Automation, AutomationDocument, CancelFlag, Environment, Inputs, Limits,
+    parse_document, Automation, AutomationDocument, Block, CancelFlag, Environment, Inputs, Limits,
     RecordingSleeper, Run, Sleeper, SystemClock, ThreadSleeper, Trace, NO_INPUTS,
 };
 use flexdeck_plugin::{Ctx, Notifier, PluginError, RecordingNotifier, Registry};
@@ -96,8 +96,18 @@ pub struct BehaviorInner {
     /// How many times each cycling widget has advanced. In memory: a restart
     /// starts every cycle at its first look, as a fresh deck would.
     pub(crate) cycled: Mutex<std::collections::HashMap<String, usize>>,
-    /// The look each provider-driven widget's action last reported.
+    /// The look each provider-driven widget's action last reported, or the
+    /// look a gesture-driven widget's last gesture picked.
     pub(crate) provided: Mutex<std::collections::HashMap<String, String>>,
+    /// What a gesture-driven widget showed before a hold began, to go back to
+    /// when it ends and the release has no look of its own.
+    pub(crate) before_hold: Mutex<std::collections::HashMap<String, Option<String>>>,
+    /// Why each key cannot do what it does any more, by widget id.
+    pub(crate) unavailable: RwLock<Arc<BTreeMap<String, String>>>,
+    /// The actions each loaded plugin has, copied out of the registry when
+    /// its catalogue changes. A run holds the registry for as long as it
+    /// takes, waits included, so drawing or previewing a key must not need it.
+    pub(crate) actions: RwLock<Arc<ActionCatalogue>>,
     /// Each slider's pending value and whether a run is draining it. See
     /// [`Behavior::slide`].
     pub(crate) sliders: Mutex<std::collections::HashMap<String, SliderSlot>>,
@@ -164,6 +174,7 @@ impl Behavior {
         if let Some(secrets) = secrets {
             sources.load_secrets(secrets);
         }
+        let actions = ActionCatalogue::of(&registry.lock().unwrap_or_else(PoisonError::into_inner));
         let locale = store
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -190,6 +201,9 @@ impl Behavior {
             widgets: RwLock::new((u64::MAX, Arc::new(Vec::new()))),
             cycled: Mutex::new(std::collections::HashMap::new()),
             provided: Mutex::new(std::collections::HashMap::new()),
+            before_hold: Mutex::new(std::collections::HashMap::new()),
+            unavailable: RwLock::new(Arc::new(BTreeMap::new())),
+            actions: RwLock::new(Arc::new(actions)),
             sliders: Mutex::new(std::collections::HashMap::new()),
             viewers: std::sync::atomic::AtomicUsize::new(0),
             limits,
@@ -394,7 +408,48 @@ impl Behavior {
             .unwrap_or_else(PoisonError::into_inner)
             .get(&plan.widget_id)
             .cloned();
-        plan.state_in(&self.inner.variables, cycled, provided.as_deref(), &self.locale())
+        let mut event = plan.state_in(&self.inner.variables, cycled, provided.as_deref(), &self.locale());
+        event.unavailable = self.unavailable_of(&plan.widget_id).unwrap_or_default();
+        event
+    }
+
+    fn unavailable_of(&self, widget_id: &str) -> Option<String> {
+        self.inner
+            .unavailable
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(widget_id)
+            .cloned()
+    }
+
+    /// Why `plan` cannot do what it does on the plugins as they are now;
+    /// empty when it can.
+    pub fn unavailable_for(&self, plan: &WidgetPlan) -> String {
+        let actions = Arc::clone(&self.inner.actions.read().unwrap_or_else(PoisonError::into_inner));
+        plan.flows.iter().find_map(|blocks| unavailable_in(&actions, blocks)).unwrap_or_default()
+    }
+
+    /// Check every key's actions against the plugins as they are now, and
+    /// return the keys whose answer changed.
+    fn refresh_unavailable(&self) -> BTreeSet<String> {
+        let plans = self.widget_plans();
+        let actions = Arc::clone(&self.inner.actions.read().unwrap_or_else(PoisonError::into_inner));
+        let fresh: BTreeMap<String, String> = plans
+            .iter()
+            .filter_map(|plan| {
+                let why = plan.flows.iter().find_map(|blocks| unavailable_in(&actions, blocks))?;
+                Some((plan.widget_id.clone(), why))
+            })
+            .collect();
+        let mut kept = self.inner.unavailable.write().unwrap_or_else(PoisonError::into_inner);
+        let changed = kept
+            .keys()
+            .chain(fresh.keys())
+            .filter(|id| kept.get(*id) != fresh.get(*id))
+            .cloned()
+            .collect();
+        *kept = Arc::new(fresh);
+        changed
     }
 
     /// What one widget shows right now, if it exists.
@@ -408,9 +463,16 @@ impl Behavior {
     /// What every live widget should show right now — sent to a tablet when
     /// it connects, and after the configuration changes.
     pub fn widget_state_snapshot(&self) -> Vec<flexdeck_protocol::StateEvent> {
+        // A key fixed since (a new action picked) is no longer in this
+        // snapshot unless it is live, so every viewer is told it directly.
+        let changed = self.refresh_unavailable();
+        if !changed.is_empty() {
+            self.push_widget_states(|plan| changed.contains(&plan.widget_id));
+        }
+        let unavailable = Arc::clone(&self.inner.unavailable.read().unwrap_or_else(PoisonError::into_inner));
         self.widget_plans()
             .iter()
-            .filter(|plan| plan.is_live())
+            .filter(|plan| plan.is_live() || unavailable.contains_key(&plan.widget_id))
             .map(|plan| self.state_of(plan))
             .collect()
     }
@@ -622,6 +684,31 @@ impl Behavior {
         }
     }
 
+    /// Keep the look `gesture` picks, if `plan`'s looks follow gestures.
+    fn record_gesture(&self, plan: &WidgetPlan, gesture: Gesture) {
+        let Some(crate::widgets::StateSource::Gesture(picks)) = &plan.source else {
+            return;
+        };
+        let mut provided = self.inner.provided.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut before = self.inner.before_hold.lock().unwrap_or_else(PoisonError::into_inner);
+        let id = plan.widget_id.clone();
+        if gesture == Gesture::HoldStart {
+            before.insert(id.clone(), provided.get(&id).cloned());
+        }
+        let held = if gesture == Gesture::HoldEnd { before.remove(&id) } else { None };
+        // A hold whose start was never recorded (its flow failed) has no look
+        // to go back to: leave the one the key shows.
+        let next = match (picks.get(&gesture), held) {
+            (Some(look), _) => Some(look.clone()),
+            (None, Some(previous)) => previous,
+            (None, None) => return,
+        };
+        match next {
+            Some(look) => provided.insert(id, look),
+            None => provided.remove(&id),
+        };
+    }
+
     /// Keep the look a run's providing action reported, if `plan`'s looks
     /// come from an action and that action is in this run (the `flow`-th
     /// flow). Returns whether anything was kept.
@@ -658,14 +745,17 @@ impl Behavior {
 
     /// Tell anyone watching that the plugin catalogue moved.
     pub fn catalogue_changed(&self) {
-        let generation = self
-            .inner
-            .registry
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .generation();
+        let (generation, actions) = {
+            let registry = self.inner.registry.lock().unwrap_or_else(PoisonError::into_inner);
+            (registry.generation(), ActionCatalogue::of(&registry))
+        };
+        *self.inner.actions.write().unwrap_or_else(PoisonError::into_inner) = Arc::new(actions);
         // No subscribers is normal.
         let _ = self.inner.catalogue.send(generation);
+        let changed = self.refresh_unavailable();
+        if !changed.is_empty() {
+            self.push_widget_states(|plan| changed.contains(&plan.widget_id));
+        }
     }
 
     /// Hear about every catalogue change. See [`Self::catalogue_changed`].
@@ -740,6 +830,10 @@ impl Behavior {
         let Some(plan) = plans.iter().find(|plan| plan.widget_id == widget_id) else {
             return Ok(Interaction::default());
         };
+        let why = self.unavailable_for(plan);
+        if !why.is_empty() {
+            return Ok(Interaction { ran: false, failure: Some(why) });
+        }
 
         let settings = BTreeMap::new();
         let mut notifier_guard = self
@@ -769,6 +863,9 @@ impl Behavior {
             interaction.ran = true;
             interaction.failure = failure_of(&run);
             self.record_provided(plan, index, &run);
+        }
+        if zone.is_empty() && interaction.failure.is_none() {
+            self.record_gesture(plan, gesture);
         }
 
         // A zone is a button of its own: it neither cycles the key's looks
@@ -1596,6 +1693,56 @@ pub struct Interaction {
     pub failure: Option<String>,
 }
 
+/// Each loaded plugin's actions and the arguments each one must be given.
+#[derive(Default)]
+pub(crate) struct ActionCatalogue {
+    actions: BTreeMap<String, BTreeMap<String, Vec<String>>>,
+}
+
+impl ActionCatalogue {
+    fn of(registry: &Registry) -> Self {
+        let actions = registry
+            .manifests()
+            .into_iter()
+            .map(|manifest| {
+                let actions = manifest
+                    .actions
+                    .iter()
+                    .map(|action| {
+                        let required = action.arguments.iter().filter(|a| !a.optional).map(|a| a.name.clone()).collect();
+                        (action.action.clone(), required)
+                    })
+                    .collect();
+                (manifest.id.clone(), actions)
+            })
+            .collect();
+        Self { actions }
+    }
+}
+
+/// Why `blocks` cannot run on the plugins as they are: an action an
+/// installed plugin no longer has, or an argument it now needs that the
+/// step does not give. A plugin that is not loaded (yet) says nothing here.
+fn unavailable_in(catalogue: &ActionCatalogue, blocks: &[Block]) -> Option<String> {
+    blocks.iter().find_map(|block| match block {
+        Block::DoAction { plugin, action, args } => {
+            let actions = catalogue.actions.get(plugin)?;
+            let Some(required) = actions.get(action) else {
+                return Some(format!("{plugin} no longer has \"{action}\""));
+            };
+            required
+                .iter()
+                .find(|name| !args.contains_key(*name))
+                .map(|name| format!("{plugin} \"{action}\" now needs \"{name}\""))
+        }
+        Block::If { then_blocks, else_if, otherwise, .. } => unavailable_in(catalogue, then_blocks)
+            .or_else(|| else_if.iter().find_map(|branch| unavailable_in(catalogue, &branch.blocks)))
+            .or_else(|| unavailable_in(catalogue, otherwise)),
+        Block::Repeat { body, .. } => unavailable_in(catalogue, body),
+        Block::Wait { .. } | Block::SetVariable { .. } => None,
+    })
+}
+
 /// The reason a run did not complete, if it did not.
 fn failure_of(run: &Run) -> Option<String> {
     match run.outcome {
@@ -1882,6 +2029,80 @@ mod tests {
         assert_eq!(look(&behavior), "muted", "only a short press cycles");
         behavior.interact("btn", Gesture::ShortPress).unwrap();
         assert_eq!(look(&behavior), "live");
+    }
+
+    #[test]
+    fn a_key_whose_plugin_lost_its_action_is_shown_disabled_and_refuses_a_press() {
+        let behavior = behavior();
+        let press = |blocks: serde_json::Value| serde_json::json!([{"trigger": {"gesture": "GESTURE_SHORT_PRESS"}, "blocks": blocks}]);
+        store_config(
+            &behavior,
+            &deck(serde_json::json!([
+                {"id": "gone", "flows": press(serde_json::json!([
+                    {"block": "if", "condition": {"kind": "compare", "left": {"number": 1.0}, "op": "eq", "right": {"number": 1.0}},
+                     "then": [{"block": "doAction", "plugin": "example", "action": "vanished", "args": {}}]},
+                    set_counter(7.0)
+                ]))},
+                {"id": "fine", "flows": press(serde_json::json!([{"block": "doAction", "plugin": "example", "action": "flip"}]))},
+                {"id": "absent", "flows": press(serde_json::json!([{"block": "doAction", "plugin": "nobody", "action": "nothing", "args": {}}]))}
+            ])),
+        );
+        let snapshot = behavior.widget_state_snapshot();
+        let gone = snapshot.iter().find(|state| state.widget_id == "gone").expect("sent though not live");
+        assert!(gone.unavailable.contains("vanished"), "{}", gone.unavailable);
+        assert!(snapshot.iter().all(|state| state.widget_id != "fine" && state.widget_id != "absent"));
+
+        let pressed = behavior.interact("gone", Gesture::ShortPress).unwrap();
+        assert!(!pressed.ran && pressed.failure.is_some());
+        assert_eq!(counter(&behavior), None, "nothing in it ran");
+        assert_eq!(behavior.widget_state("fine").unwrap().unavailable, "");
+    }
+
+    #[test]
+    fn a_key_fixed_by_hand_is_told_it_works_again_though_it_shows_nothing_live() {
+        let behavior = behavior();
+        let _viewer = behavior.viewer();
+        let mut states = behavior.subscribe_widget_states();
+        let key = |action: &str| deck(serde_json::json!([{"id": "k", "flows": [
+            {"trigger": {"gesture": "GESTURE_SHORT_PRESS"}, "blocks": [{"block": "doAction", "plugin": "example", "action": action}]}
+        ]}]));
+        store_config(&behavior, &key("vanished"));
+        assert_eq!(behavior.widget_state_snapshot().len(), 1);
+        while states.try_recv().is_ok() {}
+
+        store_config(&behavior, &key("flip"));
+        assert!(behavior.widget_state_snapshot().is_empty(), "not live, so not in the snapshot");
+        let pushed = states.try_recv().expect("so it is pushed instead");
+        assert_eq!((pushed.widget_id.as_str(), pushed.unavailable.as_str()), ("k", ""));
+    }
+
+    #[test]
+    fn the_last_gesture_picks_the_look_and_a_hold_lasts_while_held() {
+        let behavior = behavior();
+        store_config(
+            &behavior,
+            &deck(serde_json::json!([{"id": "btn",
+                "states": {"looks": [{"id": "tap"}, {"id": "long"}, {"id": "held"}], "gesture": {"looks": [
+                    {"gesture": "GESTURE_SHORT_PRESS", "state": "tap"},
+                    {"gesture": "GESTURE_LONG_PRESS", "state": "long"},
+                    {"gesture": "GESTURE_HOLD_START", "state": "held"}
+                ]}}
+            }])),
+        );
+        let look = |b: &Behavior| b.widget_state("btn").unwrap().state_id;
+        assert_eq!(look(&behavior), "", "nothing pressed yet: the key's own look");
+        behavior.interact("btn", Gesture::LongPress).unwrap();
+        assert_eq!(look(&behavior), "long");
+        behavior.interact("btn", Gesture::DoubleTap).unwrap();
+        assert_eq!(look(&behavior), "long", "a gesture without a look changes nothing");
+        behavior.interact("btn", Gesture::HoldStart).unwrap();
+        assert_eq!(look(&behavior), "held");
+        behavior.interact("btn", Gesture::HoldEnd).unwrap();
+        assert_eq!(look(&behavior), "long", "letting go goes back to what it showed");
+        behavior.interact("btn", Gesture::ShortPress).unwrap();
+        assert_eq!(look(&behavior), "tap");
+        behavior.interact("btn", Gesture::HoldEnd).unwrap();
+        assert_eq!(look(&behavior), "tap", "a hold whose start was never kept leaves the look alone");
     }
 
     #[test]

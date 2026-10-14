@@ -23,6 +23,8 @@ export const Capability = {
   series: "series",
   presets: "presets",
   feeds: "feeds",
+  /** `active` with a fixed value (`is`) or `{{argument}}` placeholders in its variable. */
+  toggles: "toggles",
 } as const;
 export type Capability = (typeof Capability)[keyof typeof Capability];
 
@@ -52,10 +54,15 @@ export interface ActionDto {
   active?: ActiveDto;
 }
 
-/** ABI 4: when a key running an action shows as active. */
+/**
+ * ABI 4: when a key running an action shows as active — while `variable`
+ * holds the `equals` argument's value or, with the `toggles` capability, the
+ * value `is` (`"true"` when neither is given).
+ */
 export interface ActiveDto {
   variable: string;
-  equals: string;
+  equals?: string;
+  is?: string;
 }
 
 /** ABI 3: which argument a slider writes, its range, and the variable it follows. */

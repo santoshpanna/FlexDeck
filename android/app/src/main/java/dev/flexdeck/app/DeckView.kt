@@ -305,6 +305,14 @@ class DeckView(context: Context) : View(context) {
         style = Paint.Style.STROKE
         strokeWidth = 3f
     }
+    private val unavailablePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UNAVAILABLE_SHADE }
+    private val warnPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+        color = WAIT
+    }
+    private val warnPath = Path()
 
     /**
      * A widget reduced to exactly what drawing it needs.
@@ -343,6 +351,8 @@ class DeckView(context: Context) : View(context) {
         /** Its strip's buttons, and where each falls, in grid units. */
         val zones: List<ZoneSpec> = emptyList(),
         val zoneRects: List<RectF> = emptyList(),
+        /** No light in the corner while it is lit. */
+        val hideDot: Boolean = false,
     )
 
     /** A look, resolved against its widget's own colours and label. */
@@ -512,6 +522,7 @@ class DeckView(context: Context) : View(context) {
                     zoneRects = strip.zones.map { z ->
                         RectF(frame.left + z.x.toFloat(), frame.top + z.y.toFloat(), frame.left + z.right.toFloat(), frame.top + z.bottom.toFloat())
                     },
+                    hideDot = widget.hideDot,
                 )
             }
         }
@@ -703,9 +714,16 @@ class DeckView(context: Context) : View(context) {
                 canvas.drawCircle(frame.left + 12f * unit, frame.top + 12f * unit, 3.5f * unit, ledPaint)
             }
 
+            // A plugin no longer has what it does: shaded, with a warning, and a
+            // press is not sent. It comes back when the plugin does.
+            if (!state?.unavailable.isNullOrEmpty()) {
+                canvas.drawRoundRect(frame, radius, radius, unavailablePaint)
+                drawWarning(canvas, frame.centerX(), frame.centerY(), minOf(frame.width(), frame.height()) * 0.18f)
+            }
+
             // A light in the corner while the key is active — its scene is the live
             // one, its toggle is on. Every key does something, so that says nothing.
-            if (spec == null && lit) {
+            if (spec == null && lit && !widget.hideDot) {
                 val led = 3.5f * unit
                 val x = frame.right - 12f * unit
                 val y = frame.top + 12f * unit
@@ -1114,6 +1132,7 @@ class DeckView(context: Context) : View(context) {
                     swipe = null
                 }
                 if (widget == null) return touches.isNotEmpty() || swipe != null
+                if (!live[widget.id]?.unavailable.isNullOrEmpty()) return true
                 val spec = widget.slider
                 when {
                     // The name row is the slider's mute: a tap there, not a drag.
@@ -1257,6 +1276,19 @@ class DeckView(context: Context) : View(context) {
         }
     }
 
+    /** A warning triangle with a "!" in it, `size` from its centre to a corner. */
+    private fun drawWarning(canvas: Canvas, x: Float, y: Float, size: Float) {
+        warnPaint.strokeWidth = size * 0.16f
+        warnPath.reset()
+        warnPath.moveTo(x, y - size)
+        warnPath.lineTo(x + size * 1.1f, y + size * 0.8f)
+        warnPath.lineTo(x - size * 1.1f, y + size * 0.8f)
+        warnPath.close()
+        canvas.drawPath(warnPath, warnPaint)
+        canvas.drawLine(x, y - size * 0.4f, x, y + size * 0.15f, warnPaint)
+        canvas.drawPoint(x, y + size * 0.48f, warnPaint)
+    }
+
     /** Send what the recogniser decided, and wake it again when it next has something due. */
     private fun fire(events: List<Fired>) {
         for (event in events) {
@@ -1384,6 +1416,8 @@ class DeckView(context: Context) : View(context) {
         val NUMBER = Color.parseColor("#FF8A5C")
         val OK = Color.parseColor("#4ADE80")
         val WAIT = Color.parseColor("#FBBF24")
+        /** Over a key whose plugin lost what it does. */
+        val UNAVAILABLE_SHADE = Color.argb(170, 5, 5, 6)
         val TRACK = Color.parseColor("#0A0A0B")
         val LEVEL = Color.parseColor("#FF5A1F")
         val MUTED_LEVEL = Color.parseColor("#3A3A40")

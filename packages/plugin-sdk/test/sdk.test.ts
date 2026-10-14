@@ -117,6 +117,55 @@ test("at ABI 4 the manifest carries presets and feeds the Rust ABI parses", () =
   assert.equal(feeding.manifest(3).feeds, undefined);
 });
 
+const toggling = definePlugin({
+  id: "toggling",
+  name: "Toggling",
+  version: "1.0.0",
+  variables: {
+    "toggling.muted": { kind: "bool" },
+    "toggling.scene": { kind: "text" },
+  },
+  actions: {
+    toggle_mute: { description: "Mute", active: { variable: "toggling.muted" }, run: () => {} },
+    toggle_user: {
+      description: "Mute one",
+      arguments: { user: { kind: "text", example: "1" } },
+      active: { variable: "toggling.user.{{user}}.muted" },
+      run: () => {},
+    },
+    set_scene: {
+      description: "Scene",
+      arguments: { scene: { kind: "text", example: "A" } },
+      active: { variable: "toggling.scene", equals: "scene" },
+      run: () => {},
+    },
+  },
+});
+
+test("a toggle's light reaches only an agent that offers toggles", async () => {
+  const offered = toggling.manifest(4);
+  assert.deepEqual(offered.actions.map((action) => action.active), [
+    { variable: "toggling.muted" },
+    { variable: "toggling.user.{{user}}.muted" },
+    { variable: "toggling.scene", equals: "scene" },
+  ]);
+  assert.ok(offered.uses?.includes("toggles"));
+
+  const older = (await toggling.handle("initialize", { abi: 4, hostCapabilities: ["series", "presets", "feeds"] })) as {
+    manifest: ReturnType<typeof toggling.manifest>;
+  };
+  assert.deepEqual(older.manifest.actions.map((action) => action.active), [undefined, undefined, { variable: "toggling.scene", equals: "scene" }]);
+  assert.ok(!older.manifest.uses?.includes("toggles"));
+});
+
+test("a toggle's light must name the action's own arguments", () => {
+  const define = (active: { variable: string; is?: string }) =>
+    definePlugin({ id: "bad", name: "Bad", version: "1", actions: { t: { description: "", arguments: { a: { kind: "text", example: "" } }, active, run: () => {} } } });
+  assert.throws(() => define({ variable: "bad.{{b}}.on" }), /'b' is not one of its arguments/);
+  assert.throws(() => define({ variable: "other.on" }), /must start with 'bad.'/);
+  define({ variable: "bad.{{a}}.on", is: "yes" });
+});
+
 test("a feed publishes per key, and forgets a key that goes", async () => {
   await feeding.handle("initialize", { abi: 4, hostCapabilities: ["series", "presets", "feeds"] });
   feeding.sent.length = 0;

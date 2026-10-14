@@ -1,7 +1,6 @@
 import type { Block, Gesture, WireConfig, WireFlow, WireWidget } from "../../../services/api/api.ts";
-import { gridSpecOf, profileOf } from "./config.lib.ts";
+import { gridSpecOf, profileOf, withSchemaFor } from "./config.lib.ts";
 import { findPage, findWidget, firstFreeCell, nextWidgetId, widgetIdsOf, resizeWidget, spansOf, withPage, withWidget } from "./editing.lib.ts";
-import { CONFIG_SCHEMA } from "../../../services/api/api.ts";
 
 /**
  * Ready-made keys: a face, what it reads, and what a press does — dropped on
@@ -393,19 +392,18 @@ export const PRESETS: readonly Preset[] = [
     id: "weather",
     name: "Weather",
     category: "Web",
-    description: "Temperature and sky now, today's temperatures behind. Set its place in Its own data.",
+    description: "Temperature and sky now, today's temperatures behind. Set its place in its source.",
     w: 2,
     h: 1,
     needs: { starter: "Weather", id: "weather" },
     widget: {
-      sources: [{ source: "weather" }],
       face: {
         layout: "FACE_LAYOUT_SPLIT",
-        background: { graph: "this.today", graphColor: "#38bdf8" },
+        background: { graph: "src.weather.today", graphColor: "#38bdf8" },
         elements: [
-          { slot: "SLOT_VISUAL", kind: "ELEMENT_KIND_ICON", template: "{{this.icon}}" },
-          { slot: "SLOT_TITLE", template: "{{ this.temp | temp }}", text: { size: "TEXT_SIZE_XL", bold: true } },
-          { slot: "SLOT_CAPTION", template: "{{this.sky}} · {{ this.wind | round }} km/h" },
+          { slot: "SLOT_VISUAL", kind: "ELEMENT_KIND_ICON", template: "{{src.weather.icon}}" },
+          { slot: "SLOT_TITLE", template: "{{ src.weather.temp | temp }}", text: { size: "TEXT_SIZE_XL", bold: true } },
+          { slot: "SLOT_CAPTION", template: "{{src.weather.sky}} · {{ src.weather.wind | round }} km/h" },
         ],
       },
     },
@@ -414,24 +412,23 @@ export const PRESETS: readonly Preset[] = [
     id: "crypto",
     name: "Crypto ticker",
     category: "Web",
-    description: "A coin's price, green or red with its change over a day. Set the coin in Its own data.",
+    description: "A coin's price, green or red with its change over a day. Set the coin in its source.",
     w: 2,
     h: 1,
     needs: { starter: "Crypto price", id: "crypto" },
     widget: {
-      sources: [{ source: "crypto" }],
       face: {
         layout: "FACE_LAYOUT_VALUE",
-        rules: [{ when: "this.change < -5", color: HOT, pulse: true }],
+        rules: [{ when: "src.crypto.change < -5", color: HOT, pulse: true }],
         elements: [
           { slot: "SLOT_TOP", template: "Bitcoin" },
-          { slot: "SLOT_VALUE", template: "{{ this.price | currency }}", text: { font: "FONT_MONO" } },
+          { slot: "SLOT_VALUE", template: "{{ src.crypto.price | currency }}", text: { font: "FONT_MONO" } },
           {
             slot: "SLOT_CAPTION",
-            template: "{{ this.change | round(2) | sign }}% today",
+            template: "{{ src.crypto.change | round(2) | sign }}% today",
             rules: [
-              { when: "this.change < 0", color: BAD },
-              { when: "this.change >= 0", color: GOOD },
+              { when: "src.crypto.change < 0", color: BAD },
+              { when: "src.crypto.change >= 0", color: GOOD },
             ],
           },
         ],
@@ -486,7 +483,7 @@ export function placePreset(config: WireConfig, pageId: string, preset: Preset):
     if (!widget.props) widget.props = { label: preset.name };
     else if (!widget.props.label) widget.props = { ...widget.props, label: preset.name };
     const next = withPage(config, pageId, (target) => ({ ...target, widgets: [...(target.widgets ?? []), widget] }));
-    return { config: (next.schema ?? 0) >= CONFIG_SCHEMA ? next : { ...next, schema: CONFIG_SCHEMA }, widgetId: id };
+    return { config: withSchemaFor(next), widgetId: id };
   }
   return null;
 }
@@ -527,17 +524,35 @@ export function applyPresetLook(config: WireConfig, widgetId: string, preset: Pr
   const target = findWidget(config, widgetId)?.widget;
   if (!isLookPreset(preset) || !target || target.type === "WIDGET_TYPE_SLIDER") return config;
   const next = withWidget(config, widgetId, (widget) => {
-    const { face, props, sources } = preset.widget;
+    const { face, props, sources } = sharedReads(preset.widget);
     if (!face) {
       return { ...widget, props: { ...(widget.props ?? {}), icon: props!.icon! } };
     }
-    const look: WireWidget = { ...widget, face: structuredClone(face) };
+    const look: WireWidget = { ...widget, face };
     if (widget.face?.zones?.length) look.face = { ...look.face, zones: widget.face.zones };
-    if (sources?.length) look.sources = structuredClone(sources);
+    if (sources?.length) look.sources = sources;
     return look;
   });
   if (next === config) return config;
-  return (next.schema ?? 0) >= CONFIG_SCHEMA ? next : { ...next, schema: CONFIG_SCHEMA };
+  return withSchemaFor(next);
+}
+
+/**
+ * A preset's key without a data source run of its own: a plugin's preset that
+ * still asks for one reads the shared source instead, `this.temp` becoming
+ * `src.weather.temp`. Its own settings for the run are dropped; the source's
+ * are used. A plugin's feed (`plugin/feed`) is per key by nature and stays.
+ * The agent's `upgrade::shared_sources` does the same to decks already saved.
+ */
+export function sharedReads<W extends Pick<WireWidget, "sources">>(widget: W): W {
+  const copy = structuredClone(widget);
+  const source = copy.sources?.[0]?.source;
+  if (!source || source.includes("/")) return copy;
+  const feeds = (copy.sources ?? []).filter((used) => used.source?.includes("/"));
+  delete copy.sources;
+  const shared = JSON.parse(JSON.stringify(copy).replace(/(?<![\w.])this\.(?=[A-Za-z_])/g, `src.${source}.`)) as W;
+  if (feeds.length) shared.sources = feeds;
+  return shared;
 }
 
 /** Whether the key can grow to the preset's own size where it stands. */
@@ -587,7 +602,7 @@ export function applyWholePreset(config: WireConfig, widgetId: string, preset: P
   if (!target || target.type === "WIDGET_TYPE_SLIDER") return config;
   const named = target.props?.label && target.props.label !== "New button" ? target.props.label : undefined;
   let next = withWidget(config, widgetId, (widget) => {
-    const { face, flows, states, sources, props } = structuredClone(preset.widget);
+    const { face, flows, states, sources, props } = sharedReads(preset.widget);
     const made: WireWidget = { id: widget.id, type: widget.type ?? "WIDGET_TYPE_BUTTON", col: widget.col, row: widget.row, w: widget.w, h: widget.h };
     if (widget.portrait) made.portrait = widget.portrait;
     made.props = { ...(props ?? {}), label: named ?? props?.label ?? preset.name };
@@ -598,5 +613,5 @@ export function applyWholePreset(config: WireConfig, widgetId: string, preset: P
     return made;
   });
   if (presetFits(next, widgetId, preset)) next = resizeWidget(next, widgetId, preset.w, preset.h);
-  return (next.schema ?? 0) >= CONFIG_SCHEMA ? next : { ...next, schema: CONFIG_SCHEMA };
+  return withSchemaFor(next);
 }

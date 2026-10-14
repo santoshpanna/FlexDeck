@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use flexdeck_actions::{ActionSpec, ArgumentSpec, CoreAction, Hotkey, KeyName, SliderSpec};
+use flexdeck_actions::{ActionSpec, ActiveSpec, ArgumentSpec, CoreAction, Hotkey, KeyName, SliderSpec};
 use flexdeck_vars::{Kind, Value, VariableSpec};
 
 use super::media_sessions::{Command, ImageSink, MediaSessions};
@@ -42,6 +42,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Play or pause",
         arguments: &[],
         slider: None,
+        active: Some(ActiveSpec::while_true("media.current.playing")),
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -49,6 +50,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Next track",
         arguments: &[],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -56,6 +58,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Previous track",
         arguments: &[],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -63,6 +66,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Stop playback",
         arguments: &[],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -70,6 +74,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Volume up one step",
         arguments: &[],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -77,6 +82,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Volume down one step",
         arguments: &[],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -84,6 +90,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Mute or unmute",
         arguments: &[],
         slider: None,
+        active: Some(ActiveSpec::while_true(super::system::MUTED)),
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -91,6 +98,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Play or pause one player",
         arguments: &[APP],
         slider: None,
+        active: Some(ActiveSpec::while_true("media.{{app}}.playing")),
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -98,6 +106,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Skip to one player's next track",
         arguments: &[APP],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -105,6 +114,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Go to one player's previous track",
         arguments: &[APP],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -112,6 +122,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Stop one player",
         arguments: &[APP],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -119,6 +130,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Jump to a point in the track",
         arguments: &[APP, ArgumentSpec::number("seconds", "Seconds from the start", "60")],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -126,6 +138,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Jump forward or back",
         arguments: &[APP, ArgumentSpec::number("seconds", "Seconds; negative goes back", "10")],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -133,6 +146,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Jump to a point in the track, as a percentage",
         arguments: &[APP, ArgumentSpec::number("percent", "0 to 100", "50")],
         slider: Some(SliderSpec::percent("percent", "media.{{app}}.progress")),
+        active: None,
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -140,6 +154,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Turn one player's shuffle on or off",
         arguments: &[APP],
         slider: None,
+        active: Some(ActiveSpec::while_true("media.{{app}}.shuffle")),
     },
     ActionSpec {
         plugin: MEDIA_PLUGIN,
@@ -147,6 +162,7 @@ static MEDIA_ACTIONS: &[ActionSpec] = &[
         description: "Change one player's repeat: off, all, one",
         arguments: &[APP],
         slider: None,
+        active: None,
     },
 ];
 
@@ -403,6 +419,13 @@ impl Plugin for Media {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_manifest_and_its_lights_are_valid() {
+        let manifest = MEDIA_MANIFEST.to_dto();
+        manifest.validate().expect("valid");
+        assert!(manifest.uses(crate::abi::capability::TOGGLES), "its toggles light up");
+    }
 
     #[test]
     fn the_catalogue_and_the_key_table_name_the_same_actions() {

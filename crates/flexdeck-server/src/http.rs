@@ -376,7 +376,11 @@ impl IntoResponse for ApiError {
 
 impl From<AgentError> for ApiError {
     fn from(error: AgentError) -> Self {
-        Self::internal(error.to_string())
+        match error {
+            // A deck the agent will not take is the sender's to fix, not a fault here.
+            AgentError::Widgets(_) | AgentError::Json(_) => Self::bad_request(error.to_string()),
+            _ => Self::internal(error.to_string()),
+        }
     }
 }
 
@@ -1319,7 +1323,7 @@ async fn preview_face(
     let locale = behavior.locale();
     let limits = flexdeck_automation::Limits::default();
     let one = |widget: &Value, look: &str| -> Value {
-        match crate::widgets::preview(widget, look, behavior.variables(), &limits, &locale) {
+        match crate::widgets::preview(widget, look, behavior.variables(), &limits, &locale, |plan| behavior.unavailable_for(plan)) {
             Ok(state) => json!({ "state": serde_json::to_value(state).unwrap_or(Value::Null) }),
             Err(error) => json!({ "error": error }),
         }
@@ -1745,6 +1749,16 @@ mod tests {
 
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert!(body["error"].as_str().is_some(), "errors carry a message");
+    }
+
+    #[tokio::test]
+    async fn a_config_the_agent_will_not_take_is_the_senders_mistake() {
+        let deck = json!({"schema": 5, "profiles": [{"id": "p", "pages": [{"id": "home", "widgets": [
+            {"id": "w", "props": {"labelTemplate": "Rec {{discord.voice."}}
+        ]}]}]});
+        let (status, body) = send(agent(), put("/api/config", deck)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(body["error"].as_str().unwrap().contains("never closed"), "{body}");
     }
 
     #[tokio::test]

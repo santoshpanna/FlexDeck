@@ -275,6 +275,7 @@ export function GridPreview({ profile, page, orientation, onOrientation, caption
                 const face = faceColors(widget, lit);
                 // A transparent face shows the page behind it: no key at all.
                 const see = widget.face?.background?.transparent === true && !previews?.[widget.id]?.state?.background;
+                const unavailable = previews?.[widget.id]?.state?.unavailable;
                 return (
                   <motion.div
                     key={widget.id}
@@ -287,7 +288,7 @@ export function GridPreview({ profile, page, orientation, onOrientation, caption
                     onPointerDown={(event) => drag.startMove(forDrag(widget), event)}
                   >
                     <div
-                      className={cn("absolute inset-0 overflow-hidden border text-center text-[var(--fd-deck-ink)]", probe === "disabled" && "grayscale")}
+                      className={cn("absolute inset-0 overflow-hidden border text-center text-[var(--fd-deck-ink)]", probe === "disabled" && "grayscale", unavailable && "opacity-40 grayscale")}
                       style={{
                         borderRadius: radius,
                         borderColor: see ? "transparent" : lit ? "var(--fd-deck-lit-line)" : "var(--fd-deck-key-line)",
@@ -352,7 +353,7 @@ export function GridPreview({ profile, page, orientation, onOrientation, caption
                           ) : null}
                         </span>
                       ) : null}
-                      {lit ? (
+                      {lit && !widget.props?.hideDot ? (
                         <span
                           aria-hidden="true"
                           className="absolute rounded-full"
@@ -367,6 +368,14 @@ export function GridPreview({ profile, page, orientation, onOrientation, caption
                         />
                       ) : null}
                     </div>
+                      {unavailable ? (
+                        <span title={unavailable} aria-label={unavailable} className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                          <svg viewBox="0 0 24 24" width={28 * unit} height={28 * unit} fill="none" stroke="#fbbf24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M12 3 2.5 20h19L12 3Z" />
+                            <path d="M12 10v4.5M12 17.5v.01" />
+                          </svg>
+                        </span>
+                      ) : null}
 
                     {selected ? (
                       <motion.div

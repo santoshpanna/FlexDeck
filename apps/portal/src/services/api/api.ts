@@ -71,8 +71,14 @@ export interface WireAction {
   args?: Record<string, string>;
 }
 
-/** The configuration schema this portal writes. 3 adds sliders and holds; 4 faces. */
-export const CONFIG_SCHEMA = 4;
+/** The configuration schema this portal writes. 3 adds sliders and holds; 4 faces; 5 gesture states and value rules. */
+export const CONFIG_SCHEMA = 5;
+
+/** The schema faces need; a deck is raised only as far as what it holds needs. */
+export const FACES_SCHEMA = 4;
+
+/** The schema gesture states, value rules and a hidden dot need. */
+export const GESTURE_STATES_SCHEMA = 5;
 
 /** How a person touched a widget. Each has at most one flow on a widget. */
 export type Gesture =
@@ -151,6 +157,22 @@ export interface WireStates {
   cycle?: Record<string, never>;
   variable?: { variable?: string; cases?: WireCase[]; otherwise?: string };
   provider?: { flow?: number; path?: number[] };
+  /** The last gesture on the key picks the look. */
+  gesture?: { looks?: WireGestureLook[] };
+  /** Looks a value picks, tried in order before the source. */
+  rules?: WireRule[];
+}
+
+export interface WireGestureLook {
+  gesture?: Gesture;
+  state?: string;
+}
+
+export interface WireRule {
+  variable?: string;
+  op?: CaseOp;
+  value?: string;
+  state?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +291,10 @@ export interface WireWidget {
     labelTemplate?: string;
     /** A live icon: "{{media.spotify.art}}" shows the album art. */
     iconTemplate?: string;
+    /** No light in the corner while it is lit. */
+    hideDot?: boolean;
+    /** Its light was cleared by hand: not lit again on its own. */
+    noAutoLight?: boolean;
   };
   /** What the widget does: one flow per gesture, and any event-triggered ones. */
   flows?: WireFlow[];
@@ -379,6 +405,8 @@ export interface WidgetPreview {
     zonesOn?: string[];
     /** A slider's current value, from its variable. Absent: unknown. */
     value?: number;
+    /** Why it cannot do what it does any more: a plugin lost an action it calls. */
+    unavailable?: string;
   };
   /** Why it cannot work, in the agent's words. */
   error?: string;
@@ -464,8 +492,12 @@ export interface ActionDefinition {
   arguments: ActionArgument[];
   /** Set when a slider can drive this action. */
   slider?: SliderTarget;
-  /** A key running it is lit while `variable` equals the `equals` argument. */
-  active?: { variable: string; equals: string };
+  /**
+   * A key running it is lit while `variable` equals the `equals` argument, or
+   * the value `is` (`"true"` when neither is set). `variable` may hold
+   * `{{argument}}` placeholders.
+   */
+  active?: { variable: string; equals?: string; is?: string };
 }
 
 /**

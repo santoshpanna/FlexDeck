@@ -53,6 +53,8 @@ PERMISSIONS = ("network", "notifications", "processes", "filesystem")
 MAX_SERIES_POINTS = 600
 MAX_IMAGE_BYTES = 256 * 1024
 IMAGE_MIMES = ("image/png", "image/jpeg", "image/webp")
+CAPABILITIES = ("series", "presets", "feeds", "toggles")
+_PLACEHOLDER = re.compile(r"\{\{\s*([^{}\s]+)\s*\}\}")
 
 Value = Union[str, float, int, bool]
 
@@ -109,6 +111,15 @@ class _Action:
     run: Callable[[Dict[str, str], "Context"], Any]
     arguments: Dict[str, Argument]
     check: Optional[Callable[[Dict[str, str], "Context"], Optional[str]]] = None
+    active: Optional[Dict[str, str]] = None
+
+    def active_dto(self, offered: Iterable[str]) -> Optional[Dict[str, str]]:
+        """The light as the host reads it: the plain kind (``equals``, no
+        placeholders) for any host, the rest only for one offering ``toggles``."""
+        if self.active is None:
+            return None
+        plain = "equals" in self.active and not _PLACEHOLDER.search(self.active["variable"])
+        return dict(self.active) if plain or "toggles" in offered else None
 
 
 @dataclass
@@ -311,17 +322,31 @@ class Plugin:
         """Something that happens, which an automation can be started by."""
         self._events[name] = {"description": description, "fields": list(fields)}
 
-    def action(self, name: str, description: str, arguments: Optional[Mapping[str, Argument]] = None, *, check=None):
+    def action(self, name: str, description: str, arguments: Optional[Mapping[str, Argument]] = None, *, check=None, active: Optional[Mapping[str, str]] = None):
         """Decorate a function ``run(args, ctx)`` as an action. It may return
-        ``{"state": "<look>"}`` for the key to show."""
+        ``{"state": "<look>"}`` for the key to show.
+
+        ``active`` says when a key running it is lit: ``{"variable": "x.muted"}``
+        while that is true, ``{"variable": "x.mode", "is": "ptt"}`` while it holds
+        that value, ``{"variable": "x.scene", "equals": "scene"}`` while it holds
+        the ``scene`` argument's value. The variable may hold ``{{argument}}``
+        placeholders."""
         arguments = dict(arguments or {})
         for arg_name, argument in arguments.items():
             _require(argument.kind in KINDS, f"{name}.{arg_name}: '{argument.kind}' is not a kind")
             if argument.kind == "choice":
                 _require(argument.example in argument.choices, f"{name}.{arg_name}: the example must be one of its choices")
+        if active is not None:
+            active = dict(active)
+            variable = active.get("variable", "")
+            _require(set(active) <= {"variable", "equals", "is"}, f"{name}.active: takes variable, equals and is")
+            _require(not ("equals" in active and "is" in active), f"{name}.active: takes equals or is, not both")
+            _require(variable.startswith(f"{self.id}."), f"{name}.active: variable '{variable}' must start with '{self.id}.'")
+            for named in _PLACEHOLDER.findall(variable) + ([active["equals"]] if "equals" in active else []):
+                _require(named in arguments, f"{name}.active: '{named}' is not one of its arguments")
 
         def register(run):
-            self._actions[name] = _Action(description=description, run=run, arguments=arguments, check=check)
+            self._actions[name] = _Action(description=description, run=run, arguments=arguments, check=check, active=active)
             return run
 
         return register
@@ -360,8 +385,16 @@ class Plugin:
 
     # ---- What the host is told -------------------------------------------------
 
-    def manifest(self) -> Dict[str, Any]:
-        """What ``initialize`` answers with."""
+    def manifest(self, offered: Iterable[str] = CAPABILITIES) -> Dict[str, Any]:
+        """What ``initialize`` answers with, to a host offering ``offered``."""
+        offered = tuple(offered)
+        actions = []
+        for n, a in self._actions.items():
+            dto: Dict[str, Any] = {"action": n, "description": a.description, "arguments": [arg.dto(k) for k, arg in a.arguments.items()]}
+            light = a.active_dto(offered)
+            if light is not None:
+                dto["active"] = light
+            actions.append(dto)
         manifest: Dict[str, Any] = {
             "abi": ABI_VERSION,
             "id": self.id,
@@ -369,10 +402,7 @@ class Plugin:
             "version": self.version,
             "description": self.description,
             "author": self.author,
-            "actions": [
-                {"action": n, "description": a.description, "arguments": [arg.dto(k) for k, arg in a.arguments.items()]}
-                for n, a in self._actions.items()
-            ],
+            "actions": actions,
             "settings": [
                 {"key": k, "description": s["description"], "kind": s["kind"], "choices": s["choices"], "defaultValue": s["default"], "secret": s["secret"]}
                 for k, s in self._settings_spec.items()
@@ -395,6 +425,8 @@ class Plugin:
                 }
                 for n, f in self._feeds.items()
             ]
+        if "toggles" in offered and any(a.active is not None and a.active_dto(()) is None for a in self._actions.values()):
+            uses.append("toggles")
         manifest["uses"] = uses
         return manifest
 
@@ -451,7 +483,7 @@ class Plugin:
             if asked not in SUPPORTED_ABIS:
                 raise PluginError(f"this plugin speaks ABI {' or '.join(map(str, SUPPORTED_ABIS))}, the agent speaks {asked}")
             self.configure(body.get("settings") or {}, body.get("dataDir"))
-            return {"manifest": self.manifest(), "variables": self.variables()}
+            return {"manifest": self.manifest(body.get("hostCapabilities") or ()), "variables": self.variables()}
         if method == "variables":
             return self.variables()
         if method == "check":

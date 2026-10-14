@@ -13,7 +13,7 @@ import type {
   WireStates,
   WireWidget,
 } from "../../../services/api/api.ts";
-import { gridSpecOf, pageOf, profileOf } from "./config.lib.ts";
+import { gridSpecOf, pageOf, profileOf, withSchemaFor } from "./config.lib.ts";
 
 /**
  * Editing operations on a configuration.
@@ -292,6 +292,9 @@ export function setWidgetBinding(
     const template = binding.labelTemplate.trim();
     if (template) props.labelTemplate = template;
     else delete props.labelTemplate;
+    // A light cleared by hand stays cleared: `lightActiveKeys` reads this.
+    if (state) delete props.noAutoLight;
+    else if (stateVariableOf(widget)) props.noAutoLight = true;
     let next = withProps(widget, props);
     if (state) {
       next = {
@@ -355,6 +358,19 @@ function withProps(widget: WireWidget, props: WidgetProps): WireWidget {
   const next = { ...widget };
   delete next.props;
   return next;
+}
+
+/** Show or hide the light in a key's corner while it is lit; its look is untouched. */
+export function setHideDot(config: WireConfig, widgetId: string, hide: boolean): WireConfig {
+  if (Boolean(findWidget(config, widgetId)?.widget.props?.hideDot) === hide) return config;
+  return withSchemaFor(
+    withWidget(config, widgetId, (widget) => {
+      const props = { ...(widget.props ?? {}) };
+      if (hide) props.hideDot = true;
+      else delete props.hideDot;
+      return withProps(widget, props);
+    }),
+  );
 }
 
 const SHORT_PRESS: Gesture = "GESTURE_SHORT_PRESS";
@@ -450,20 +466,50 @@ export function setWidgetAction(
   });
 }
 
+/** Whether a key has looks of its own; an empty `states` left by the editor is none. */
+function hasLooks(states: WireStates | undefined): boolean {
+  return (states?.looks?.length ?? 0) > 0;
+}
+
 /** The looks a key lit while its action is active has: off, then the deck's own glow. */
 const ACTIVE_STATES: WireStates["looks"] = [{ id: "off" }, { id: "on" }];
 
-/** Whether these are the looks `setActiveLight` wrote: plain off/on, matched to one value. */
+/**
+ * Whether these are the looks `setActiveLight` wrote: plain off/on, matched to
+ * one value. "Lights up while" writes the same shape with a colour of its own,
+ * which is how the two are told apart.
+ */
 function isActiveStates(states: WireStates | undefined): boolean {
   const looks = states?.looks ?? [];
   return (
     looks.length === 2 &&
     looks[0]?.id === "off" &&
     looks[1]?.id === "on" &&
-    !looks[1]?.bgColor &&
-    (states?.variable?.cases?.length ?? 0) === 1 &&
-    states?.variable?.cases?.[0]?.value !== "true"
+    looks.every((look) => !look.bgColor && !look.fgColor && !look.label && !look.icon && !look.face) &&
+    !states?.rules?.length &&
+    (states?.variable?.cases?.length ?? 0) === 1
   );
+}
+
+/**
+ * The variable and value a key running this action is lit by, with the
+ * action's arguments filled in — or null when it cannot tell: no `active`, or
+ * an argument still blank or waiting on a placeholder of its own.
+ */
+function activeCase(definition: ActionDefinition | null, args: Record<string, string>): { variable: string; value: string } | null {
+  const active = definition?.active;
+  if (!active) return null;
+  let missing = false;
+  const variable = active.variable.replace(/\{\{\s*([^{}\s]+)\s*\}\}/g, (_, name: string) => {
+    const value = (args[name] ?? "").trim();
+    if (!value || value.includes("{{")) missing = true;
+    return value;
+  });
+  const value = active.equals !== undefined ? (args[active.equals] ?? "").trim() : (active.is ?? "true");
+  if (missing || !value || value.includes("{{")) return null;
+  // An argument that already names the whole variable — `vars.focus` where
+  // `focus` was asked for — would otherwise say its plugin twice.
+  return { variable: variable.replace(/^([a-z][a-z0-9_-]*)\.\1\./, "$1."), value };
 }
 
 /**
@@ -479,16 +525,17 @@ export function setActiveLight(
   args: Record<string, string>,
 ): WireConfig {
   return withWidget(config, widgetId, (widget) => {
-    const ours = !widget.states || isActiveStates(widget.states);
-    const value = definition?.active ? (args[definition.active.equals] ?? "").trim() : "";
-    // A value still waiting on a placeholder never equals what the variable holds.
-    if (definition?.active && value && !value.includes("{{")) {
+    const ours = !hasLooks(widget.states) || isActiveStates(widget.states);
+    const lit = activeCase(definition, args);
+    if (lit) {
       if (!ours) return widget;
+      const props = { ...(widget.props ?? {}) };
+      delete props.noAutoLight;
       return {
-        ...widget,
+        ...withProps(widget, props),
         states: {
           looks: ACTIVE_STATES,
-          variable: { variable: definition.active.variable, cases: [{ value, state: "on" }], otherwise: "off" },
+          variable: { variable: lit.variable, cases: [{ value: lit.value, state: "on" }], otherwise: "off" },
         },
       };
     }
@@ -515,15 +562,16 @@ export function relightActive(config: WireConfig, widgetId: string, catalogue: r
 /**
  * Give every key whose press can be seen to be active — a scene key made
  * before actions said how to tell — the light `setActiveLight` gives a new
- * one. Keys with states of their own are left alone. The SAME config when
- * nothing needed it, so a caller can tell there is nothing to save.
+ * one. Keys with states of their own, or whose light was cleared by hand,
+ * are left alone. The SAME config when nothing needed it, so a caller can
+ * tell there is nothing to save.
  */
 export function lightActiveKeys(config: WireConfig, catalogue: readonly ActionDefinition[]): WireConfig {
   let next = config;
   for (const profile of config.profiles ?? []) {
     for (const page of profile.pages ?? []) {
       for (const widget of page.widgets ?? []) {
-        if (widget.states || !widget.id) continue;
+        if (hasLooks(widget.states) || widget.props?.noAutoLight || !widget.id) continue;
         const action = pressActionOf(widget);
         const definition = catalogue.find((entry) => entry.plugin === action?.plugin && entry.action === action?.action);
         if (!action || !definition?.active) continue;

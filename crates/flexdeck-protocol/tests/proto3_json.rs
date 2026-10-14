@@ -56,6 +56,8 @@ fn sample_config() -> pb::Config {
                         fg_color: "#ffffff".to_string(),
                         label_template: "Mic {{system.audio.muted}}".to_string(),
                         icon_template: String::new(),
+                        hide_dot: false,
+                        no_auto_light: false,
                     }),
                     flows: vec![pb::Flow {
                         trigger: Some(pb::FlowTrigger {
@@ -90,6 +92,7 @@ fn sample_config() -> pb::Config {
                             }],
                             otherwise: "live".to_string(),
                         })),
+                        rules: vec![],
                     }),
                     slider: None,
                 }],
@@ -202,6 +205,7 @@ fn a_cycle_source_is_an_empty_object() {
     let states = pb::WidgetStates {
         looks: vec![],
         source: Some(pb::widget_states::Source::Cycle(pb::CycleSource {})),
+        rules: vec![],
     };
     let json = serde_json::to_value(&states).expect("serializes");
     assert_eq!(json, json!({"cycle": {}}));

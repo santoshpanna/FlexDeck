@@ -38,6 +38,7 @@ static DECK_ACTIONS: &[ActionSpec] = &[
         description: "Show the next page",
         arguments: &[],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: DECK_PLUGIN,
@@ -45,6 +46,7 @@ static DECK_ACTIONS: &[ActionSpec] = &[
         description: "Show the previous page",
         arguments: &[],
         slider: None,
+        active: None,
     },
     ActionSpec {
         plugin: DECK_PLUGIN,
@@ -52,6 +54,7 @@ static DECK_ACTIONS: &[ActionSpec] = &[
         description: "Show a page",
         arguments: &[ArgumentSpec::text("page", "The page's name", "Stream")],
         slider: None,
+        active: None,
     },
 ];
 

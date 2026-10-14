@@ -438,6 +438,28 @@ pub fn serve_with<S: Sidecar, R: BufRead>(sidecar: S, input: R, output: Box<dyn 
     }
 }
 
+/// Leave out the action lights this agent cannot read, rather than have it
+/// refuse the whole manifest over one: under ABI 4 without `toggles`, only
+/// the plain kind goes. Says it uses `toggles` when it does.
+pub fn fit_to_host(manifest: &mut abi::ManifestDto, abi_version: u32, offered: &[String]) {
+    let toggles = abi_version >= 4 && offered.iter().any(|used| used == abi::capability::TOGGLES);
+    let prefix = manifest.variable_prefix();
+    let mut using = false;
+    for action in &mut manifest.actions {
+        let Some(active) = &action.active else { continue };
+        if abi_version < 4 || (!active.is_plain(&prefix) && !toggles) {
+            action.active = None;
+        } else if !active.is_plain(&prefix) {
+            using = true;
+        }
+    }
+    // An agent refuses a capability it has never heard of, even unused.
+    manifest.uses.retain(|used| used != abi::capability::TOGGLES);
+    if using {
+        manifest.uses.push(abi::capability::TOGGLES.to_string());
+    }
+}
+
 fn initialize<S: Sidecar>(sidecar: &S, host: &Host, id: u64, params: Value) -> Option<Start> {
     let params: abi::InitializeParams = match serde_json::from_value(params) {
         Ok(params) => params,
@@ -459,8 +481,10 @@ fn initialize<S: Sidecar>(sidecar: &S, host: &Host, id: u64, params: Value) -> O
         return None;
     }
     host.abi.store(params.abi, std::sync::atomic::Ordering::SeqCst);
+    let mut manifest = sidecar.manifest(params.abi);
+    fit_to_host(&mut manifest, params.abi, &params.host_capabilities);
     let result = abi::InitializeResult {
-        manifest: sidecar.manifest(params.abi),
+        manifest,
         variables: sidecar.variables(),
     };
     host.write(&Message::success(
@@ -622,6 +646,40 @@ mod tests {
             serde_json::from_value(response(&messages, 1).result.clone().unwrap()).unwrap();
         assert_eq!(result.manifest.abi, 2);
         result.manifest.validate().expect("valid");
+    }
+
+    #[test]
+    fn a_toggle_light_reaches_only_an_agent_that_offers_toggles() {
+        let lit = |variable: &str, equals: Option<&str>| abi::ActionDto {
+            action: variable.replace('.', "_"),
+            description: String::new(),
+            arguments: vec![],
+            slider: None,
+            active: Some(abi::ActiveDto { variable: variable.into(), equals: equals.map(str::to_string), is: None }),
+        };
+        let plain = lit("counter.scene", Some("scene"));
+        let toggle = lit("counter.on", None);
+        let manifest = || {
+            let mut manifest = manifest(4, "counter", "Counter", "1.0.0");
+            manifest.actions = vec![plain.clone(), toggle.clone()];
+            manifest
+        };
+
+        let mut older = manifest();
+        older.uses.push(abi::capability::TOGGLES.into());
+        fit_to_host(&mut older, 4, &["series".into()]);
+        assert_eq!(older.actions[0].active, plain.active, "the plain kind every ABI 4 agent reads");
+        assert_eq!(older.actions[1].active, None);
+        assert!(!older.uses(abi::capability::TOGGLES));
+
+        let mut newer = manifest();
+        fit_to_host(&mut newer, 4, &[abi::capability::TOGGLES.into()]);
+        assert_eq!(newer.actions[1].active, toggle.active);
+        assert!(newer.uses(abi::capability::TOGGLES));
+
+        let mut abi3 = manifest();
+        fit_to_host(&mut abi3, 3, &[abi::capability::TOGGLES.into()]);
+        assert!(abi3.actions.iter().all(|action| action.active.is_none()), "ABI 3 has no lights");
     }
 
     #[test]

@@ -29,8 +29,9 @@ test("a source becomes a recipe: named after it, secrets blank, a preset that re
   assert.deepEqual(plugin.permissions, ["network"]);
   assert.ok(!JSON.stringify(recipe).includes("s3cret"));
   const preset = (recipe.presets as { widget: { face: { elements: { template: string }[]; background?: { graph: string } } } }[])[0]!;
-  assert.deepEqual(preset.widget.face.elements.map((e) => e.template), ["Bitcoin", "{{this.price}}", "{{this.change}}"]);
-  assert.equal(preset.widget.face.background?.graph, "this.day");
+  assert.deepEqual(preset.widget.face.elements.map((e) => e.template), ["Bitcoin", "{{src.btc.price}}", "{{src.btc.change}}"]);
+  assert.equal(preset.widget.face.background?.graph, "src.btc.day");
+  assert.ok(!("sources" in (preset.widget as object)), "keys read the shared source");
 
   assert.match(recipeProblem({ ...source, kind: "command" }, meta)!, /program/);
   assert.match(recipeProblem(source, { id: "1x", name: "B" })!, /id/);

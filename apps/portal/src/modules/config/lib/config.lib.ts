@@ -1,6 +1,6 @@
 import type { GridSpec, WidgetSpan } from "@flexdeck/grid";
 
-import type { WireConfig, WirePage, WireProfile, WireWidget } from "../../../services/api/api.ts";
+import { FACES_SCHEMA, GESTURE_STATES_SCHEMA, type WireConfig, type WirePage, type WireProfile, type WireWidget } from "../../../services/api/api.ts";
 
 /**
  * Configuration as it arrives, turned into what the grid algorithm needs.
@@ -95,4 +95,16 @@ export function pageIndexOf(profile: WireProfile | null, pageId: string | null):
 export function pageNameOf(page: WirePage): string {
   const name = page.name?.trim();
   return name ? name : page.id;
+}
+
+/**
+ * The deck raised to the schema what it holds needs: faces need 4, a key's
+ * states picked by gestures or by value rules, or a hidden dot, need 5. Never lowered, so an
+ * agent too old for something in it refuses the deck by name rather than
+ * dropping it unread.
+ */
+export function withSchemaFor(config: WireConfig): WireConfig {
+  const widgets = (config.profiles ?? []).flatMap((profile) => (profile.pages ?? []).flatMap((page) => page.widgets ?? []));
+  const needed = widgets.some((widget) => widget.states?.gesture || widget.states?.rules?.length || widget.props?.hideDot || widget.props?.noAutoLight) ? GESTURE_STATES_SCHEMA : FACES_SCHEMA;
+  return (config.schema ?? 0) >= needed ? config : { ...config, schema: needed };
 }

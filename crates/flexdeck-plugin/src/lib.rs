@@ -118,6 +118,11 @@ pub struct PluginManifest {
 
 impl PluginManifest {
     pub fn to_dto(&self) -> abi::ManifestDto {
+        let actions: Vec<abi::ActionDto> = self.actions.iter().map(action_to_dto).collect();
+        let prefix = format!("{}.", self.id);
+        let toggles = actions
+            .iter()
+            .any(|action| action.active.as_ref().is_some_and(|active| !active.is_plain(&prefix)));
         abi::ManifestDto {
             abi: abi::ABI_VERSION,
             id: self.id.to_string(),
@@ -125,11 +130,11 @@ impl PluginManifest {
             version: self.version.to_string(),
             description: self.description.to_string(),
             author: "flexdeck".to_string(),
-            actions: self.actions.iter().map(action_to_dto).collect(),
+            actions,
             settings: self.settings.iter().map(SettingSpec::to_dto).collect(),
             events: Vec::new(),
             permissions: Vec::new(),
-            uses: Vec::new(),
+            uses: if toggles { vec![abi::capability::TOGGLES.to_string()] } else { Vec::new() },
             presets: Vec::new(),
             feeds: Vec::new(),
         }
@@ -164,7 +169,11 @@ pub fn action_to_dto(spec: &ActionSpec) -> abi::ActionDto {
                 feedback: Some(mute.feedback.to_string()),
             }),
         }),
-        active: None,
+        active: spec.active.map(|active| abi::ActiveDto {
+            variable: active.variable.to_string(),
+            equals: active.equals.map(str::to_string),
+            is: active.is.map(str::to_string),
+        }),
     }
 }
 

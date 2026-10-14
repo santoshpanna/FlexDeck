@@ -29,6 +29,8 @@ data class LiveWidget(
     val problem: String = "",
     /** Zones of its strip showing their other icon. */
     val zonesOn: Set<String> = emptySet(),
+    /** Why it cannot do what it does any more; empty when it can. */
+    val unavailable: String = "",
 )
 
 class DeckSession {
@@ -98,6 +100,7 @@ class DeckSession {
                     message.backgroundImage,
                     message.problem,
                     message.zonesOn,
+                    message.unavailable,
                 )
             }
 

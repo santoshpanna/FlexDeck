@@ -63,6 +63,8 @@ sealed interface ServerMessage {
         val problem: String = "",
         /** Zones of its strip whose `when` holds: they show their other icon. */
         val zonesOn: Set<String> = emptySet(),
+        /** Why it cannot do what it does any more — a plugin lost an action it calls; empty when it can. */
+        val unavailable: String = "",
     ) : ServerMessage
 
     /**
@@ -192,6 +194,7 @@ object Frames {
             backgroundImage = fields.string("backgroundImage"),
             problem = fields.string("problem"),
             zonesOn = (fields["zonesOn"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }.toSet(),
+            unavailable = fields.string("unavailable"),
         )
 
     private fun parseSeries(fields: JsonObject): ServerMessage.Series =

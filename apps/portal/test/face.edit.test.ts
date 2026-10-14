@@ -14,6 +14,7 @@ import {
   setBackground,
   setCustomFace,
   setLayout,
+  setLookRules,
   setLookSource,
   setPageBackground,
   starterElement,
@@ -94,22 +95,37 @@ test("a cycle keeps the looks and drops the variable", () => {
   assert.deepEqual(widgetOf(config).states, { looks: [{ id: "a" }], cycle: {} });
 });
 
+test("gestures pick looks, rules ride along any source, and a removed look leaves both", () => {
+  let config = addLook(addLook(deck({ id: "w" }), "w", { id: "a" }), "w", { id: "b" });
+  assert.equal(config.schema, 4, "looks alone need no newer agent than faces do");
+  config = setLookSource(config, "w", {
+    kind: "gesture",
+    picks: [{ gesture: "GESTURE_SHORT_PRESS", state: "a" }, { gesture: "GESTURE_LONG_PRESS", state: "b" }, { gesture: "GESTURE_DOUBLE_TAP" }],
+  });
+  assert.deepEqual(widgetOf(config).states?.gesture?.looks?.length, 2, "a gesture without a look is left out");
+  assert.equal(lookSourceOf(widgetOf(config)).kind, "gesture");
+  assert.equal(config.schema, 5, "an older agent refuses the deck by name rather than failing to read it");
+
+  config = setLookRules(config, "w", [
+    { variable: " obs.recording ", op: "COMPARE_OP_EQ", value: "true", state: "b" },
+    { variable: "", value: "x", state: "a" },
+  ]);
+  assert.deepEqual(widgetOf(config).states?.rules, [{ variable: "obs.recording", value: "true", state: "b" }]);
+  config = setLookSource(config, "w", { kind: "cycle" });
+  assert.equal(widgetOf(config).states?.rules?.length, 1, "changing the source keeps the rules");
+
+  config = setLookSource(config, "w", { kind: "gesture", picks: [{ gesture: "GESTURE_LONG_PRESS", state: "b" }] });
+  config = removeLook(config, "w", "b");
+  assert.equal(widgetOf(config).states?.rules, undefined);
+  assert.deepEqual(widgetOf(config).states?.gesture?.looks, []);
+});
+
 test("a page background is set and cleared, and an unknown page is no change", () => {
   const config = deck({ id: "w" });
   const set = setPageBackground(config, "home", { image: "img:ab", dim: 30 });
   assert.deepEqual(set.profiles![0]!.pages![0]!.background, { image: "img:ab", dim: 30 });
   assert.equal(setPageBackground(set, "home", null).profiles![0]!.pages![0]!.background, undefined);
   assert.equal(setPageBackground(config, "nowhere", { color: "#000000" }), config);
-});
-
-test("a key's own run of a source keeps only the settings it changes", async () => {
-  const { setKeySource } = await import("../src/modules/config/lib/face.edit.lib.ts");
-  let config = deck({ id: "w" });
-  config = setKeySource(config, "w", { source: "weather", args: { lat: "35.68", lon: "" } });
-  assert.deepEqual(widgetOf(config).sources, [{ source: "weather", args: { lat: "35.68" } }]);
-  assert.equal(config.schema, 4);
-  config = setKeySource(config, "w", null);
-  assert.equal(widgetOf(config).sources, undefined);
 });
 
 test("screen care is set on the page's profile, and cleared when all off", async () => {
@@ -144,4 +160,15 @@ test("a zone's flows are its own, follow a rename and leave with it", async () =
   config = renameZone(config, "w", "skip", null);
   assert.deepEqual(widgetOf(config).face?.zones?.map((z) => z.name), ["prev", "play"]);
   assert.equal(widgetOf(config).flows, undefined);
+});
+
+test("a rule still being filled in changes nothing", () => {
+  const config = addLook(deck({ id: "w" }), "w", { id: "a" });
+  assert.equal(setLookRules(config, "w", [{ variable: "", value: "true", state: "a" }]), config);
+});
+
+test("picking what switches a key with no states leaves it with none", () => {
+  const config = deck({ id: "w" });
+  assert.equal(setLookSource(config, "w", { kind: "none" }), config);
+  assert.equal(widgetOf(setLookSource(deck({ id: "w", states: { looks: [] } }), "w", { kind: "cycle" })).states, undefined);
 });
