@@ -2,11 +2,24 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
-## Next
+## v0.1.0-rc.6 — 2026-10-14
+
+**Retry taken ports, reuse one window, and gate command sources**
+
+### Added
+
+- **desktop** Reuse the open window when flexdeck is launched again.
 
 ### Fixed
 
 - **general** Cla workflow.
+- **desktop** Retry a taken port every 5s and as soon as the window is focused.
+- **desktop** Move the default agent port to 23539 and same-PC door to 23540.
+- **android** Default to port 23539 to match the desktop agent.
+- **editor** Reach the same-PC agent on port 23540.
+- **desktop** Require a yes at the desktop for command sources from elsewhere.
+- **desktop** Keep a key's address from borrowing another key's shared token.
+- **editor** Flag imported sources that send requests to another host.
 
 ## v0.1.0-rc.5 — 2026-10-13
 

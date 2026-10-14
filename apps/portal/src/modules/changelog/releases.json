@@ -1,16 +1,66 @@
 {
-  "next": [
+  "next": [],
+  "releases": [
     {
-      "name": "Fixed",
-      "items": [
+      "version": "v0.1.0-rc.6",
+      "platforms": [
+        "desktop",
+        "android",
+        "server"
+      ],
+      "hash": "29ea6121d8b1c11e88c404baf160f6aed1fc9ec1",
+      "date": "2026-10-14",
+      "title": "Retry taken ports, reuse one window, and gate command sources",
+      "blurb": "",
+      "groups": [
         {
-          "area": "GENERAL",
-          "text": "Cla workflow."
+          "name": "Added",
+          "items": [
+            {
+              "area": "DESKTOP",
+              "text": "Reuse the open window when flexdeck is launched again."
+            }
+          ]
+        },
+        {
+          "name": "Fixed",
+          "items": [
+            {
+              "area": "GENERAL",
+              "text": "Cla workflow."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Retry a taken port every 5s and as soon as the window is focused."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Move the default agent port to 23539 and same-PC door to 23540."
+            },
+            {
+              "area": "ANDROID",
+              "text": "Default to port 23539 to match the desktop agent."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Reach the same-PC agent on port 23540."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Require a yes at the desktop for command sources from elsewhere."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Keep a key's address from borrowing another key's shared token."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Flag imported sources that send requests to another host."
+            }
+          ]
         }
       ]
-    }
-  ],
-  "releases": [
+    },
     {
       "version": "v0.1.0-rc.5",
       "platforms": [
