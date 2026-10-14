@@ -635,7 +635,7 @@ class PairingScreen(
         /** Mirrors the tablet PIN in crates/flexdeck-pairing/src/session.rs. */
         const val PIN_LENGTH = 6
         /** Mirrors MainActivity's default; written addresses leave it out. */
-        const val DEFAULT_PORT = 7878
+        const val DEFAULT_PORT = 23539
         const val PROBE_MS = 1500
 
         val BACKGROUND = Color.parseColor("#0A0A0B")

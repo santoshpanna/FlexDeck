@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast::error::RecvError;
 
 use flexdeck_server::{Agent, WebAccess};
@@ -33,11 +33,7 @@ fn forward_approvals(app: AppHandle, agent: Arc<Agent>) {
     tauri::async_runtime::spawn(async move {
         while let Ok(_) | Err(RecvError::Lagged(_)) = changes.recv().await {
             if !agent.approvals().pending().is_empty() {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
-                }
+                crate::show_window(&app);
             }
             announce(&app);
         }

@@ -23,9 +23,10 @@ const DEV_URL = "http://127.0.0.1:5174";
 
 /**
  * The port a debug build of the window listens on: `DEV_PORT` in the desktop's
- * main.rs, one above the release default so an installed flexdeck keeps 7878.
+ * main.rs, two above the release default (23539) so an installed flexdeck keeps
+ * its own port and the same-PC door above it.
  */
-const AGENT_PORT = 7879;
+const AGENT_PORT = 23541;
 
 /**
  * The portal the window dials, from `DEFAULT_PORT` in flexdeck-cloud.

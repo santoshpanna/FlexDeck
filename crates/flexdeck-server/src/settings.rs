@@ -33,7 +33,14 @@ pub const WEB_ACCESS_ON: &str = "on";
 pub const WEB_ACCESS_OFF: &str = "off";
 
 /// The port a fresh installation listens on.
-pub const DEFAULT_PORT: u16 = 7878;
+///
+/// An uncommon one on purpose, so that another program holding it by chance is
+/// unlikely: a taken port is the one failure that leaves the window looking
+/// healthy while no tablet can connect. Kept below the ephemeral range (32768
+/// and up on Linux, 49152 and up on Windows) so an outbound connection never
+/// borrows it first. The same-PC door sits on the port above (`loopback_port`
+/// in the agent), and a debug build on the one above that, two above this.
+pub const DEFAULT_PORT: u16 = 23539;
 
 /// The portal a fresh installation reaches when web access is switched on.
 pub const DEFAULT_PORTAL_URL: &str = "wss://app.flex-deck.com/tunnel";

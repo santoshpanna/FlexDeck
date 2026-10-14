@@ -609,7 +609,8 @@ class MainActivity : Activity(), AgentClient.Listener {
         const val KEY_HOST = "host"
         const val KEY_PORT = "port"
         const val KEY_TOKEN = "token"
-        const val DEFAULT_PORT = 7878
+        /** Mirrors `DEFAULT_PORT` in crates/flexdeck-server/src/settings.rs. */
+        const val DEFAULT_PORT = 23539
 
         /**
          * How long the display stays lit after a drop.

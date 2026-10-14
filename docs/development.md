@@ -118,13 +118,18 @@ enough; importing `@tauri-apps/cli` would only rename these steps to `tauri dev`
 
 Dev builds run beside an installed release. A debug desktop build is "flexdeck
 dev" (identifier `dev.flexdeck.desktop.dev`, its own WebView profile) and
-listens on **7879**, keeping 7878 for the installed app; a debug APK is package
-`dev.flexdeck.dev`, labelled "flexdeck dev". Pair a dev tablet by QR, or type
-the address with `:7879`.
+listens on **23541**, keeping 23539 for the installed app and 23540 for its
+same-PC door; a debug APK is package `dev.flexdeck.dev`, labelled "flexdeck
+dev". Pair a dev tablet by QR, or type the address with `:23541`.
 
 One agent per port: `dev:desktop` and `dev:agent` both serve the tablets on
-7879, so run one or the other. `dev:desktop` checks the port first and says so rather than
-opening a window that cannot reach anything.
+23541, so run one or the other. `dev:desktop` checks the port first and says so
+rather than opening a window that cannot reach anything.
+
+One window per installation: opening flexdeck while it already sits in the tray
+brings that window forward rather than starting a second copy. The listener
+keeps trying a taken port every few seconds, and tries at once whenever the
+window comes forward, so closing whatever held the port is enough — no restart.
 
 Two checks the ordinary suites cannot make:
 

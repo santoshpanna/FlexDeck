@@ -24,13 +24,20 @@ mod state;
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
-use flexdeck_agent::{Host, HostParts, Options};
+use flexdeck_agent::{Host, Options};
 use flexdeck_server::tunnel::TunnelConfig;
 use flexdeck_server::WebAccess;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{Manager, WindowEvent};
+use tauri::{AppHandle, Manager, WindowEvent};
+
+/// How long the listener waits before trying a taken port again.
+///
+/// Binding is cheap, so this is slow only to stay quiet: the window gets an
+/// immediate attempt the moment it comes forward (see `ShellState::kick`).
+const RETRY_EVERY: Duration = Duration::from_secs(5);
 
 fn main() {
     attach_parent_console();
@@ -52,6 +59,16 @@ fn main() {
     };
 
     tauri::Builder::default()
+        // Registered first, as its documentation asks. One process per
+        // installation: opening flexdeck while it already sits in the tray
+        // brings that window forward instead of starting a second copy that
+        // finds its port taken by the first — which, with start-to-tray on, is
+        // the easiest way to end up with a window that says BLOCKED and a tray
+        // icon that looks identical to the one actually serving. A debug build
+        // has its own identifier, so it never collides with an installed one.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_window(app);
+        }))
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::status,
@@ -94,17 +111,13 @@ fn main() {
             // The window keeps the handles; the server gets its own copy of them
             // and runs for as long as the process does.
             let parts = host.into_parts();
-            let serving = HostParts {
-                agent: Arc::clone(&parts.agent),
-                settings: parts.settings.clone(),
-                bind: parts.bind,
-                web_access: parts.web_access.clone(),
-            };
+            let serving = parts.clone();
 
             // Shared with the server task so that a listener which fails to come
             // up can be reported *in the window*, not only on a console nobody is
-            // watching.
+            // watching — and so the window can ask for another try.
             let server_error = Arc::new(std::sync::Mutex::new(None));
+            let (retry, mut retries) = tokio::sync::mpsc::channel::<()>(1);
 
             // The window ALWAYS has a web-access handle, even where the host had
             // none because no portal is configured. It is what lets the window
@@ -136,6 +149,7 @@ fn main() {
                 parts,
                 Arc::clone(&web_access),
                 Arc::clone(&server_error),
+                retry,
             ));
 
             {
@@ -147,17 +161,56 @@ fn main() {
                 );
             }
 
+            // The listener, kept trying. A taken port is the common failure and
+            // a passing one — the terminal agent holding it gets closed — so the
+            // window reports it and tries again, rather than reporting it and
+            // needing a restart to notice the port came free. The timer is slow
+            // enough to cost nothing; `retry` cuts it short when the window comes
+            // forward, because that is when someone has just dealt with the cause
+            // and is watching for the result. One forced attempt, then the timer
+            // again.
             let handle = app.handle().clone();
             let bind = serving.bind;
             tauri::async_runtime::spawn(async move {
-                if let Err(error) = flexdeck_agent::serve_parts(serving).await {
-                    let message = explain(&error.to_string(), bind);
-                    eprintln!("the agent stopped: {message}");
-
-                    *server_error
+                // Says so only when the state CHANGES. A port taken for an
+                // afternoon is one message and one re-read, not one every
+                // five seconds.
+                let report = |error: Option<String>| {
+                    let mut current = server_error
                         .lock()
-                        .expect("the server lock is not poisoned") = Some(message);
+                        .expect("the server lock is not poisoned");
+                    if *current == error {
+                        return;
+                    }
+                    if let Some(message) = &error {
+                        eprintln!("the agent stopped: {message}");
+                    }
+                    *current = error;
+                    drop(current);
                     events::announce(&handle);
+                };
+
+                loop {
+                    let outcome = match flexdeck_agent::bind_parts(serving.clone()).await {
+                        Ok(bound) => {
+                            report(None);
+                            bound.serve().await
+                        }
+                        Err(error) => Err(error),
+                    };
+
+                    let reason = outcome
+                        .err()
+                        .map_or_else(|| "the listener stopped".to_string(), |error| error.to_string());
+                    report(Some(explain(&reason, bind)));
+
+                    // Kicks from before this failure are stale: drop them, so
+                    // only a window coming forward from here on cuts the wait.
+                    while retries.try_recv().is_ok() {}
+                    tokio::select! {
+                        () = tokio::time::sleep(RETRY_EVERY) => {}
+                        _ = retries.recv() => {}
+                    }
                 }
             });
 
@@ -202,6 +255,13 @@ fn main() {
                     let _ = window.hide();
                 }
             }
+            // The window coming forward by any route — tray, taskbar, alt-tab,
+            // a second launch — is the moment to try a taken port again.
+            WindowEvent::Focused(true) => {
+                if let Some(state) = window.try_state::<state::ShellState>() {
+                    state.kick();
+                }
+            }
             _ => {}
         })
         .run(context())
@@ -214,8 +274,10 @@ fn main() {
 /// bar and tray, and its own port. Release builds keep `tauri.conf.json` as is.
 const DEV_BUILD: bool = cfg!(debug_assertions);
 
-/// The dev build's port, one above the release default so both can listen.
-const DEV_PORT: u16 = flexdeck_server::settings::DEFAULT_PORT + 1;
+/// The dev build's port, two above the release default so both can listen: the
+/// port one above is the installed app's same-PC door (`loopback_port`), and a
+/// dev build one above would have fought it for that.
+const DEV_PORT: u16 = flexdeck_server::settings::DEFAULT_PORT + 2;
 
 /// What the window calls itself: the product name, marked in a dev build.
 const APP_NAME: &str = if DEV_BUILD { "flexdeck dev" } else { "flexdeck" };
@@ -284,11 +346,12 @@ fn options() -> Result<Options, String> {
 ///
 /// The common case by far is the port already being taken — usually by this same
 /// agent run from a terminal, which is easy to do by accident and impossible to
-/// diagnose from a window that otherwise looks fine.
+/// diagnose from a window that otherwise looks fine. The listener keeps trying,
+/// so the advice is to close the other one, not to restart this.
 fn explain(error: &str, bind: std::net::SocketAddr) -> String {
     if error.contains("10048") || error.contains("address in use") {
         return format!(
-            "Something is already using port {} — another agent may be running. Close it and reopen this window.",
+            "Something is already using port {} — another agent may be running. Close it; this window reconnects by itself.",
             bind.port()
         );
     }
@@ -305,14 +368,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
         .tooltip(APP_NAME)
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "show" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    // Hidden while minimized, it would come back minimized.
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
-                }
-            }
+            "show" => show_window(app),
             "quit" => app.exit(0),
             _ => {}
         });
@@ -326,6 +382,26 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 
     tray.build(app)?;
     Ok(())
+}
+
+/// Bring the window forward, and give a downed listener a nudge while it is
+/// there.
+///
+/// One function for the tray, a second launch and an approval, so they cannot
+/// drift: shown but still minimized, or shown but not focused, is the kind of
+/// half-state each caller used to get wrong on its own. The nudge is here as
+/// well as on the focus event because `set_focus` on a window that already has
+/// focus raises no event — and that is still someone looking at the window.
+pub fn show_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        // Hidden while minimized, it would come back minimized.
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+    if let Some(state) = app.try_state::<state::ShellState>() {
+        state.kick();
+    }
 }
 
 /// A GUI-subsystem process starts with no console. If it was launched from a

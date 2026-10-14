@@ -154,6 +154,13 @@ export function reviewBundle(bundle: Bundle, installed: readonly string[], yours
     for (const use of widget.sources ?? []) {
       const plugin = use.source.split("/")[0]!;
       if (use.source.includes("/") && !have.has(plugin)) missing.add(plugin);
+      // A key may point a source of yours (say, Home Assistant) at an address
+      // of its own: what it fetches, and any token it sends, goes there.
+      for (const value of Object.values(use.args ?? {})) {
+        if (typeof value === "string" && /^[a-z][a-z0-9+.-]*:\/\//i.test(value.trim())) {
+          concerns.push({ where, what: `points ${use.source} at ${hostOf(value)}`, severe: true });
+        }
+      }
     }
   }
   const taken = new Set(yours.map((source) => source.id));

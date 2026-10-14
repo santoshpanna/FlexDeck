@@ -150,6 +150,36 @@ impl SourceDef {
         let seconds = if self.every_seconds == 0 { default } else { self.every_seconds.max(floor) };
         Duration::from_secs(u64::from(seconds))
     }
+
+    /// The program a command source runs and its argument templates, as one
+    /// line for a person to read. `None` for a web source.
+    pub fn command_line(&self) -> Option<String> {
+        if self.kind != SourceKind::Command {
+            return None;
+        }
+        let command = self.command.as_ref()?;
+        Some(std::iter::once(command.program.as_str()).chain(command.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" "))
+    }
+
+    /// Whether the scheduler would run this source's program.
+    fn runs_program(&self) -> bool {
+        self.enabled && self.kind == SourceKind::Command
+    }
+}
+
+/// The command sources `next` would run that `current` does not already run
+/// exactly as written: new, switched on, or with a different program,
+/// arguments or argument defaults. These are what a person must agree to.
+pub fn new_commands<'a>(current: &SourcesDoc, next: &'a SourcesDoc) -> Vec<&'a SourceDef> {
+    next.sources
+        .iter()
+        .filter(|source| source.runs_program())
+        .filter(|source| {
+            !current.sources.iter().any(|old| {
+                old.id == source.id && old.runs_program() && old.command == source.command && old.args == source.args
+            })
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -813,25 +843,45 @@ impl Sources {
         *self.secrets.write().unwrap_or_else(PoisonError::into_inner) = secrets;
     }
 
-    /// Keep `value` as a key's secret. The first one given for a source also
-    /// becomes the source's own, so the next key that uses it works at once —
-    /// one Home Assistant token, however many tiles. Returns whether anything
-    /// changed.
+    /// Keep `value` as a key's secret. A key's secrets also become the
+    /// source's own, so the next key that uses it works at once — one Home
+    /// Assistant token, however many tiles — but only when they belong
+    /// together: the source shares none yet, or the key's agree with every
+    /// one it already shares. A key that only brings an address of its own
+    /// (an imported one, say) never pairs it with the token kept for
+    /// another. Returns whether anything changed.
     pub fn set_secret(&self, source: &str, widget: Option<&str>, arg: &str, value: &str) -> bool {
         if value.is_empty() {
             return false;
         }
-        let mut secrets = self.secrets.write().unwrap_or_else(PoisonError::into_inner);
-        let shared = secret_key(source, None, arg);
-        let mut changed = false;
-        if widget.is_some() && !secrets.contains_key(&shared) {
-            secrets.insert(shared, value.to_string());
-            changed = true;
+        let mut names = self.secret_args(source);
+        if !names.iter().any(|name| name == arg) {
+            names.push(arg.to_string());
         }
+        let mut secrets = self.secrets.write().unwrap_or_else(PoisonError::into_inner);
+        let mut changed = false;
         let key = secret_key(source, widget, arg);
         if secrets.get(&key).map(String::as_str) != Some(value) {
             secrets.insert(key, value.to_string());
             changed = true;
+        }
+        if let Some(widget) = widget {
+            let own: Vec<(String, String)> = names
+                .iter()
+                .filter_map(|name| secrets.get(&secret_key(source, Some(widget), name)).map(|v| (name.clone(), v.clone())))
+                .collect();
+            let shares_any = names.iter().any(|name| secrets.contains_key(&secret_key(source, None, name)));
+            let agrees = own.iter().any(|(name, v)| secrets.get(&secret_key(source, None, name)) == Some(v))
+                && own.iter().all(|(name, v)| secrets.get(&secret_key(source, None, name)).is_none_or(|shared| shared == v));
+            if !shares_any || agrees {
+                for (name, v) in own {
+                    let shared = secret_key(source, None, &name);
+                    if !secrets.contains_key(&shared) {
+                        secrets.insert(shared, v);
+                        changed = true;
+                    }
+                }
+            }
         }
         drop(secrets);
         if changed {
@@ -845,15 +895,20 @@ impl Sources {
         self.secrets.write().unwrap_or_else(PoisonError::into_inner).remove(&secret_key(source, widget, arg)).is_some()
     }
 
-    /// Put the kept secrets into `args`: the key's own, else the source's. A
-    /// value already there (a config from before secrets) is left alone if
-    /// nothing is kept.
+    /// Put the kept secrets into `args`: the key's own, else the source's —
+    /// the source's only for a key whose own secrets all match it, so a key
+    /// that brings, say, its own address never borrows the token kept for
+    /// another one's. A value already there (a config from before secrets)
+    /// is left alone if nothing is kept.
     pub fn fill_secrets(&self, source: &SourceDef, widget: Option<&str>, args: &mut BTreeMap<String, String>) {
         let secrets = self.secrets.read().unwrap_or_else(PoisonError::into_inner);
-        for arg in source.args.iter().filter(|a| a.secret) {
-            let own = widget.and_then(|w| secrets.get(&secret_key(&source.id, Some(w), &arg.name)));
-            if let Some(value) = own.or_else(|| secrets.get(&secret_key(&source.id, None, &arg.name))) {
-                args.insert(arg.name.clone(), value.clone());
+        let names: Vec<&str> = source.args.iter().filter(|a| a.secret).map(|a| a.name.as_str()).collect();
+        let own = |name: &str| widget.and_then(|w| secrets.get(&secret_key(&source.id, Some(w), name)));
+        let shared = |name: &str| secrets.get(&secret_key(&source.id, None, name));
+        let borrows = names.iter().all(|name| own(name).is_none_or(|value| shared(name) == Some(value)));
+        for name in names {
+            if let Some(value) = own(name).or_else(|| if borrows { shared(name) } else { None }) {
+                args.insert(name.to_string(), value.clone());
             }
         }
     }
@@ -1023,6 +1078,30 @@ mod tests {
 
     fn source(value: serde_json::Value) -> SourceDef {
         serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn only_command_sources_that_would_newly_run_need_a_yes() {
+        let doc = |sources: serde_json::Value| -> SourcesDoc { serde_json::from_value(json!({ "sources": sources })).unwrap() };
+        let ping = json!({"id": "ping", "kind": "command", "command": {"program": "ping", "args": ["-n", "1", "{{args.host}}"]}});
+        let current = doc(json!([ping.clone(), {"id": "web", "http": {"url": "https://x"}}]));
+        let ids = |next: &SourcesDoc| new_commands(&current, next).iter().map(|s| s.id.clone()).collect::<Vec<_>>();
+
+        // Unchanged commands, renames and web sources ask nothing.
+        let mut renamed = ping.clone();
+        renamed["name"] = json!("Ping");
+        assert!(ids(&doc(json!([renamed, {"id": "web", "http": {"url": "https://y"}}]))).is_empty());
+
+        // A different program, a new command, or a switched-on one does.
+        let mut swapped = ping.clone();
+        swapped["command"]["program"] = json!("cmd.exe");
+        assert_eq!(ids(&doc(json!([swapped]))), ["ping"]);
+        assert_eq!(ids(&doc(json!([ping.clone(), {"id": "new", "kind": "command", "command": {"program": "whoami"}}]))), ["new"]);
+        let off = doc(json!([{"id": "ping", "enabled": false, "kind": "command", "command": {"program": "ping"}}]));
+        assert!(new_commands(&current, &off).is_empty());
+        assert_eq!(new_commands(&off, &doc(json!([{"id": "ping", "kind": "command", "command": {"program": "ping"}}]))).len(), 1);
+
+        assert_eq!(source(ping).command_line().as_deref(), Some("ping -n 1 {{args.host}}"));
     }
 
     #[test]
@@ -1236,6 +1315,49 @@ mod tests {
 
         assert!(sources.forget_secret("ha", Some("w1"), "token"));
         assert!(!sources.forget_secret("ha", Some("w1"), "token"));
+    }
+
+    #[test]
+    fn a_key_that_brings_its_own_address_does_not_get_the_shared_token() {
+        let vars = Arc::new(VariableStore::new());
+        let sources = Sources::new(vars);
+        let ha = source(json!({
+            "id": "ha", "lan": true,
+            "http": {"url": "{{args.url}}/api/states/{{args.entity}}", "headers": {"Authorization": "Bearer {{args.token}}"}},
+            "args": [{"name": "url", "secret": true}, {"name": "token", "secret": true}, {"name": "entity"}],
+            "fields": [{"name": "state", "value": "json.state"}]
+        }));
+        sources.replace(SourcesDoc { sources: vec![ha] });
+
+        // Yours: address and token, shared with your other tiles.
+        sources.set_secret("ha", Some("w1"), "url", "http://ha.local:8123");
+        sources.set_secret("ha", Some("w1"), "token", "mine");
+        // An imported tile pointing elsewhere: it is not made the source's,
+        // and it borrows nothing.
+        sources.set_secret("ha", Some("evil"), "url", "https://attacker.example");
+        // A tile of yours naming the same address borrows the token.
+        sources.set_secret("ha", Some("w2"), "url", "http://ha.local:8123");
+
+        let uses: Vec<_> = ["w1", "w2", "w3", "evil"].iter().map(|w| ("ha".to_string(), w.to_string(), BTreeMap::new())).collect();
+        let due = sources.due(&uses, &BTreeSet::new(), Instant::now());
+        let arg = |w: &str, name: &str| due.iter().find(|d| d.instance.as_deref() == Some(w)).unwrap().args.get(name).cloned().unwrap_or_default();
+        assert_eq!((arg("w1", "token"), arg("w2", "token"), arg("w3", "token")), ("mine".into(), "mine".into(), "mine".into()));
+        assert_eq!(arg("w3", "url"), "http://ha.local:8123");
+        assert_eq!((arg("evil", "url"), arg("evil", "token")), ("https://attacker.example".into(), String::new()));
+
+        // Nor once the shared token is all there is (kept before the address was secret).
+        let sources = Sources::new(Arc::new(VariableStore::new()));
+        sources.replace(SourcesDoc { sources: vec![source(json!({
+            "id": "ha", "http": {"url": "{{args.url}}", "headers": {"Authorization": "Bearer {{args.token}}"}},
+            "args": [{"name": "url", "secret": true}, {"name": "token", "secret": true}],
+            "fields": [{"name": "state", "value": "json.state"}]
+        }))] });
+        sources.set_secret("ha", None, "token", "mine");
+        sources.set_secret("ha", Some("evil"), "url", "https://attacker.example");
+        assert!(!sources.secret_names().contains(&"ha//url".to_string()));
+        let mut args = BTreeMap::new();
+        sources.fill_secrets(&sources.doc().sources[0], Some("evil"), &mut args);
+        assert_eq!(args.get("token"), None);
     }
 
     #[test]

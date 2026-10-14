@@ -24,8 +24,12 @@ export interface Connection {
   via: Via;
 }
 
-/** Where the desktop app on this computer listens for this page. */
-export const LOCAL_AGENT = "http://127.0.0.1:7879";
+/**
+ * Where the desktop app on this computer listens for this page: one above
+ * `DEFAULT_PORT` in crates/flexdeck-server/src/settings.rs (`loopback_port` in
+ * apps/agent).
+ */
+export const LOCAL_AGENT = "http://127.0.0.1:23540";
 
 const KEY = "flexdeck.connections";
 

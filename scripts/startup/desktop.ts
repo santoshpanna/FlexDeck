@@ -15,7 +15,7 @@
  *
  *   pnpm dev:agent -- --port 9000
  *
- * It listens on 7879 unless `--port` says otherwise — the dev window's port, one
+ * It listens on 23541 unless `--port` says otherwise — the dev window's port, two
  * above the release default, so an installed flexdeck can keep running.
  *
  * Stop this before running `cargo build`: on Windows a running binary holds a
@@ -26,6 +26,6 @@
 import { run } from "./env.ts";
 
 const args = process.argv.slice(2);
-const port = args.includes("--port") ? [] : ["--port", "7879"];
+const port = args.includes("--port") ? [] : ["--port", "23541"];
 
 run("cargo", ["run", "-p", "flexdeck-agent", "--", ...port, ...args]);

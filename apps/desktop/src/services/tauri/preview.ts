@@ -103,7 +103,7 @@ export function previewShell(): Shell {
   const status = (): Status => ({
     fingerprint: "a3f921c0e8b74d1f",
     host: "192.168.1.24",
-    port: 7878,
+    port: 23539,
     warnings: [],
     server: { error: null },
     tunnel: { enabled: webOn, running: webOn, refused: null, lastError: null, portal: "wss://deck.example.net/tunnel" },

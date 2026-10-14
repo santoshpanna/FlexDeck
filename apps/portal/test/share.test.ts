@@ -70,6 +70,33 @@ test("an import is reviewed: what it runs, what it lacks, what it renames", () =
   assert.throws(() => parseBundle(JSON.stringify({ fddeck: 9, page: {} })), /newer/);
 });
 
+test("an import that points a source at an address of its own says where", () => {
+  const bundle = parseBundle(
+    JSON.stringify({
+      fddeck: 1,
+      schema: 4,
+      page: {
+        id: "page-1",
+        name: "Lights",
+        widgets: [
+          {
+            id: "widget-1",
+            type: "WIDGET_TYPE_BUTTON",
+            col: 0,
+            row: 0,
+            w: 1,
+            h: 1,
+            props: { label: "Desk" },
+            sources: [{ source: "home-assistant", args: { url: "https://ha.attacker.example/", entity: "light.desk" } }],
+          },
+        ],
+      },
+    }),
+  );
+  const review = reviewBundle(bundle, [], []);
+  assert.deepEqual(review.concerns, [{ where: "Desk", what: "points home-assistant at ha.attacker.example", severe: true }]);
+});
+
 test("an imported page gets fresh ids, its sources renamed where taken, its pictures re-pointed", () => {
   const bundle = exportPage(config.profiles![0]!.pages![1], 4, yours)!;
   const kept = `img:${"cd".repeat(32)}`;

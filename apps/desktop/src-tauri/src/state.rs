@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use flexdeck_agent::HostParts;
 use flexdeck_server::{Agent, Settings, WebAccess};
+use tokio::sync::mpsc;
 
 /// Everything the window's commands need, held for the life of the window.
 ///
@@ -26,6 +27,12 @@ pub struct ShellState {
     /// another agent. That is invisible from inside the window unless it is said
     /// out loud, so it is.
     pub server_error: Arc<Mutex<Option<String>>>,
+
+    /// Asks the listener to try its port again now rather than on its timer.
+    ///
+    /// Pulled when the window comes forward: someone has most likely just closed
+    /// whatever held the port and is looking at the window to see it recover.
+    pub retry: mpsc::Sender<()>,
 }
 
 impl ShellState {
@@ -33,6 +40,7 @@ impl ShellState {
         parts: HostParts,
         web_access: Arc<WebAccess>,
         server_error: Arc<Mutex<Option<String>>>,
+        retry: mpsc::Sender<()>,
     ) -> Self {
         Self {
             agent: parts.agent,
@@ -40,6 +48,17 @@ impl ShellState {
             bind: parts.bind,
             web_access,
             server_error,
+            retry,
         }
+    }
+
+    /// Try the port again now, if the listener is waiting to.
+    ///
+    /// Safe to call at any time and any number of times. The channel holds one
+    /// signal, so a burst (a tray click and the focus it causes) is one retry;
+    /// and the listener empties it before each wait, so a kick sent while it was
+    /// up or mid-attempt never makes a *later* failure retry at once.
+    pub fn kick(&self) {
+        let _ = self.retry.try_send(());
     }
 }

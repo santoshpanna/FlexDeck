@@ -313,6 +313,10 @@ impl Host {
 }
 
 /// An assembled agent in pieces, for a caller that keeps the handles.
+///
+/// Cloneable because binding can fail — the port is taken — and a shell that
+/// keeps trying needs a fresh set of parts for every attempt.
+#[derive(Clone)]
 pub struct HostParts {
     pub agent: Arc<Agent>,
     pub settings: Settings,
@@ -335,29 +339,67 @@ pub fn router_for(agent: &Arc<Agent>, web_access: Option<&Arc<WebAccess>>) -> ax
 /// Free-standing so a shell can serve from the parts it kept, rather than having
 /// to give up the agent to start the server.
 pub async fn serve_parts(parts: HostParts) -> HostResult<()> {
-    let app = router_for(&parts.agent, parts.web_access.as_ref());
+    bind_parts(parts).await?.serve().await
+}
+
+/// A listener that holds its port but is not serving yet.
+///
+/// Binding and serving are two steps so a caller can learn that the port was
+/// taken *and keep trying*. [`Bound::serve`] never returns while things are
+/// healthy, so with one step there would be no moment at which to say the
+/// listener is up — and a shell that retries needs exactly that moment to clear
+/// the error it showed.
+pub struct Bound {
+    server: axum_server::Server<SocketAddr, axum_server::tls_rustls::RustlsAcceptor>,
+    app: axum::Router,
+    parts: HostParts,
+}
+
+/// Claim the port. Fails straight away when it is taken.
+pub async fn bind_parts(parts: HostParts) -> HostResult<Bound> {
+    // Bound explicitly, before anything claims the server is up. `bind_rustls`
+    // defers the bind to `serve`, so a taken port used to be announced as
+    // "Serving on …" and refused only afterwards — which reads as a server that
+    // started and then died rather than one that never started at all. And bound
+    // FIRST, because it is the step that fails: a caller retrying a taken port
+    // should not rebuild the certificate config and router on every attempt.
+    let listener = std::net::TcpListener::bind(parts.bind)?;
+    listener.set_nonblocking(true)?;
 
     // TLS is not optional. Every API call carries a bearer token in a header, and
     // over plain HTTP that token is readable by anything on the network, which
     // would undo the authentication entirely.
     let tls = flexdeck_server::tls::rustls_config(parts.agent.identity()).await?;
-
-    // Bound explicitly, before anything claims the server is up. `bind_rustls`
-    // defers the bind to `serve`, so a taken port used to be announced as
-    // "Serving on …" and refused only afterwards — which reads as a server that
-    // started and then died rather than one that never started at all.
-    let listener = std::net::TcpListener::bind(parts.bind)?;
-    listener.set_nonblocking(true)?;
     let server = axum_server::from_tcp_rustls(listener, tls)?;
+    let app = router_for(&parts.agent, parts.web_access.as_ref());
 
-    println!();
-    println!("Serving on https://{}", parts.bind);
-    println!("               (the certificate is self-signed; a browser will warn once)");
+    Ok(Bound { server, app, parts })
+}
 
-    serve_loopback(&parts, app.clone()).await;
+impl Bound {
+    /// Serve until the process ends.
+    pub async fn serve(self) -> HostResult<()> {
+        println!();
+        println!("Serving on https://{}", self.parts.bind);
+        println!("               (the certificate is self-signed; a browser will warn once)");
 
-    server.serve(app.into_make_service()).await?;
-    Ok(())
+        // Held for as long as the LAN listener serves, and closed with it: a
+        // shell that binds again after this returns must find the door's port
+        // free, not held by an orphan from the previous attempt.
+        let _door = serve_loopback(&self.parts, self.app.clone()).await;
+
+        self.server.serve(self.app.into_make_service()).await?;
+        Ok(())
+    }
+}
+
+/// A spawned task that ends when this is dropped.
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 /// The port the same-PC door listens on: the agent's own, plus one.
@@ -372,7 +414,7 @@ pub fn loopback_port(settings: &Settings) -> u16 {
 /// treats `http://127.0.0.1` as a secure context. Not fatal if the port is
 /// taken: the LAN listener and the cloud still work, and the portal on this
 /// computer can still pair with a code.
-async fn serve_loopback(parts: &HostParts, api: axum::Router) {
+async fn serve_loopback(parts: &HostParts, api: axum::Router) -> Option<AbortOnDrop> {
     let port = loopback_port(&parts.settings);
     let config = loopback::LoopbackConfig {
         port,
@@ -384,17 +426,18 @@ async fn serve_loopback(parts: &HostParts, api: axum::Router) {
     match tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)).await {
         Ok(listener) => {
             println!("Serving this computer's browser on http://127.0.0.1:{port}");
-            tokio::spawn(async move {
+            Some(AbortOnDrop(tokio::spawn(async move {
                 if let Err(error) = axum::serve(listener, app).await {
                     eprintln!("warning: the same-PC listener stopped: {error}");
                 }
-            });
+            })))
         }
         Err(error) => {
             eprintln!(
                 "warning: could not open http://127.0.0.1:{port} for this computer's browser \
                  ({error}); pair it with a code instead"
             );
+            None
         }
     }
 }

@@ -162,8 +162,9 @@ fn api_router(agent: Arc<Agent>) -> Router {
         // templates and live values: the editor never evaluates one itself.
         .route("/api/faces/preview", post(preview_face))
         .route("/api/live/watch", post(crate::live::watch))
-        // Data sources: reading is open, saving and testing need admin (a
-        // command source runs a program; a test fetches on the caller's say).
+        // Data sources: reading is open, saving and testing need a configurator
+        // (a test fetches on the caller's say), and a command source, which
+        // runs a program, also needs a yes at the desktop when asked from elsewhere.
         .route("/api/sources", get(get_sources).put(put_sources))
         .route("/api/sources/test", post(test_source))
         .route("/api/sources/secrets/forget", post(forget_source_secret))
@@ -1215,6 +1216,19 @@ async fn put_sources(
     Json(doc): Json<crate::sources::SourcesDoc>,
 ) -> Result<Json<Value>, ApiError> {
     require_configurator_inline(&authority)?;
+    crate::sources::validate(&doc).map_err(ApiError::bad_request)?;
+    // A command source runs a program on this machine, on a timer, with no
+    // press: from elsewhere, a person at the desktop says yes to each new one.
+    if authority.needs_approval() {
+        let current = agent.behavior().sources().doc();
+        let commands: Vec<String> = crate::sources::new_commands(&current, &doc)
+            .into_iter()
+            .filter_map(crate::sources::SourceDef::command_line)
+            .collect();
+        if !commands.is_empty() {
+            require_approval(&agent, &authority, "Run a program on a schedule", &commands.join("\n")).await?;
+        }
+    }
     agent.behavior().replace_sources(doc).map_err(ApiError::bad_request)?;
     Ok(Json(json!({ "ok": true })))
 }
@@ -1240,6 +1254,11 @@ async fn test_source(
     let doc = crate::sources::SourcesDoc { sources: vec![request.source.clone()] };
     if let Err(error) = crate::sources::validate(&doc) {
         return Ok(Json(json!({ "error": error })));
+    }
+    // Testing a command source runs it now: from elsewhere, only with a yes
+    // from a person at the desktop, the same as installing a plugin.
+    if let Some(line) = request.source.command_line() {
+        require_approval(&agent, &authority, "Run a program", &line).await?;
     }
     let behavior = agent.behavior().clone();
     let answer = tokio::task::spawn_blocking(move || {

@@ -17,7 +17,7 @@
  * different topology — and the topology is the thing to keep in mind.
  *
  * A cloud service cannot dial a desktop's local address. It has no route to
- * `127.0.0.1:7878` on someone else's computer, and must never be designed as
+ * `127.0.0.1:23539` on someone else's computer, and must never be designed as
  * though it did. So the desktop is the side that connects: it opens an
  * **outbound** tunnel to this cloud, and the portal's requests travel back *down*
  * that connection. Nothing here, and nothing in the cloud, reaches out to a
@@ -256,7 +256,7 @@ function report(): void {
   console.log("  The cloud never dials a desktop — a desktop dials out to it.");
   console.log("  To connect one, hand an agent the tunnel URL once:");
   console.log(`    pnpm dev:agent -- --cloud ws://127.0.0.1:${API_PORT}/tunnel`);
-  console.log("  It is persisted. Stop the desktop app first: both bind 7878.");
+  console.log("  It is persisted. Stop the dev window first: both bind the same port.");
   console.log("  (The desktop app itself cannot be pointed at a portal yet.)");
   console.log();
 }

@@ -21,3 +21,4 @@ serde_json = { workspace = true }
 tauri = { version = "2", features = ["tray-icon"] }
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "net", "time"] }
 tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
