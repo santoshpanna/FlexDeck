@@ -2,6 +2,29 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
+## v0.1.0-rc.7 — 2026-10-15
+
+**Light toggle keys, pick looks by gesture or value, and flag keys a plugin update broke**
+
+### Added
+
+- **editor** Keys that toggle something light up while it's on, and a light you clear stays cleared.
+- **editor** A key's look can follow its last gesture — tap, long press, or hold until you let go.
+- **editor** Show a different look while a value holds, like "Recording" while OBS records.
+- **editor** Hide a key's corner dot without turning off its light.
+- **editor** Variable names complete one level at a time as you type.
+- **android** Keys can hide their corner dot.
+- **plugins** The media play key lights while something is playing.
+- **plugins** An action can light its key while a true/false value is on, or while it holds a fixed value, and the value's name can include the action's arguments.
+- **plugins** A key's light can follow another plugin's value.
+
+### Fixed
+
+- **desktop** A key whose plugin no longer has its action, or now needs an argument the key doesn't give, shows a warning and ignores presses until the plugin has it again.
+- **android** Draw keys a plugin update broke shaded with a warning, and don't send their presses.
+- **desktop** Keys that ran a data source of their own now read the shared one, moved once on first start and undoable in the editor.
+- **desktop** A deck the agent refuses is reported as the sender's mistake, not a server error.
+
 ## v0.1.0-rc.6 — 2026-10-14
 
 **Retry taken ports, reuse one window, and gate command sources**

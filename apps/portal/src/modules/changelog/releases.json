@@ -2,6 +2,82 @@
   "next": [],
   "releases": [
     {
+      "version": "v0.1.0-rc.7",
+      "platforms": [
+        "desktop",
+        "android",
+        "server"
+      ],
+      "hash": "514c311b793b25de336ee57a429c64907b4646ce",
+      "date": "2026-10-15",
+      "title": "Light toggle keys, pick looks by gesture or value, and flag keys a plugin update broke",
+      "blurb": "",
+      "groups": [
+        {
+          "name": "Added",
+          "items": [
+            {
+              "area": "EDITOR",
+              "text": "Keys that toggle something light up while it's on, and a light you clear stays cleared."
+            },
+            {
+              "area": "EDITOR",
+              "text": "A key's look can follow its last gesture — tap, long press, or hold until you let go."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Show a different look while a value holds, like \"Recording\" while OBS records."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Hide a key's corner dot without turning off its light."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Variable names complete one level at a time as you type."
+            },
+            {
+              "area": "ANDROID",
+              "text": "Keys can hide their corner dot."
+            },
+            {
+              "area": "PLUGINS",
+              "text": "The media play key lights while something is playing."
+            },
+            {
+              "area": "PLUGINS",
+              "text": "An action can light its key while a true/false value is on, or while it holds a fixed value, and the value's name can include the action's arguments."
+            },
+            {
+              "area": "PLUGINS",
+              "text": "A key's light can follow another plugin's value."
+            }
+          ]
+        },
+        {
+          "name": "Fixed",
+          "items": [
+            {
+              "area": "DESKTOP",
+              "text": "A key whose plugin no longer has its action, or now needs an argument the key doesn't give, shows a warning and ignores presses until the plugin has it again."
+            },
+            {
+              "area": "ANDROID",
+              "text": "Draw keys a plugin update broke shaded with a warning, and don't send their presses."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Keys that ran a data source of their own now read the shared one, moved once on first start and undoable in the editor."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "A deck the agent refuses is reported as the sender's mistake, not a server error."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.1.0-rc.6",
       "platforms": [
         "desktop",
