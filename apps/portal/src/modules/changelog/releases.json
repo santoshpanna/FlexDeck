@@ -2,6 +2,36 @@
   "next": [],
   "releases": [
     {
+      "version": "v0.1.0-rc.8",
+      "platforms": [
+        "android"
+      ],
+      "hash": "31a38fba93c09b9cea72650ed42d3043cc15ef78",
+      "date": "2026-10-15",
+      "title": "Swipe pages from on top of keys without pressing them",
+      "blurb": "",
+      "groups": [
+        {
+          "name": "Added",
+          "items": [
+            {
+              "area": "ANDROID",
+              "text": "On decks with more than one page, a swipe that starts on a key, zone or slider's mute row turns the page instead of pressing it."
+            }
+          ]
+        },
+        {
+          "name": "Fixed",
+          "items": [
+            {
+              "area": "ANDROID",
+              "text": "A quick tap or a shaky press still counts as a press, never a page swipe."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.1.0-rc.7",
       "platforms": [
         "desktop",

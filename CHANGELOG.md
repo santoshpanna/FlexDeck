@@ -2,6 +2,18 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
+## v0.1.0-rc.8 — 2026-10-15
+
+**Swipe pages from on top of keys without pressing them**
+
+### Added
+
+- **android** On decks with more than one page, a swipe that starts on a key, zone or slider's mute row turns the page instead of pressing it.
+
+### Fixed
+
+- **android** A quick tap or a shaky press still counts as a press, never a page swipe.
+
 ## v0.1.0-rc.7 — 2026-10-15
 
 **Light toggle keys, pick looks by gesture or value, and flag keys a plugin update broke**
