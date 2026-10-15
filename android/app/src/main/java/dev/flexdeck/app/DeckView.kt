@@ -32,6 +32,7 @@ import dev.flexdeck.client.LiveWidget
 import dev.flexdeck.client.Pager
 import dev.flexdeck.client.ScreenCare
 import dev.flexdeck.client.PathData
+import dev.flexdeck.client.PressGate
 import dev.flexdeck.client.Segment
 import dev.flexdeck.client.SliderMath
 import dev.flexdeck.client.SliderOrientation
@@ -167,15 +168,31 @@ class DeckView(context: Context) : View(context) {
     /**
      * A finger that may yet turn out to be a swipe between pages.
      *
-     * Only one that lands off every key: a plain key fires the moment it is
-     * touched, so a swipe starting on one would already have run it. Pages turn
-     * from the page bar along the bottom and from the gaps between keys.
+     * One that lands on a key holds that key's press back for a moment (see
+     * [PressGate]) and must run further sideways than one from a gap, so a
+     * shaky press stays a press. A fader's body never swipes: its drag is its own.
      */
-    private class Swipe(val pointer: Int, val startX: Float, val startY: Float) {
+    private class Swipe(val pointer: Int, var startX: Float, val startY: Float) {
         var claimed = false
         var dx = 0f
+        var held: Held? = null
     }
     private var swipe: Swipe? = null
+
+    /** A key's press, sunk but not yet sent, while it may still turn out to be a swipe. */
+    private class Held(val widget: DrawnWidget, val zone: Int, val header: Boolean, val downAt: Long) {
+        val gate = PressGate().also { it.down(downAt) }
+    }
+
+    private val keySlop = Pager.KEY_SLOP_DP * resources.displayMetrics.density
+    private val heldTick = Runnable {
+        val pending = swipe ?: return@Runnable
+        val held = pending.held ?: return@Runnable
+        if (held.gate.tick(SystemClock.uptimeMillis()) == PressGate.Outcome.COMMIT) {
+            commitHeld(pending)
+            swipe = null
+        }
+    }
 
     /** Draws key faces. Icons and pictures come from this view's caches. */
     private val painter = FacePainter(
@@ -1122,22 +1139,30 @@ class DeckView(context: Context) : View(context) {
                 val index = event.actionIndex
                 val pointer = event.getPointerId(index)
                 val widget = widgetAt(event.getX(index), event.getY(index))
+                val onHeader = widget?.slider != null &&
+                    widget.header.contains(gridX(event.getX(index)), gridY(event.getY(index)))
                 if (event.actionMasked == MotionEvent.ACTION_DOWN) {
                     velocity?.recycle()
                     velocity = VelocityTracker.obtain().also { it.addMovement(event) }
                     val paged = (deck?.pages?.size ?: 0) > 1
-                    swipe = if (paged && widget == null) Swipe(pointer, event.getX(index), event.getY(index)) else null
+                    val onFader = widget?.slider != null && !onHeader
+                    swipe = if (paged && !onFader) Swipe(pointer, event.getX(index), event.getY(index)) else null
                 } else if (swipe != null) {
                     // A second finger makes it a chord, not a swipe.
+                    swipe?.let { if (it.held?.gate?.otherFinger() == PressGate.Outcome.COMMIT) commitHeld(it) }
                     swipe = null
                 }
                 if (widget == null) return touches.isNotEmpty() || swipe != null
                 if (!live[widget.id]?.unavailable.isNullOrEmpty()) return true
+                val holding = swipe?.takeIf { it.pointer == pointer && event.actionMasked == MotionEvent.ACTION_DOWN }
                 val spec = widget.slider
                 when {
                     // The name row is the slider's mute: a tap there, not a drag.
-                    spec != null && widget.header.contains(gridX(event.getX(index)), gridY(event.getY(index))) ->
-                        onPress?.invoke(widget.id)
+                    onHeader && holding != null -> {
+                        press(widget.id, true)
+                        hold(holding, Held(widget, -1, header = true, downAt = event.eventTime))
+                    }
+                    onHeader -> onPress?.invoke(widget.id)
                     spec != null -> {
                         // Nothing moves yet: a fader moves by how far the finger
                         // goes from here, never to where it landed.
@@ -1157,7 +1182,15 @@ class DeckView(context: Context) : View(context) {
                         val gx = gridX(event.getX(index))
                         val gy = gridY(event.getY(index))
                         val zone = widget.zoneRects.indexOfFirst { it.contains(gx, gy) }
-                        if (zone >= 0) {
+                        if (holding != null) {
+                            if (zone >= 0) {
+                                zoneDown[widget.id] = zone
+                                invalidate()
+                            } else {
+                                press(widget.id, true)
+                            }
+                            hold(holding, Held(widget, zone, header = false, downAt = event.eventTime))
+                        } else if (zone >= 0) {
                             // A button of its own: fires as it lands, and only it sinks.
                             touches[pointer] = Touch(widget, 0, null, zone = zone)
                             zoneDown[widget.id] = zone
@@ -1180,10 +1213,27 @@ class DeckView(context: Context) : View(context) {
                 if (pending != null && at >= 0) {
                     val dx = event.getX(at) - pending.startX
                     val dy = event.getY(at) - pending.startY
-                    if (!pending.claimed && Pager.claims(dx, dy, touchSlop)) pending.claimed = true
+                    val held = pending.held
+                    if (held != null) {
+                        when (held.gate.move(dx, dy, keySlop, event.eventTime)) {
+                            PressGate.Outcome.COMMIT -> {
+                                commitHeld(pending)
+                                swipe = null
+                            }
+                            PressGate.Outcome.DISCARD -> {
+                                dropHeld(pending)
+                                pending.claimed = true
+                                // Follow the finger from here, as a swipe from a gap would, not jump the key slop.
+                                pending.startX += dx - Math.signum(dx) * touchSlop
+                            }
+                            PressGate.Outcome.NONE -> Unit
+                        }
+                    } else if (!pending.claimed && Pager.claims(dx, dy, touchSlop)) {
+                        pending.claimed = true
+                    }
                     if (pending.claimed) {
-                        pending.dx = dx
-                        slide.snap(Pager.offset(dx, pageIndex, deck?.pages?.size ?: 1))
+                        pending.dx = event.getX(at) - pending.startX
+                        slide.snap(Pager.offset(pending.dx, pageIndex, deck?.pages?.size ?: 1))
                         invalidate()
                     }
                 }
@@ -1203,7 +1253,10 @@ class DeckView(context: Context) : View(context) {
                 if (pending != null && pending.pointer == pointer) {
                     swipe = null
                     val count = deck?.pages?.size ?: 1
-                    if (pending.claimed) {
+                    val held = pending.held
+                    if (held != null) {
+                        if (held.gate.up() == PressGate.Outcome.COMMIT) commitHeld(pending)
+                    } else if (pending.claimed) {
                         velocity?.addMovement(event)
                         velocity?.computeCurrentVelocity(1000)
                         val speed = velocity?.getXVelocity(pointer) ?: 0f
@@ -1227,18 +1280,85 @@ class DeckView(context: Context) : View(context) {
             MotionEvent.ACTION_CANCEL -> {
                 // A half-done swipe springs back to the page it started on.
                 if (swipe?.claimed == true) turnTo(pageIndex, slide.value)
+                releaseAll()
                 swipe = null
                 velocity?.recycle()
                 velocity = null
-                releaseAll()
                 return true
             }
         }
         return super.onTouchEvent(event)
     }
 
+    /** Hold a key's press back until [PressGate] decides it is a press, not a swipe. */
+    private fun hold(pending: Swipe, held: Held) {
+        pending.held = held
+        removeCallbacks(heldTick)
+        held.gate.nextDeadline()?.let { at -> postDelayed(heldTick, maxOf(0L, at - SystemClock.uptimeMillis())) }
+    }
+
+    /** It is a press: send what landing on the key would have sent, timed from when it landed. */
+    private fun commitHeld(pending: Swipe) {
+        val held = pending.held ?: return
+        pending.held = null
+        removeCallbacks(heldTick)
+        val widget = held.widget
+        // It may have gone unavailable while held; landing on it now would be refused.
+        if (!live[widget.id]?.unavailable.isNullOrEmpty()) {
+            unsinkHeld(held)
+            return
+        }
+        when {
+            held.header -> {
+                press(widget.id, false)
+                onPress?.invoke(widget.id)
+            }
+            held.zone >= 0 -> {
+                touches[pending.pointer] = Touch(widget, 0, null, zone = held.zone)
+                onZone?.invoke(widget.id, widget.zones[held.zone].name)
+            }
+            else -> {
+                touches[pending.pointer] = Touch(widget, 0, null)
+                fire(recognizer.down(widget.id, widget.gestures, held.downAt))
+            }
+        }
+    }
+
+    /** It is a swipe: the key springs back and nothing is sent. */
+    private fun dropHeld(pending: Swipe) {
+        val held = pending.held ?: return
+        pending.held = null
+        removeCallbacks(heldTick)
+        unsinkHeld(held)
+    }
+
+    private fun unsinkHeld(held: Held) {
+        when {
+            held.zone >= 0 -> {
+                zoneDown.remove(held.widget.id)
+                invalidate()
+            }
+            else -> press(held.widget.id, false)
+        }
+    }
+
+    /** A held press is dropped unsent when the agent goes away, the page turns or the view goes. */
+    private fun cancelHeld() {
+        val pending = swipe ?: return
+        val held = pending.held ?: return
+        held.gate.cancel()
+        dropHeld(pending)
+        swipe = null
+    }
+
+    override fun onDetachedFromWindow() {
+        cancelHeld()
+        super.onDetachedFromWindow()
+    }
+
     /** Every finger counts as gone: a hold ends, a key springs back, a fader lets go. */
     private fun releaseAll() {
+        cancelHeld()
         val now = SystemClock.uptimeMillis()
         for (touch in touches.values) {
             if (touch.zone >= 0) {

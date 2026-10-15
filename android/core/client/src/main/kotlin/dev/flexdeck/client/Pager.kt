@@ -24,6 +24,15 @@ object Pager {
     /** A flick this fast (px/s) turns the page however short it was. */
     const val FLICK_VELOCITY = 900f
 
+    /** How long a key's press is held back on a paged deck, in case it is a swipe. */
+    const val PRESS_DELAY_MS = 150L
+
+    /**
+     * How far (dp) a finger that landed on a key must run sideways to swipe —
+     * wider than the system's touch slop, so a shaky press stays a press.
+     */
+    const val KEY_SLOP_DP = 24f
+
     /**
      * Whether a finger that has moved (`dx`, `dy`) from where it landed is now
      * swiping. It must clear `slop` and run mostly sideways, so a press that
