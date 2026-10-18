@@ -16,7 +16,7 @@
     "@flexdeck/grid": "workspace:*",
     "@flexdeck/tokens": "workspace:*",
     "@flexdeck/ui": "workspace:*",
-    "marked": "^16.4.2",
+    "marked": "^18.1.1",
     "motion": "^14.1.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
