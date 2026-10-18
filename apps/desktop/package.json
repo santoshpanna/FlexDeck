@@ -14,7 +14,7 @@
   "dependencies": {
     "@flexdeck/tokens": "workspace:*",
     "@flexdeck/ui": "workspace:*",
-    "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/api": "^2.12.4",
     "motion": "^14.1.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
