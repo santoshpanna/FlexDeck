@@ -1,5 +1,27 @@
 {
-  "next": [],
+  "next": [
+    {
+      "name": "Added",
+      "items": [
+        {
+          "area": "EDITOR",
+          "text": "The icon picker lists icon packs from your plugin repositories and installs them in a click."
+        },
+        {
+          "area": "DESKTOP",
+          "text": "Download repository icon packs with a checksum and size check, and never install the same pack twice."
+        },
+        {
+          "area": "PLUGINS",
+          "text": "Flexdeck-plugin repo --icon-packs lists icon pack zips in repository.json beside the plugins."
+        },
+        {
+          "area": "PLUGINS",
+          "text": "The Rust plugin ABI reads the iconPacks list in a repository index."
+        }
+      ]
+    }
+  ],
   "releases": [
     {
       "version": "v0.1.0-rc.9",

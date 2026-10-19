@@ -2,6 +2,15 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
+## Next
+
+### Added
+
+- **editor** The icon picker lists icon packs from your plugin repositories and installs them in a click.
+- **desktop** Download repository icon packs with a checksum and size check, and never install the same pack twice.
+- **plugins** Flexdeck-plugin repo --icon-packs lists icon pack zips in repository.json beside the plugins.
+- **plugins** The Rust plugin ABI reads the iconPacks list in a repository index.
+
 ## v0.1.0-rc.9 — 2026-10-19
 
 **Keep keys responsive when a plugin is slow, keep a log, and tidy the key editor**
