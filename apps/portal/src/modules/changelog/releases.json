@@ -2,6 +2,95 @@
   "next": [],
   "releases": [
     {
+      "version": "v0.1.0-rc.9",
+      "platforms": [
+        "desktop",
+        "android",
+        "server"
+      ],
+      "hash": "303cc2e076816d8d4956c53dd95b2db1c50603a5",
+      "date": "2026-10-19",
+      "title": "Keep keys responsive when a plugin is slow, keep a log, and tidy the key editor",
+      "blurb": "",
+      "groups": [
+        {
+          "name": "Added",
+          "items": [
+            {
+              "area": "DESKTOP",
+              "text": "FlexDeck keeps a log of the last 7 days in its data folder, so you have something to send when something goes wrong."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Icons in a pack are grouped by category, and search matches category names."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Pick a key's icon, and each look's icon, from a sheet instead of typing its name."
+            },
+            {
+              "area": "EDITOR",
+              "text": "A look's label can include values, like any other key text."
+            },
+            {
+              "area": "EDITOR",
+              "text": "A look's \"While\" box suggests value names as you type, but not inside quoted text."
+            },
+            {
+              "area": "PLUGINS",
+              "text": "Icon packs can give each icon a category."
+            }
+          ]
+        },
+        {
+          "name": "Improved",
+          "items": [
+            {
+              "area": "EDITOR",
+              "text": "The editor loads each piece of data once and refreshes it only when the desktop says it changed."
+            }
+          ]
+        },
+        {
+          "name": "Fixed",
+          "items": [
+            {
+              "area": "DESKTOP",
+              "text": "A slow or stuck plugin no longer holds up key presses or the other plugins' values."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "A burst of value changes updates your keys once instead of once per change."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "If installing a plugin fails, the consent sheet tells you why instead of closing without a word."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "A remote editor you closed stops counting as watching, even if it never said goodbye."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Saving through the cloud relay gets up to two minutes before it times out, and a desktop that doesn't answer in time shows as a timeout, not a broken connection."
+            },
+            {
+              "area": "EDITOR",
+              "text": "If a plugin action fails, the plugins panel shows the error."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Key borders follow rounded corners in the preview."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Text alignment says Left, Centre and Right, and the text style controls have room to breathe."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.1.0-rc.8",
       "platforms": [
         "android"

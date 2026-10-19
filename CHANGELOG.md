@@ -2,6 +2,34 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
+## v0.1.0-rc.9 — 2026-10-19
+
+**Keep keys responsive when a plugin is slow, keep a log, and tidy the key editor**
+
+### Added
+
+- **desktop** FlexDeck keeps a log of the last 7 days in its data folder, so you have something to send when something goes wrong.
+- **editor** Icons in a pack are grouped by category, and search matches category names.
+- **editor** Pick a key's icon, and each look's icon, from a sheet instead of typing its name.
+- **editor** A look's label can include values, like any other key text.
+- **editor** A look's "While" box suggests value names as you type, but not inside quoted text.
+- **plugins** Icon packs can give each icon a category.
+
+### Improved
+
+- **editor** The editor loads each piece of data once and refreshes it only when the desktop says it changed.
+
+### Fixed
+
+- **desktop** A slow or stuck plugin no longer holds up key presses or the other plugins' values.
+- **desktop** A burst of value changes updates your keys once instead of once per change.
+- **desktop** If installing a plugin fails, the consent sheet tells you why instead of closing without a word.
+- **desktop** A remote editor you closed stops counting as watching, even if it never said goodbye.
+- **editor** Saving through the cloud relay gets up to two minutes before it times out, and a desktop that doesn't answer in time shows as a timeout, not a broken connection.
+- **editor** If a plugin action fails, the plugins panel shows the error.
+- **editor** Key borders follow rounded corners in the preview.
+- **editor** Text alignment says Left, Centre and Right, and the text style controls have room to breathe.
+
 ## v0.1.0-rc.8 — 2026-10-15
 
 **Swipe pages from on top of keys without pressing them**
