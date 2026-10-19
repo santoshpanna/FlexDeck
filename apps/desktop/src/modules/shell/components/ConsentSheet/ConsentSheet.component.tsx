@@ -13,11 +13,13 @@ import { PluginFace } from "../PluginFace/PluginFace.component.tsx";
 export function ConsentSheet({
   consent,
   busy,
+  error = null,
   onAccept,
   onCancel,
 }: {
   consent: Consent | null;
   busy: boolean;
+  error?: string | null;
   onAccept: () => void;
   onCancel: () => void;
 }) {
@@ -53,6 +55,8 @@ export function ConsentSheet({
               From <strong>{consent.repo.name}</strong>, a repository you added. FlexDeck has not reviewed it; install only if you trust whoever runs it.
             </Notice>
           ) : null}
+
+          {error ? <Notice>{error}</Notice> : null}
 
           <div className="flex gap-2.5">
             <Key size="lg" className="flex-1" onClick={onCancel} disabled={busy}>

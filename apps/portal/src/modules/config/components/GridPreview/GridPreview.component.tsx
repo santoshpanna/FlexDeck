@@ -288,10 +288,9 @@ export function GridPreview({ profile, page, orientation, onOrientation, caption
                     onPointerDown={(event) => drag.startMove(forDrag(widget), event)}
                   >
                     <div
-                      className={cn("absolute inset-0 overflow-hidden border text-center text-[var(--fd-deck-ink)]", probe === "disabled" && "grayscale", unavailable && "opacity-40 grayscale")}
+                      className={cn("absolute inset-0 overflow-hidden text-center text-[var(--fd-deck-ink)]", probe === "disabled" && "grayscale", unavailable && "opacity-40 grayscale")}
                       style={{
                         borderRadius: radius,
-                        borderColor: see ? "transparent" : lit ? "var(--fd-deck-lit-line)" : "var(--fd-deck-key-line)",
                         ...(face.ink ? { color: face.ink } : {}),
                         background: see
                           ? "transparent"
@@ -367,6 +366,13 @@ export function GridPreview({ profile, page, orientation, onOrientation, caption
                           }}
                         />
                       ) : null}
+                      {see ? null : (
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-0 border"
+                          style={{ borderRadius: radius, borderColor: lit ? "var(--fd-deck-lit-line)" : "var(--fd-deck-key-line)" }}
+                        />
+                      )}
                     </div>
                       {unavailable ? (
                         <span title={unavailable} aria-label={unavailable} className="pointer-events-none absolute inset-0 flex items-center justify-center">

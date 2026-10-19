@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { Glyph, cn } from "@flexdeck/ui";
+import { Glyph, Label, Sheet, cn } from "@flexdeck/ui";
 
 import { Icon } from "../../../../common/components/Icon/Icon.component.tsx";
-import { searchIcons } from "../../../../common/icons/icons.lib.ts";
+import { byCategory, searchIcons } from "../../../../common/icons/icons.lib.ts";
 import { fileAsBase64, type IconPack, type IconPackSummary } from "../../../../services/api/api.ts";
 import { control } from "../Flow/fields.tsx";
 import { uploadPicture, useDesk } from "../PicturePicker/PicturePicker.component.tsx";
@@ -49,7 +49,7 @@ export function IconPicker({ value, onPick }: { value: string | undefined; onPic
   const bundled = useMemo(() => searchIcons(query), [query]);
   const fromPack = useMemo(() => {
     const words = query.trim().toLowerCase();
-    return (pack?.icons ?? []).filter((icon) => !words || icon.name.toLowerCase().includes(words) || icon.tags?.some((tag) => tag.toLowerCase().includes(words)));
+    return (pack?.icons ?? []).filter((icon) => !words || icon.name.toLowerCase().includes(words) || icon.category?.toLowerCase().includes(words) || icon.tags?.some((tag) => tag.toLowerCase().includes(words)));
   }, [pack, query]);
 
   const tab = (id: string, label: string) => (
@@ -81,14 +81,19 @@ export function IconPicker({ value, onPick }: { value: string | undefined; onPic
                 <Icon name={icon.name} size={18} decorative />
               </Choice>
             ))
-          : fromPack.slice(0, SHOWN).map((icon) => {
-              const name = `pack:${source}/${icon.name}`;
-              return (
-                <Choice key={icon.name} on={value === name} title={icon.name} onClick={() => onPick(name)}>
-                  <Icon name={name} size={18} decorative />
-                </Choice>
-              );
-            })}
+          : byCategory(fromPack.slice(0, SHOWN)).map(([category, icons]) => (
+              <Fragment key={category ?? ""}>
+                {category !== null ? <p className="col-span-7 m-0 pt-1 font-mono text-[10px] tracking-[0.14em] text-faint uppercase">{category}</p> : null}
+                {icons.map((icon) => {
+                  const name = `pack:${source}/${icon.name}`;
+                  return (
+                    <Choice key={icon.name} on={value === name} title={icon.name} onClick={() => onPick(name)}>
+                      <Icon name={name} size={18} decorative />
+                    </Choice>
+                  );
+                })}
+              </Fragment>
+            ))}
         {source !== "bundled" && fromPack.length > SHOWN ? <p className="col-span-7 m-0 text-center text-[11px] text-faint">{fromPack.length - SHOWN} more — search to find them</p> : null}
       </div>
       {api && desktopId ? (
@@ -158,6 +163,59 @@ export function IconPicker({ value, onPick }: { value: string | undefined; onPic
       ) : null}
       {notice ? <p className="m-0 text-[11px] text-muted">{notice}</p> : null}
     </div>
+  );
+}
+
+export function IconField({
+  label,
+  value,
+  fallback,
+  placeholder = "No icon",
+  onPick,
+  children,
+}: {
+  label: string;
+  value: string | undefined;
+  fallback?: string;
+  placeholder?: string;
+  onPick: (icon: string | null) => void;
+  children?: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const shown = value || fallback;
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={label}
+        onClick={() => setOpen(true)}
+        className={cn(control, "flex h-8 flex-1 cursor-pointer items-center gap-2 text-left")}
+      >
+        <span className={cn("flex size-5 shrink-0 items-center justify-center", !value && "opacity-50")}>
+          {shown ? <Icon name={shown} size={16} decorative /> : <span className="text-faint">—</span>}
+        </span>
+        <span className={cn("min-w-0 flex-1 truncate font-mono text-[12px]", !value && "text-faint")}>{value || placeholder}</span>
+        <span className="text-[11px] text-muted">Change</span>
+      </button>
+      <Sheet open={open} onClose={() => setOpen(false)} label={label} placement="viewport">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <Label>{label}</Label>
+            <button type="button" aria-label="Close" onClick={() => setOpen(false)} className="flex size-6 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-plate-2 hover:text-ink">
+              <Glyph name="close" size={12} />
+            </button>
+          </div>
+          <IconPicker
+            value={value}
+            onPick={(icon) => {
+              onPick(icon);
+              setOpen(false);
+            }}
+          />
+          {children}
+        </div>
+      </Sheet>
+    </>
   );
 }
 

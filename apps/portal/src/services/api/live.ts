@@ -1,3 +1,5 @@
+import { QWebSocket, type WSAdapter, type WSMessageEvent } from "@questorylabs/qhttp/ws";
+
 import type { Connection } from "../connections/connections.lib.ts";
 import type { SourceStatus, WidgetPreview } from "./api.ts";
 
@@ -67,6 +69,12 @@ export function parseLive(text: string): LiveMessage | Refusal | null {
   return null;
 }
 
+export function isLiveFrame(data: WSMessageEvent["data"]): boolean {
+  if (typeof data !== "string") return false;
+  const message = parseLive(data);
+  return message !== null && !("code" in message);
+}
+
 /**
  * One desktop's live socket, shared by everything on the page that listens,
  * and reconnected for as long as anything does.
@@ -78,26 +86,56 @@ export function parseLive(text: string): LiveMessage | Refusal | null {
 export class LiveFeed {
   /** How this socket reaches the desktop, so a changed route can be told apart. */
   readonly route: Connection;
-  readonly #url: string;
   readonly #hello: string;
   readonly #listeners = new Set<LiveListener>();
   readonly #onRefused: () => void;
-  #socket: WebSocket | null = null;
-  #retry: ReturnType<typeof setTimeout> | null = null;
-  #backoff = 1000;
+  readonly #socket: QWebSocket | null = null;
+  // "open" is told once the desktop has said yes — its first frame is where
+  // things stand — not when the socket merely connected.
+  #welcomed = false;
+  #refused = false;
   #closed = false;
+  #retry: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(route: Connection, cloud: string, local: string, onRefused: () => void) {
+  constructor(route: Connection, cloud: string, local: string, onRefused: () => void, adapter?: WSAdapter) {
     this.route = route;
     this.#onRefused = onRefused;
+    let url: string;
     if (route.via === "local") {
-      this.#url = `${local.replace(/^http/, "ws")}/api/live`;
+      url = `${local.replace(/^http/, "ws")}/api/live`;
       this.#hello = JSON.stringify({ hello: { role: "portal", token: route.token } });
     } else {
-      this.#url = `${cloudSocketBase(cloud)}/api/live`;
+      url = `${cloudSocketBase(cloud)}/api/live`;
       this.#hello = JSON.stringify({ fingerprint: route.fingerprint, token: route.token });
     }
-    this.#open();
+    if (!adapter && typeof WebSocket === "undefined") return;
+    const socket = new QWebSocket(url).setReconnect({
+      retries: Infinity,
+      delay: 1000,
+      backoff: "exponential",
+      maxDelay: MAX_BACKOFF_MS,
+      resetOn: (event) => isLiveFrame(event.data),
+      reconnectOn: () => true,
+    });
+    if (adapter) socket.setAdapter(adapter);
+    socket.onOpen(() => {
+      this.#welcomed = false;
+      this.#refused = false;
+      socket.send(this.#hello);
+    });
+    socket.onMessage((event) => this.#hear(event.data));
+    this.#socket = socket;
+    this.#start(1000);
+  }
+
+  #start(wait: number): void {
+    if (this.#closed || !this.#socket) return;
+    try {
+      this.#socket.connect();
+    } catch {
+      this.#socket.close();
+      this.#retry = setTimeout(() => this.#start(Math.min(MAX_BACKOFF_MS, wait * 2)), wait);
+    }
   }
 
   listen(listener: LiveListener): void {
@@ -120,7 +158,6 @@ export class LiveFeed {
     this.#closed = true;
     if (this.#retry) clearTimeout(this.#retry);
     this.#socket?.close();
-    this.#socket = null;
   }
 
   #tell(message: LiveMessage): void {
@@ -133,52 +170,24 @@ export class LiveFeed {
     }
   }
 
-  #open(): void {
-    if (this.#closed || typeof WebSocket === "undefined") return;
-    let socket: WebSocket;
-    try {
-      socket = new WebSocket(this.#url);
-    } catch {
-      this.#again();
+  #hear(data: WSMessageEvent["data"]): void {
+    const message = parseLive(String(data));
+    if (!message) return;
+    if ("code" in message) {
+      // A token the desktop no longer honours will not start working by
+      // asking again; anything else — offline, a restart — may.
+      if (message.code === "unauthorised" && !this.#refused) {
+        this.#refused = true;
+        this.#socket?.close();
+        this.#onRefused();
+      }
       return;
     }
-    this.#socket = socket;
-    let refused = false;
-    // "open" is told once the desktop has said yes — its first frame is where
-    // things stand — not when the socket merely connected.
-    let welcomed = false;
-    socket.onopen = () => socket.send(this.#hello);
-    socket.onmessage = (event) => {
-      const message = parseLive(String(event.data));
-      if (!message) return;
-      if ("code" in message) {
-        // A token the desktop no longer honours will not start working by
-        // asking again; anything else — offline, a restart — may.
-        refused = message.code === "unauthorised";
-        return;
-      }
-      if (!welcomed) {
-        welcomed = true;
-        this.#backoff = 1000;
-        this.#tell({ kind: "open" });
-      }
-      this.#tell(message);
-    };
-    socket.onclose = () => {
-      if (this.#socket === socket) this.#socket = null;
-      if (refused) {
-        this.#onRefused();
-        return;
-      }
-      this.#again();
-    };
-  }
-
-  #again(): void {
-    if (this.#closed) return;
-    const wait = this.#backoff;
-    this.#backoff = Math.min(MAX_BACKOFF_MS, this.#backoff * 2);
-    this.#retry = setTimeout(() => this.#open(), wait);
+    if (!this.#welcomed) {
+      this.#welcomed = true;
+      this.#tell({ kind: "open" });
+    }
+    this.#tell(message);
   }
 }
 

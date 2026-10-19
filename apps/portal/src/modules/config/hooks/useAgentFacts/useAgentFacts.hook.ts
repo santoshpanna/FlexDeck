@@ -1,15 +1,24 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 
 import { useApi } from "../../../../hooks/useApi/useApi.hook.ts";
 import type { Device, Status } from "../../../../services/api/api.ts";
+import { useDesktopResource } from "../useDesktopResource/useDesktopResource.hook.ts";
 
 export interface AgentFactsValue {
   status: Status | null;
   devices: Device[];
   reload: () => Promise<void>;
+  ensure: () => Promise<void>;
   revoke: (deviceId: string) => Promise<void>;
   revokeAll: () => Promise<void>;
 }
+
+interface Facts {
+  status: Status;
+  devices: Device[];
+}
+
+const NO_DEVICES: Device[] = [];
 
 /**
  * What the agent reports about itself: its address and revision, and the
@@ -21,23 +30,17 @@ export interface AgentFactsValue {
  */
 export function useAgentFacts(desktopId: string | null): AgentFactsValue {
   const api = useApi();
-  const [status, setStatus] = useState<Status | null>(null);
-  const [devices, setDevices] = useState<Device[]>([]);
 
-  const reload = useCallback(async () => {
-    if (!desktopId) {
-      setStatus(null);
-      setDevices([]);
-      return;
-    }
-
-    const [nextStatus, nextDevices] = await Promise.all([
-      api.status(desktopId),
-      api.devices(desktopId),
+  const load = useCallback(async (): Promise<Facts> => {
+    const [status, devices] = await Promise.all([
+      api.status(desktopId ?? ""),
+      api.devices(desktopId ?? ""),
     ]);
-    setStatus(nextStatus);
-    setDevices(nextDevices.devices);
+    return { status, devices: devices.devices };
   }, [api, desktopId]);
+
+  const { resource, reload, ensure } = useDesktopResource<Facts>(desktopId, "facts", load);
+  const facts = desktopId === null ? undefined : resource.value;
 
   const revoke = useCallback(
     async (deviceId: string) => {
@@ -54,5 +57,5 @@ export function useAgentFacts(desktopId: string | null): AgentFactsValue {
     }
   }, [api, desktopId]);
 
-  return { status, devices, reload, revoke, revokeAll };
+  return { status: facts?.status ?? null, devices: facts?.devices ?? NO_DEVICES, reload, ensure, revoke, revokeAll };
 }

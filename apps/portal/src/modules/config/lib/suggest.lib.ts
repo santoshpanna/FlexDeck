@@ -78,6 +78,28 @@ export function templateSlot(text: string, caret: number): Slot | null {
   return { start, end: caret + tail.length, query, braces: true, open: false };
 }
 
+/** An expression: the name the caret is in. Names start with a letter; nothing is offered inside a quoted string. */
+export function expressionSlot(text: string, caret: number): Slot | null {
+  const before = text.slice(0, caret);
+  if (inQuote(before)) return null;
+  const word = /[A-Za-z_][\w.]*$/.exec(before)?.[0] ?? "";
+  if (!word && text.trim()) return null;
+  if (word && /[\w.]/.test(before.charAt(before.length - word.length - 1))) return null;
+  const tail = /^[\w.]*/.exec(text.slice(caret))![0];
+  return { start: caret - word.length, end: caret + tail.length, query: word, braces: false, open: false };
+}
+
+function inQuote(text: string): boolean {
+  let quote = "";
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quote && c === "\\") i++;
+    else if (quote && c === quote) quote = "";
+    else if (!quote && (c === '"' || c === "'")) quote = c;
+  }
+  return quote !== "";
+}
+
 /** The field with a completion put in its slot, and where the caret goes. */
 export function applyCompletion(text: string, slot: Slot, completion: Completion): { text: string; caret: number } {
   const head = text.slice(0, slot.start) + (slot.open ? "{{" : "") + completion.text;

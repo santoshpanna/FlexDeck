@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useApi } from "../../../../hooks/useApi/useApi.hook.ts";
-import { useLive } from "../../../../hooks/useLive/useLive.hook.ts";
 import type { Device, PairingBegin } from "../../../../services/api/api.ts";
-import type { LiveMessage } from "../../../../services/api/live.ts";
 
 export interface PairingValue {
   /** The open window, if one is showing. A window is single-use. */
@@ -21,11 +19,7 @@ export interface PairingValue {
  * was used, and the window closes on its own. It also closes when the code
  * expires, rather than showing a dead code.
  */
-export function usePairing(
-  desktopId: string | null,
-  devices: Device[],
-  reloadDevices: () => Promise<void>,
-): PairingValue {
+export function usePairing(desktopId: string | null, devices: Device[]): PairingValue {
   const api = useApi();
   const [pairing, setPairing] = useState<PairingBegin | null>(null);
   // The devices paired before this code opened: anything else is the new one.
@@ -51,16 +45,6 @@ export function usePairing(
     const expire = setTimeout(() => setPairing(null), Math.max(0, pairing.expiresAt * 1000 - Date.now()));
     return () => clearTimeout(expire);
   }, [pairing]);
-
-  // Paired, revoked, connected, gone: the list everyone sees follows at once,
-  // code or no code — which is also what closes the code once it is used.
-  const hear = useCallback(
-    (message: LiveMessage) => {
-      if (message.kind === "devices" || message.kind === "open") reloadDevices().catch(() => {});
-    },
-    [reloadDevices],
-  );
-  useLive(desktopId, hear);
 
   useEffect(() => {
     if (pairing && devices.some((device) => !known.current.has(device.id))) {

@@ -21,7 +21,7 @@ import { ColorPicker } from "../FillPicker/ColorPicker.component.tsx";
 import { FillPicker } from "../FillPicker/FillPicker.component.tsx";
 import { IconPicker } from "../IconPicker/IconPicker.component.tsx";
 
-import { DraftInput, ValueInput, VariableInput, control } from "../Flow/fields.tsx";
+import { DraftInput, ExpressionInput, ValueInput, VariableInput, control } from "../Flow/fields.tsx";
 
 type FaceChange = (change: (face: Face) => Face) => void;
 
@@ -405,42 +405,51 @@ function TextStyleRow({ element, onChange }: { element: FaceElement; onChange: (
   const text = element.text ?? {};
   const set = (change: Partial<NonNullable<FaceElement["text"]>>) => onChange({ text: compactObject({ ...text, ...change }) });
   return (
-    <div className="grid grid-cols-2 gap-2">
-      <select aria-label="Size" value={text.size ?? "TEXT_SIZE_AUTO"} onChange={(event) => set({ size: event.target.value === "TEXT_SIZE_AUTO" ? undefined : (event.target.value as never) })} className={cn(control, "h-8")}>
-        <option value="TEXT_SIZE_AUTO">Size: as placed</option>
-        <option value="TEXT_SIZE_XS">Tiny</option>
-        <option value="TEXT_SIZE_S">Small</option>
-        <option value="TEXT_SIZE_M">Medium</option>
-        <option value="TEXT_SIZE_L">Large</option>
-        <option value="TEXT_SIZE_XL">Huge</option>
-        <option value="TEXT_SIZE_FIT">As big as fits</option>
-      </select>
-      <select aria-label="Font" value={text.font ?? "FONT_SANS"} onChange={(event) => set({ font: event.target.value === "FONT_SANS" ? undefined : (event.target.value as never) })} className={cn(control, "h-8")}>
-        <option value="FONT_SANS">Sans</option>
-        <option value="FONT_MONO">Mono (steady digits)</option>
-        <option value="FONT_SERIF">Serif</option>
-      </select>
-      <Segmented
-        size="sm"
-        label="Alignment"
-        value={text.align ?? "TEXT_ALIGN_AUTO"}
-        onChange={(align) => set({ align: align === "TEXT_ALIGN_AUTO" ? undefined : align })}
-        options={[
-          { value: "TEXT_ALIGN_AUTO", label: "Auto" },
-          { value: "TEXT_ALIGN_START", label: "◧" },
-          { value: "TEXT_ALIGN_CENTER", label: "▣" },
-          { value: "TEXT_ALIGN_END", label: "◨" },
-        ]}
-      />
-      <div className="flex items-center justify-end gap-3">
-        <label className="flex items-center gap-1.5 text-[12px] text-muted">
-          Bold <Switch size="sm" label="Bold" checked={text.bold ?? false} onChange={(bold) => set({ bold: bold || undefined })} />
-        </label>
-        <label className="flex items-center gap-1.5 text-[12px] text-muted" title="Too long for its place: one line, scrolling sideways">
-          Scroll <Switch size="sm" label="Scroll when too long" checked={text.marquee ?? false} onChange={(marquee) => set({ marquee: marquee || undefined })} />
-        </label>
-        <DraftInput aria-label="Lines" title="Most lines it wraps to (0: as placed)" value={String(text.maxLines ?? 0)} onCommit={(value) => set({ maxLines: Math.max(0, Math.min(4, Math.round(Number(value) || 0))) || undefined })} className={cn(control, "h-8 w-12 text-center font-mono")} />
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-2">
+        <select aria-label="Size" value={text.size ?? "TEXT_SIZE_AUTO"} onChange={(event) => set({ size: event.target.value === "TEXT_SIZE_AUTO" ? undefined : (event.target.value as never) })} className={cn(control, "h-8")}>
+          <option value="TEXT_SIZE_AUTO">Size: as placed</option>
+          <option value="TEXT_SIZE_XS">Tiny</option>
+          <option value="TEXT_SIZE_S">Small</option>
+          <option value="TEXT_SIZE_M">Medium</option>
+          <option value="TEXT_SIZE_L">Large</option>
+          <option value="TEXT_SIZE_XL">Huge</option>
+          <option value="TEXT_SIZE_FIT">As big as fits</option>
+        </select>
+        <select aria-label="Font" value={text.font ?? "FONT_SANS"} onChange={(event) => set({ font: event.target.value === "FONT_SANS" ? undefined : (event.target.value as never) })} className={cn(control, "h-8")}>
+          <option value="FONT_SANS">Sans</option>
+          <option value="FONT_MONO">Mono (steady digits)</option>
+          <option value="FONT_SERIF">Serif</option>
+        </select>
       </div>
+      <Row label="Align">
+        <Segmented
+          size="sm"
+          label="Alignment"
+          value={text.align ?? "TEXT_ALIGN_AUTO"}
+          onChange={(align) => set({ align: align === "TEXT_ALIGN_AUTO" ? undefined : align })}
+          options={[
+            { value: "TEXT_ALIGN_AUTO", label: "Auto" },
+            { value: "TEXT_ALIGN_START", label: "Left" },
+            { value: "TEXT_ALIGN_CENTER", label: "Centre" },
+            { value: "TEXT_ALIGN_END", label: "Right" },
+          ]}
+        />
+      </Row>
+      <Row label="Style">
+        <div className="flex flex-1 flex-wrap items-center gap-x-4 gap-y-2">
+          <label className="flex items-center gap-1.5 text-[12px] text-muted">
+            Bold <Switch size="sm" label="Bold" checked={text.bold ?? false} onChange={(bold) => set({ bold: bold || undefined })} />
+          </label>
+          <label className="flex items-center gap-1.5 text-[12px] text-muted" title="Too long for its place: one line, scrolling sideways">
+            Scroll <Switch size="sm" label="Scroll when too long" checked={text.marquee ?? false} onChange={(marquee) => set({ marquee: marquee || undefined })} />
+          </label>
+          <label className="ml-auto flex items-center gap-1.5 text-[12px] text-muted" title="Most lines it wraps to (0: as placed)">
+            Lines
+            <DraftInput aria-label="Lines" value={String(text.maxLines ?? 0)} onCommit={(value) => set({ maxLines: Math.max(0, Math.min(4, Math.round(Number(value) || 0))) || undefined })} className={cn(control, "h-8 w-12 text-center font-mono")} />
+          </label>
+        </div>
+      </Row>
     </div>
   );
 }
@@ -530,7 +539,7 @@ function RulesEditor({
         <div key={index} className="flex flex-col gap-2 rounded-lg border border-line bg-well/40 p-2">
           <div className="flex items-center gap-2">
             <span className="text-[12px] text-muted">While</span>
-            <ValueInput label="While" value={rule.when ?? ""} variables={variables} placeholder="system.cpu.usage > 80" onCommit={(when) => update(index, { when: when.replace(/^\{\{\s*|\s*\}\}$/g, "") })} className="flex-1 font-mono" />
+            <ExpressionInput label="While" value={rule.when ?? ""} variables={variables} placeholder="system.cpu.usage > 80" onCommit={(when) => update(index, { when: when.replace(/^\{\{\s*|\s*\}\}$/g, "") })} className="flex-1 font-mono" />
             <IconButton label="Remove rule" onClick={() => onChange(rules.filter((_, at) => at !== index))}>
               <Glyph name="close" size={12} />
             </IconButton>

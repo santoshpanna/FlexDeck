@@ -54,6 +54,7 @@ pub const PASSED_ENV: &[&str] = &[
 
 /// How many of a plugin's last stderr lines explain why it died starting.
 const LAST_WORDS: usize = 5;
+const SLOW_CALL: Duration = Duration::from_secs(1);
 
 #[doc(hidden)]
 pub mod fixture;
@@ -654,12 +655,13 @@ impl Shared {
             }
         }
 
+        let asked = Instant::now();
         let answer = match receiver.recv_timeout(timeout) {
             Ok(answer) => answer,
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 lock(&self.pending).remove(&id);
                 let seconds = timeout.as_secs().max(1);
-                self.log(
+                self.report(
                     "error",
                     &format!("did not answer '{method}' within {seconds}s; restarting"),
                 );
@@ -676,6 +678,10 @@ impl Shared {
             }
         };
 
+        let took = asked.elapsed();
+        if took > SLOW_CALL {
+            tracing::warn!(plugin = %self.id, method, ms = took.as_millis() as u64, "slow plugin call");
+        }
         if let Some(error) = answer.error {
             return Err(HostError::Remote {
                 method: method.to_string(),
@@ -748,7 +754,7 @@ impl Shared {
         }
         drop(budgets);
         if warn && method != abi::notify::LOG {
-            self.log("warn", &format!("sending '{method}' faster than {rate} a second; the rest are dropped"));
+            self.report("warn", &format!("sending '{method}' faster than {rate} a second; the rest are dropped"));
         }
         false
     }
@@ -763,6 +769,9 @@ impl Shared {
             abi::notify::VARS_DECLARE => decode(params).and_then(|declare| self.declare(declare)),
             abi::notify::EVENT_EMIT => decode(params).and_then(|emit| self.emit(emit)),
             abi::notify::LOG => decode(params).map(|line: abi::LogLine| {
+                if line.level == "error" {
+                    tracing::error!(plugin = %self.id, "plugin says: {}", line.message);
+                }
                 self.log(&line.level, &line.message);
             }),
             abi::notify::NOTIFY => decode(params).and_then(|notice| self.notify(notice)),
@@ -781,7 +790,7 @@ impl Shared {
             other => Err(format!("'{other}' is not something a plugin can send")),
         };
         if let Err(reason) = outcome {
-            self.log("error", &format!("refused '{method}': {reason}"));
+            self.report("error", &format!("refused '{method}': {reason}"));
         }
     }
 
@@ -975,6 +984,15 @@ impl Shared {
         Ok(())
     }
 
+    fn report(&self, level: &str, message: &str) {
+        if level == "error" {
+            tracing::error!(plugin = %self.id, "{message}");
+        } else {
+            tracing::warn!(plugin = %self.id, "{message}");
+        }
+        self.log(level, message);
+    }
+
     fn log(&self, level: &str, message: &str) {
         {
             let mut log = lock(&self.log);
@@ -1052,7 +1070,7 @@ impl Shared {
                 Some((self.options.restart_delay * factor).min(Duration::from_secs(30)))
             }
         };
-        self.log("error", &format!("stopped unexpectedly ({described})"));
+        self.report("error", &format!("stopped unexpectedly ({described})"));
         self.changed();
 
         let Some(delay) = delay else { return };
@@ -1065,7 +1083,7 @@ impl Shared {
                 }
                 if let Err(error) = self.launch() {
                     lock(&self.state).status = Some(error.to_string());
-                    self.log("error", &format!("could not restart: {error}"));
+                    self.report("error", &format!("could not restart: {error}"));
                     self.kill_running();
                     self.changed();
                 }
@@ -1254,7 +1272,7 @@ impl Plugin for SidecarPlugin {
         );
         if let Err(error) = sent {
             self.shared
-                .log("error", &format!("could not apply new settings: {error}"));
+                .report("error", &format!("could not apply new settings: {error}"));
         }
     }
 

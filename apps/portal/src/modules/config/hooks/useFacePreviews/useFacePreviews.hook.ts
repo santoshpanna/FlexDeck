@@ -1,9 +1,11 @@
+import { useResource } from "@questorylabs/qhttp/react";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { useLive } from "../../../../hooks/useLive/useLive.hook.ts";
 import { ApiContext } from "../../../../providers/ApiProvider/ApiProvider.provider.tsx";
 import type { WidgetPreview, WireWidget } from "../../../../services/api/api.ts";
 import type { LiveMessage } from "../../../../services/api/live.ts";
+import { overlayPreviews } from "../../lib/resource.lib.ts";
 
 /**
  * What each widget on a page shows now, as the agent works it out — so the
@@ -16,43 +18,53 @@ import type { LiveMessage } from "../../../../services/api/live.ts";
  * moment it changes, exactly as it does on the tablet. Nothing is polled.
  */
 export function useFacePreviews(desktopId: string | null, widgets: readonly WireWidget[]): Record<string, WidgetPreview> {
-  // Read without the throwing hook: a view drawn outside the providers simply
+  // Read without the throwing hook: a view drawn outside the API provider simply
   // has no previews.
   const api = useContext(ApiContext);
-  const [previews, setPreviews] = useState<Record<string, WidgetPreview>>({});
   // What the agent pushed since the last ask. Kept apart, and laid over the
   // answer: a push can land before the answer does, and is the newer of the two.
   const [pushed, setPushed] = useState<Record<string, NonNullable<WidgetPreview["state"]>>>({});
-  // Bumped by a (re)opened socket: what was read before it may be stale.
-  const [opened, setOpened] = useState(0);
   const key = JSON.stringify(widgets);
+  const [asked, setAsked] = useState<{ desktopId: string | null; key: string; widgets: readonly WireWidget[] }>({
+    desktopId: null,
+    key: "[]",
+    widgets: [],
+  });
 
   useEffect(() => {
-    if (!api || !desktopId || widgets.length === 0) {
-      setPreviews({});
-      return;
-    }
-    let live = true;
     const first = setTimeout(() => {
       // From here on, only pushes newer than this ask count.
       setPushed({});
-      api
-        .facePreviews(desktopId, [...widgets])
-        .then((answer) => live && setPreviews(answer))
-        // An agent that predates previews, or a dropped call: draw from the config.
-        .catch(() => live && setPreviews({}));
+      setAsked({ desktopId, key, widgets });
     }, 250);
-    return () => {
-      live = false;
-      clearTimeout(first);
-    };
+    return () => clearTimeout(first);
     // `key` stands for `widgets`: a new array with the same widgets is no change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, desktopId, key, opened]);
+  }, [desktopId, key]);
+
+  const enabled = Boolean(api) && asked.desktopId !== null && asked.desktopId === desktopId && asked.widgets.length > 0;
+  const load = useCallback(
+    // An agent that predates previews, or a dropped call: draw from the config.
+    async (): Promise<Record<string, WidgetPreview>> =>
+      api ? api.facePreviews(asked.desktopId ?? "", [...asked.widgets]).catch(() => ({})) : {},
+    [api, asked],
+  );
+  const answer = useResource<Record<string, WidgetPreview>>({
+    id: [asked.desktopId, "previews", asked.key],
+    load,
+    when: enabled,
+  });
+  const [shown, setShown] = useState<{ desktopId: string | null; previews: Record<string, WidgetPreview> } | null>(null);
+  if (enabled && answer.value && shown?.previews !== answer.value) {
+    setShown({ desktopId: asked.desktopId, previews: answer.value });
+  }
+  const previews = !enabled
+    ? undefined
+    : (answer.value ?? (shown?.desktopId === desktopId ? shown.previews : undefined));
 
   const hear = useCallback((message: LiveMessage) => {
     if (message.kind === "open") {
-      setOpened((count) => count + 1);
+      setPushed({});
       return;
     }
     if (message.kind !== "state") return;
@@ -60,15 +72,10 @@ export function useFacePreviews(desktopId: string | null, widgets: readonly Wire
   }, []);
   useLive(desktopId, hear);
 
-  return useMemo(() => {
-    const merged: Record<string, WidgetPreview> = { ...previews };
-    // Only keys this page shows; the agent pushes every live key's look.
-    for (const widget of widgets) {
-      const state = pushed[widget.id];
-      if (state) merged[widget.id] = { ...merged[widget.id], state };
-    }
-    return merged;
+  return useMemo(
+    () => overlayPreviews(previews, pushed, widgets.map((widget) => widget.id)),
     // `key` stands for `widgets`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previews, pushed, key]);
+    [previews, pushed, key],
+  );
 }

@@ -378,6 +378,13 @@ impl ApiError {
             message: message.into(),
         }
     }
+
+    fn gateway_timeout(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::GATEWAY_TIMEOUT,
+            message: message.into(),
+        }
+    }
 }
 
 impl IntoResponse for ApiError {
@@ -393,7 +400,7 @@ impl From<RelayError> for ApiError {
         match error {
             RelayError::Offline => Self::bad_gateway("that desktop is not connected"),
             RelayError::Closed => Self::bad_gateway("that desktop's connection dropped"),
-            RelayError::Timeout => Self::bad_gateway("that desktop did not answer in time"),
+            RelayError::Timeout => Self::gateway_timeout("that desktop did not answer in time"),
             RelayError::TooManyInFlight { .. } => {
                 Self::bad_gateway("that desktop is already busy with other requests")
             }
@@ -558,6 +565,22 @@ mod tests {
 
         assert_eq!(status, StatusCode::UNAUTHORIZED);
         assert!(seen.try_recv().is_err(), "nothing was forwarded");
+    }
+
+    #[test]
+    fn a_desktop_that_did_not_answer_in_time_is_a_gateway_timeout() {
+        assert_eq!(
+            ApiError::from(RelayError::Timeout).status,
+            StatusCode::GATEWAY_TIMEOUT
+        );
+        assert_eq!(
+            ApiError::from(RelayError::Offline).status,
+            StatusCode::BAD_GATEWAY
+        );
+        assert_eq!(
+            ApiError::from(RelayError::Closed).status,
+            StatusCode::BAD_GATEWAY
+        );
     }
 
     #[tokio::test]

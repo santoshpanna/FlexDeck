@@ -1,3 +1,4 @@
+import { ResourceProvider } from "@questorylabs/qhttp/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
@@ -12,6 +13,8 @@ import "./app.css";
 // this is what makes a later change to the system preference take effect.
 startTheme();
 
+const RESOURCES = { freshFor: Infinity, retries: false } as const;
+
 const container = document.getElementById("root");
 if (!container) {
   throw new Error("the page has no #root element");
@@ -25,9 +28,11 @@ createRoot(container).render(
     */}
     <BrowserRouter>
       <ApiProvider>
-        <DesktopProvider>
-          <App />
-        </DesktopProvider>
+        <ResourceProvider defaults={RESOURCES}>
+          <DesktopProvider>
+            <App />
+          </DesktopProvider>
+        </ResourceProvider>
       </ApiProvider>
     </BrowserRouter>
   </StrictMode>,

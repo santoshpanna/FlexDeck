@@ -2,9 +2,7 @@ import type { Orientation } from "@flexdeck/grid";
 import { Children, cloneElement, useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 
 import { useDesktops } from "../../../hooks/useDesktops/useDesktops.hook.ts";
-import { useLive } from "../../../hooks/useLive/useLive.hook.ts";
 import { ApiError, type AutomationDocument, type Run, type WireConfig } from "../../../services/api/api.ts";
-import type { LiveMessage } from "../../../services/api/live.ts";
 import { describeError } from "../../../services/api/errors.ts";
 import { useActionCatalogue } from "../hooks/useActionCatalogue/useActionCatalogue.hook.ts";
 import { useArgumentChoices } from "../hooks/useArgumentChoices/useArgumentChoices.hook.ts";
@@ -17,8 +15,10 @@ import { useDeckPage } from "../hooks/useDeckPage/useDeckPage.hook.ts";
 import { useEditor } from "../hooks/useEditor/useEditor.hook.ts";
 import { useKeyboardEdit } from "../hooks/useKeyboardEdit/useKeyboardEdit.hook.ts";
 import { usePageSelection } from "../hooks/usePageSelection/usePageSelection.hook.ts";
+import { useLiveInvalidation } from "../hooks/useLiveInvalidation/useLiveInvalidation.hook.ts";
 import { usePairing } from "../hooks/usePairing/usePairing.hook.ts";
 import { gridSpecOf, pageById, pagesOf, profileOf } from "../lib/config.lib.ts";
+import { CONFIRM_WINDOW_MS, isConfirmed, type Unconfirmed, type Watched } from "../lib/resource.lib.ts";
 import type { ConfigTab } from "../lib/tabs.lib.ts";
 import type { WidgetState } from "../lib/state.lib.ts";
 import type { ConfigViewProps } from "../view/config.view.tsx";
@@ -59,8 +59,9 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
   const facts = useAgentFacts(desktopId);
   const catalogue = useActionCatalogue(desktopId);
   const loadChoices = useArgumentChoices(desktopId);
-  const pairing = usePairing(desktopId, facts.devices, facts.reload);
+  const pairing = usePairing(desktopId, facts.devices);
   const automations = useAutomations(desktopId);
+  useLiveInvalidation(desktopId);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -107,7 +108,11 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     setAutomationsDraft(automations.document);
   }, [automations.document, automationsDirty]);
 
+  const shownDesktop = useRef(desktopId);
+  shownDesktop.current = desktopId;
+
   const refresh = useCallback(async () => {
+    const asked = desktopId;
     try {
       await Promise.all([
         facts.reload(),
@@ -115,15 +120,33 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
         document.reload(),
         automations.reload(),
       ]);
-      setError(null);
+      if (shownDesktop.current === asked) setError(null);
     } catch (cause) {
-      setError(describeError(cause));
+      if (shownDesktop.current === asked) setError(describeError(cause));
     }
-  }, [facts.reload, catalogue.reload, document.reload, automations.reload]);
+  }, [desktopId, facts.reload, catalogue.reload, document.reload, automations.reload]);
+
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      try {
+        await Promise.all([facts.ensure(), catalogue.ensure(), document.ensure(), automations.ensure()]);
+        if (live) setError(null);
+      } catch (cause) {
+        if (live) setError(describeError(cause));
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [facts.ensure, catalogue.ensure, document.ensure, automations.ensure]);
 
   // Also on a reconnect: what failed against a refused token reads again with
   // the new one, rather than waiting for "Try again".
+  const heardReconnects = useRef(reconnects);
   useEffect(() => {
+    if (reconnects === heardReconnects.current) return;
+    heardReconnects.current = reconnects;
     void refresh();
   }, [refresh, reconnects]);
 
@@ -134,15 +157,56 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     await Promise.all([facts.reload(), document.reload()]);
   }, [facts.reload, document.reload]);
 
+  const deckRev = document.config?.rev;
+  const automationsRev = automations.document?.rev;
+  const revs = useRef<Record<Watched, number | undefined>>({ deck: deckRev, automations: automationsRev });
+  revs.current = { deck: deckRev, automations: automationsRev };
+  const [unconfirmed, setUnconfirmed] = useState<Unconfirmed | null>(null);
+
   /// Run a piece of work, reporting failure in the one place the view reads.
-  const act = useCallback(async (work: () => Promise<void>) => {
-    try {
-      await work();
-      setError(null);
-    } catch (cause) {
-      setError(describeError(cause));
+  const act = useCallback(
+    async (work: () => Promise<void>, watch: Watched | null = null) => {
+      const asked = shownDesktop.current;
+      const rev = watch ? revs.current[watch] : undefined;
+      try {
+        await work();
+        setError(null);
+      } catch (cause) {
+        if (!(cause instanceof ApiError && cause.isUnconfirmed) || asked === null) {
+          setError(describeError(cause));
+          return;
+        }
+        setError(null);
+        setUnconfirmed({ desktopId: asked, watch, rev, until: Date.now() + CONFIRM_WINDOW_MS });
+        await Promise.all([facts.reload(), document.reload(), automations.reload()]).catch(() => undefined);
+        if (watch === null) setUnconfirmed((pending) => (pending?.watch === null ? null : pending));
+      }
+    },
+    [facts.reload, document.reload, automations.reload],
+  );
+
+  useEffect(() => {
+    if (unconfirmed === null) return;
+    if (unconfirmed.desktopId !== desktopId) {
+      setUnconfirmed(null);
+      return;
     }
-  }, []);
+    const watch = unconfirmed.watch;
+    if (watch !== null && isConfirmed(unconfirmed, watch === "deck" ? deckRev : automationsRev)) {
+      setUnconfirmed(null);
+      if (watch === "automations") {
+        setAutomationsDirty(false);
+        setAutomationsSaving("saved");
+      }
+      return;
+    }
+    const timer = setTimeout(() => {
+      setUnconfirmed(null);
+      if (watch === "automations") setAutomationsSaving("error");
+      setError("the desktop did not confirm that change; check the desktop, then try again");
+    }, Math.max(0, unconfirmed.until - Date.now()));
+    return () => clearTimeout(timer);
+  }, [unconfirmed, desktopId, deckRev, automationsRev]);
 
   const refusedWrite = useRef<string | null>(null);
 
@@ -166,7 +230,7 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
         }
         refusedWrite.current = null;
         await refreshDeck();
-      });
+      }, "deck");
     },
     [act, document.put, refreshDeck],
   );
@@ -179,21 +243,6 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     refusedWrite.current = null;
     setError((current) => (current === refused ? null : current));
   }, []);
-
-  // The document moved somewhere else — another browser, a tablet, an undo
-  // elsewhere — or the socket reopened after a gap: read it again. The agent
-  // says so the moment it happens, so two editors never drift apart.
-  const configRev = document.config?.rev;
-  const reloadDocument = document.reload;
-  const hearDeck = useCallback(
-    (message: LiveMessage) => {
-      if (message.kind === "open" || (message.kind === "revision" && message.rev !== Number(configRev ?? -1))) {
-        void reloadDocument();
-      }
-    },
-    [configRev, reloadDocument],
-  );
-  useLive(desktopId, hearDeck);
 
   // Scene keys made before actions could say when they are active get their
   // light once the catalogue can tell — once per desktop, so an undo of it
@@ -236,14 +285,14 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     void act(async () => {
       await document.undo();
       await refreshDeck();
-    });
+    }, "deck");
   }, [act, document.undo, refreshDeck]);
 
   const redo = useCallback(() => {
     void act(async () => {
       await document.redo();
       await refreshDeck();
-    });
+    }, "deck");
   }, [act, document.redo, refreshDeck]);
 
   useKeyboardEdit({
@@ -285,10 +334,10 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
         setAutomationsDirty(false);
         setAutomationsSaving("saved");
       } catch (cause) {
-        setAutomationsSaving("error");
+        if (!(cause instanceof ApiError && cause.isUnconfirmed)) setAutomationsSaving("error");
         throw cause;
       }
-    });
+    }, "automations");
   }, [act, automations, automationsDraft]);
 
   /// The editor wants the trace of a previous dry-run to display. It is held
@@ -343,6 +392,8 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     desktopsError: desktopError,
     onRetryDesktops: () => void refreshDesktops(),
     error,
+    dismissError: () => setError(null),
+    confirming: unconfirmed !== null,
     onRetry: () => void refresh(),
     onForgetDesktop: () => {
       if (desktopId) forgetDesktop(desktopId);

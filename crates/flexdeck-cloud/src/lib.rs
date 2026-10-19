@@ -29,7 +29,7 @@ pub mod store;
 pub mod tunnel_socket;
 
 pub use cloud::Cloud;
-pub use hub::{Hub, RelayError, DEFAULT_TIMEOUT};
+pub use hub::{Hub, RelayError, DEFAULT_TIMEOUT, WRITE_TIMEOUT};
 pub use offers::Offers;
 pub use store::{DataDir, StoreError};
 pub use tunnel_socket::{admit, Admission};

@@ -60,6 +60,7 @@ export interface ShellViewProps {
   windowPrefs: WindowPrefs | null;
   onSetWindowPrefs: (patch: Partial<WindowPrefs>) => void;
   error: string | null;
+  consentError: string | null;
   busy: boolean;
   loading: boolean;
   onNewPin: () => void;
@@ -120,6 +121,7 @@ const DEFAULTS: ShellViewProps = {
   windowPrefs: null,
   onSetWindowPrefs: noop,
   error: null,
+  consentError: null,
   busy: false,
   loading: false,
   onNewPin: noop,
@@ -218,7 +220,7 @@ export function ShellView(partial: Partial<ShellViewProps>) {
 
       <TabBar items={items} value={tab} onChange={go} className="mx-2.5 mb-2.5 shrink-0" />
 
-      <ConsentSheet consent={p.consent} busy={p.busy} onAccept={p.onAccept} onCancel={p.onCancel} />
+      <ConsentSheet consent={p.consent} busy={p.busy} error={p.consentError} onAccept={p.onAccept} onCancel={p.onCancel} />
       <ApprovalSheet approvals={p.approvals} busy={p.busy} onAnswer={p.onAnswer} />
     </div>
   );

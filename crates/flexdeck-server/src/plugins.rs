@@ -569,7 +569,7 @@ impl PluginManager {
         for record in self.installed() {
             if record.enabled {
                 if let Err(error) = self.start(&record) {
-                    eprintln!("plugin '{}' did not start: {error}", record.id);
+                    tracing::warn!("plugin '{}' did not start: {error}", record.id);
                 }
             }
         }
@@ -666,9 +666,9 @@ impl PluginManager {
                         let latest = newest_change(path);
                         let previous = seen.insert(record.id.clone(), latest);
                         if previous.is_some_and(|previous| latest > previous) {
-                            eprintln!("plugin '{}' changed; reloading", record.id);
+                            tracing::info!("plugin '{}' changed; reloading", record.id);
                             if let Err(error) = manager.reload(&record.id) {
-                                eprintln!("plugin '{}' did not reload: {error}", record.id);
+                                tracing::warn!("plugin '{}' did not reload: {error}", record.id);
                             }
                         }
                     }

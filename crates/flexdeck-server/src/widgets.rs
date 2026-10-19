@@ -181,6 +181,7 @@ pub struct WidgetPlan {
     pub faces: Vec<(String, FacePlan)>,
     /// The data sources this key runs its own copy of, with their arguments.
     pub uses: Vec<(String, BTreeMap<String, String>)>,
+    reads: BTreeSet<String>,
 }
 
 /// The variables, with `this.` meaning this key's own run of its first source.
@@ -239,6 +240,10 @@ impl WidgetPlan {
 
     /// Every variable the widget's look or label reads.
     pub fn variables(&self) -> BTreeSet<String> {
+        self.reads.clone()
+    }
+
+    fn read_names(&self) -> BTreeSet<String> {
         let mut names: BTreeSet<String> = self
             .label_template
             .as_deref()
@@ -290,7 +295,7 @@ impl WidgetPlan {
 
     /// Why what it shows may be stale: the first failing source it reads.
     pub fn problem(&self, vars: &VariableStore) -> String {
-        let bases: BTreeSet<String> = self.variables().iter().filter_map(|name| crate::sources::base_of(name)).collect();
+        let bases: BTreeSet<String> = self.reads.iter().filter_map(|name| crate::sources::base_of(name)).collect();
         for base in bases {
             if vars.get(&format!("{base}.ok")) == Some(Value::Bool(false)) {
                 return match vars.get(&format!("{base}.error")) {
@@ -325,7 +330,7 @@ impl WidgetPlan {
     }
 
     pub fn reads(&self, name: &str) -> bool {
-        self.variables().contains(name)
+        self.reads.contains(name)
     }
 
     /// The action that reports this widget's state, when its state is
@@ -864,7 +869,7 @@ fn plan(widget: &Widget, limits: &Limits) -> Result<WidgetPlan, String> {
         uses.push((source.to_string(), used.args.clone().into_iter().collect()));
     }
 
-    Ok(WidgetPlan {
+    let mut plan = WidgetPlan {
         widget_id: widget.id.clone(),
         faces,
         uses,
@@ -888,7 +893,10 @@ fn plan(widget: &Widget, limits: &Limits) -> Result<WidgetPlan, String> {
         zone_flows,
         zones,
         events,
-    })
+        reads: BTreeSet::new(),
+    };
+    plan.reads = plan.read_names();
+    Ok(plan)
 }
 
 /// The variables a template reads. A template that does not parse reads none.

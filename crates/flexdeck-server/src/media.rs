@@ -35,6 +35,7 @@ pub const KEPT_SIDE: u32 = 1024;
 pub const ICON_SIDE: u32 = 256;
 pub const MAX_PACK: usize = 32 * 1024 * 1024;
 pub const MAX_ICONS: usize = 5_000;
+const MAX_CATEGORY: usize = 40;
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -178,6 +179,8 @@ pub struct PackIcon {
     pub name: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
     /// A picture: `img:<sha256>`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
@@ -241,6 +244,15 @@ fn pack_id(name: &str) -> String {
         .join("-");
     let id = id.trim_start_matches(|c: char| c.is_ascii_digit()).chars().take(40).collect::<String>();
     if id.is_empty() { "pack".into() } else { id }
+}
+
+fn tags_of(icon: &serde_json::Value) -> Vec<String> {
+    icon["tags"].as_array().into_iter().flatten().filter_map(|t| t.as_str().map(str::to_string)).collect()
+}
+
+fn category_of(icon: &serde_json::Value) -> Option<String> {
+    let category: String = icon["category"].as_str()?.trim().chars().take(MAX_CATEGORY).collect();
+    (!category.is_empty()).then_some(category)
 }
 
 fn icon_name(path: &str) -> String {
@@ -315,7 +327,7 @@ impl Packs {
         let mut name = String::new();
         let mut author = String::new();
         let mut license = String::new();
-        let mut listed: Vec<(String, String, Vec<String>)> = Vec::new(); // (file, name, tags)
+        let mut listed: Vec<(String, String, Vec<String>, Option<String>)> = Vec::new(); // (file, name, tags, category)
         if let Some(own) = find("pack.json") {
             let doc: serde_json::Value = serde_json::from_slice(&files[&own]).map_err(|e| format!("pack.json: {e}"))?;
             name = doc["name"].as_str().unwrap_or_default().to_string();
@@ -325,7 +337,7 @@ impl Packs {
             for icon in doc["icons"].as_array().into_iter().flatten() {
                 let file = format!("{base}{}", icon["file"].as_str().unwrap_or_default());
                 let icon_name = icon["name"].as_str().map(str::to_string).unwrap_or_else(|| icon_name(&file));
-                listed.push((file, icon_name, Vec::new()));
+                listed.push((file, icon_name, tags_of(icon), category_of(icon)));
             }
         } else if let Some(manifest) = find("manifest.json") {
             // The common layout: `manifest.json`, `icons.json` and `icons/`.
@@ -339,8 +351,7 @@ impl Packs {
                     let path = icon["path"].as_str().unwrap_or_default();
                     let file = format!("{base}icons/{path}");
                     let file = if files.contains_key(&file) { file } else { format!("{base}{path}") };
-                    let tags = icon["tags"].as_array().into_iter().flatten().filter_map(|t| t.as_str().map(str::to_string)).collect();
-                    listed.push((file, icon["name"].as_str().map(str::to_string).unwrap_or_else(|| icon_name(path)), tags));
+                    listed.push((file, icon["name"].as_str().map(str::to_string).unwrap_or_else(|| icon_name(path)), tags_of(icon), category_of(icon)));
                 }
             }
             if let Some(text) = find("license.txt").and_then(|f| String::from_utf8(files[&f].clone()).ok()) {
@@ -351,7 +362,7 @@ impl Packs {
             // Just icons: every PNG and SVG, named by its file.
             for file in files.keys().filter(|f| f.ends_with(".png") || f.ends_with(".svg")) {
                 if !file.contains("preview") {
-                    listed.push((file.clone(), icon_name(file), Vec::new()));
+                    listed.push((file.clone(), icon_name(file), Vec::new(), None));
                 }
             }
         }
@@ -368,7 +379,7 @@ impl Packs {
         let mut icons = Vec::new();
         let mut skipped = Vec::new();
         let mut seen = std::collections::BTreeSet::new();
-        for (file, icon, tags) in listed {
+        for (file, icon, tags, category) in listed {
             let Some(bytes) = files.get(&file) else {
                 skipped.push(format!("{icon}: {file} is not in the pack"));
                 continue;
@@ -384,6 +395,7 @@ impl Packs {
                 svg_icon(&String::from_utf8_lossy(bytes)).map(|(paths, view, fill, stroke)| PackIcon {
                     name: unique.clone(),
                     tags,
+                    category,
                     image: None,
                     paths,
                     view: Some(view),
@@ -394,6 +406,7 @@ impl Packs {
                 pictures.put(bytes, ICON_SIDE).map(|picture| PackIcon {
                     name: unique.clone(),
                     tags,
+                    category,
                     image: Some(format!("img:{}", picture.sha256)),
                     paths: Vec::new(),
                     view: None,
@@ -646,7 +659,7 @@ mod tests {
         let red = png(144, 144, true);
         let pack = zip(&[
             ("retro-keys/manifest.json", br#"{"Name": "Retro Keys", "Author": "Someone", "Version": "1.0"}"#),
-            ("retro-keys/icons.json", br#"[{"path": "play.png", "name": "Play", "tags": ["media"]}, {"path": "gone.png", "name": "Gone"}]"#),
+            ("retro-keys/icons.json", br#"[{"path": "play.png", "name": "Play", "tags": ["media"], "category": " Media "}, {"path": "gone.png", "name": "Gone"}]"#),
             ("retro-keys/icons/play.png", &red),
         ]);
         let installed = media.packs.install(&pack, &media.pictures).unwrap();
@@ -656,6 +669,7 @@ mod tests {
         let kept = media.packs.get("retro-keys").unwrap();
         assert_eq!(kept.icons[0].name, "Play");
         assert_eq!(kept.icons[0].tags, ["media"]);
+        assert_eq!(kept.icons[0].category.as_deref(), Some("Media"));
         assert!(kept.icons[0].image.as_deref().unwrap().starts_with("img:"));
 
         let loose = zip(&[("clock.svg", br#"<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><circle cx="12" cy="12" r="9"/></svg>"#), ("note.png", &red)]);

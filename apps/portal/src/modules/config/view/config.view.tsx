@@ -76,6 +76,8 @@ export interface ConfigViewProps {
   desktopsError: string | null;
   onRetryDesktops: () => void;
   error: string | null;
+  dismissError: () => void;
+  confirming: boolean;
   /** Re-read everything, for the state where this desktop cannot be reached. */
   onRetry: () => void;
   /** Drop the selected desktop from this browser — for one that removed this browser. */
@@ -217,6 +219,8 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
     desktopsError = null,
     onRetryDesktops = NEVER,
     error = null,
+    dismissError = NEVER,
+    confirming = false,
     onRetry = NEVER,
     onForgetDesktop = NEVER,
     status = null,
@@ -349,7 +353,10 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
               </button>
             </Notice>
           ) : null}
-          {error ? <Notice key="error">{error}</Notice> : null}
+          {error ? <Notice key="error" onDismiss={dismissError}>{error}</Notice> : null}
+          {confirming && !error ? (
+            <Notice key="confirming">The desktop is still finishing that. Waiting for it to confirm…</Notice>
+          ) : null}
         </NoticeSlot>
 
         {loaded && desktop ? (

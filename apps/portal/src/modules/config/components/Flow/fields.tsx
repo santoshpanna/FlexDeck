@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { cn } from "@flexdeck/ui";
 
 import type { VariableChoice } from "../../../../services/api/api.ts";
-import { applyCompletion, completions, nameSlot, templateSlot, unclosedBraces, type Completion, type Slot } from "../../lib/suggest.lib.ts";
+import { applyCompletion, completions, expressionSlot, nameSlot, templateSlot, unclosedBraces, type Completion, type Slot } from "../../lib/suggest.lib.ts";
 
 export const control =
   "h-9 w-full min-w-0 rounded-[9px] border border-line bg-well px-2.5 text-[13px] text-ink shadow-well placeholder:text-faint focus:outline-2 focus:outline-signal focus:outline-offset-1";
@@ -76,6 +76,34 @@ export function ValueInput({
       holdWhile={unclosedBraces}
       placeholder={placeholder}
       className={cn(/\{\{/.test(value) && "border-signal-line bg-signal-soft font-mono text-signal-hi", className)}
+    />
+  );
+}
+
+export function ExpressionInput({
+  value,
+  onCommit,
+  variables,
+  placeholder,
+  className,
+  label,
+}: {
+  value: string;
+  onCommit: (value: string) => void;
+  variables: readonly VariableChoice[];
+  placeholder?: string;
+  className?: string;
+  label: string;
+}) {
+  return (
+    <SuggestInput
+      label={label}
+      value={value}
+      onCommit={onCommit}
+      variables={variables}
+      slotAt={expressionSlot}
+      placeholder={placeholder}
+      className={cn("font-mono text-[12px]", className)}
     />
   );
 }

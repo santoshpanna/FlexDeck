@@ -23,6 +23,7 @@
 import type { Background, Face } from "@flexdeck/face";
 import { LOCAL_AGENT, type Connection } from "../connections/connections.lib.ts";
 import { LiveFeed, type LiveListener } from "./live.ts";
+import { QHttp, type HttpAdapter, type HttpMethod, type QHttpErrorCode } from "@questorylabs/qhttp";
 
 export interface Status {
   rev: number | null;
@@ -319,6 +320,7 @@ export interface IconPackSummary {
 export interface IconPackIcon {
   name: string;
   tags?: string[];
+  category?: string;
   image?: string;
   paths?: string[];
   view?: [number, number, number, number];
@@ -720,11 +722,17 @@ export class ApiError extends Error {
   /// `node --test` fails to even parse the file. Vite tolerates it, so the only
   /// way to notice is to run the tests, which is exactly the wrong time.
   readonly status: number;
+  readonly timedOut: boolean;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, timedOut = false) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.timedOut = timedOut;
+  }
+
+  get isUnconfirmed(): boolean {
+    return this.timedOut || this.status === 504;
   }
 
   /**
@@ -738,6 +746,34 @@ export class ApiError extends Error {
   }
 }
 
+const CLOUD_TIMEOUT = 10_000;
+const RELAY_TIMEOUT = 35_000;
+const WRITE_TIMEOUT = 125_000;
+const DESKTOP_SLOW = "the desktop took too long to answer; it may still finish";
+const LOCAL_GONE = "the desktop app on this computer is not running";
+
+function transportError(code: QHttpErrorCode, unreachable: string, slow: string): ApiError {
+  const timedOut = code === "TIMEOUT" || code === "DEADLINE";
+  return new ApiError(0, timedOut ? slow : unreachable, timedOut);
+}
+
+function httpClient(baseUrl: string, adapter: HttpAdapter | undefined, timeout?: number): QHttp {
+  return new QHttp({
+    baseUrl,
+    adapter,
+    timeout,
+    responseType: "text",
+    throwOnError: false,
+    validateStatus: () => true,
+    fetchOptions: { credentials: "omit" },
+    dedupe: true,
+  });
+}
+
+function succeeded(status: number): boolean {
+  return status >= 200 && status < 300;
+}
+
 /** Whether two routes reach the same desktop the same way, with the same token. */
 function sameRoute(a: Connection, b: Connection): boolean {
   return a.via === b.via && a.token === b.token && a.fingerprint === b.fingerprint;
@@ -749,6 +785,8 @@ export class Api {
   // even parse this file.
   readonly #base: string;
   readonly #local: string;
+  readonly #cloud: QHttp;
+  readonly #agent: QHttp;
   /** How to reach each desktop, by fingerprint. Set by the desktop provider. */
   #routes = new Map<string, Connection>();
   /** Told when the desktop on this computer refuses this browser's token. */
@@ -768,9 +806,11 @@ export class Api {
    *               origin", which is where the cloud serves the portal from.
    * @param local  where the desktop app on this computer listens for the page.
    */
-  constructor(base = "", local: string = LOCAL_AGENT) {
+  constructor(base = "", local: string = LOCAL_AGENT, adapter?: HttpAdapter) {
     this.#base = base;
     this.#local = local;
+    this.#cloud = httpClient(base, adapter, CLOUD_TIMEOUT);
+    this.#agent = httpClient(local, adapter);
   }
 
   /** Which connection to use for each desktop. */
@@ -828,7 +868,14 @@ export class Api {
     this.#onLocalRefused = listener;
   }
 
-  private async request<T>(method: string, path: string, body?: unknown, token?: string): Promise<T> {
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    token?: string,
+    timeout = CLOUD_TIMEOUT,
+    slow = "the flexdeck server took too long to answer",
+  ): Promise<T> {
     const headers: Record<string, string> = {};
     if (body !== undefined) {
       headers["content-type"] = "application/json";
@@ -836,27 +883,27 @@ export class Api {
     if (token) {
       headers.authorization = `Bearer ${token}`;
     }
-    let response: Response;
-    try {
-      response = await fetch(`${this.#base}${path}`, {
-        method,
-        // No cookies: there is no session, and none should be sent anywhere.
-        credentials: "omit",
-        headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-    } catch {
-      throw new ApiError(0, "the flexdeck server could not be reached");
+    // No cookies: there is no session, and none should be sent anywhere.
+    const result = await this.#cloud.request<string>({
+      method: method as HttpMethod,
+      url: path,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      timeout,
+    });
+    if (result.error) {
+      throw transportError(result.error.code, "the flexdeck server could not be reached", slow);
     }
 
-    const parsed = parseBody(await response.text());
+    const status = result.httpStatus;
+    const parsed = parseBody(result.data);
 
-    if (!response.ok) {
-      const message = extractError(parsed) ?? unreachable(response.status) ?? `${response.status} ${response.statusText}`;
-      throw new ApiError(response.status, message);
+    if (!succeeded(status)) {
+      const message = extractError(parsed) ?? unreachable(status) ?? `${status} ${result.statusText}`;
+      throw new ApiError(status, message);
     }
     if (parsed === undefined) {
-      throw new ApiError(response.status, "the flexdeck server sent an answer this page cannot read");
+      throw new ApiError(status, "the flexdeck server sent an answer this page cannot read");
     }
 
     return parsed as T;
@@ -870,11 +917,9 @@ export class Api {
    */
   async localHello(): Promise<{ fingerprint: string; name: string } | null> {
     try {
-      const response = await fetch(`${this.#local}/api/local/hello`, {
-        credentials: "omit",
-        signal: AbortSignal.timeout(1500),
-      });
-      return response.ok ? ((await response.json()) as { fingerprint: string; name: string }) : null;
+      const result = await this.#agent.get<string>("/api/local/hello", { timeout: 1500 });
+      if (result.error || !succeeded(result.httpStatus)) return null;
+      return JSON.parse(result.data) as { fingerprint: string; name: string };
     } catch {
       return null;
     }
@@ -882,15 +927,16 @@ export class Api {
 
   /** Ask the desktop app on this computer to let this page in. */
   async localConnect(name: string): Promise<PairResult> {
-    const response = await fetch(`${this.#local}/api/local/connect`, {
-      method: "POST",
-      credentials: "omit",
+    const result = await this.#agent.post<string>("/api/local/connect", {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name, clientId: browserId() }),
     });
-    const parsed: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new ApiError(response.status, extractError(parsed) ?? "the desktop app refused");
+    if (result.error) {
+      throw transportError(result.error.code, LOCAL_GONE, DESKTOP_SLOW);
+    }
+    const parsed: unknown = parseBody(result.data) ?? null;
+    if (!succeeded(result.httpStatus)) {
+      throw new ApiError(result.httpStatus, extractError(parsed) ?? "the desktop app refused");
     }
     return parsed as PairResult;
   }
@@ -901,7 +947,7 @@ export class Api {
    * The desktop checks the code and issues the token; the cloud only finds it.
    */
   pair(code: string, name: string): Promise<PairResult> {
-    return this.request("POST", "/api/pair", { code, name, clientId: browserId() });
+    return this.request("POST", "/api/pair", { code, name, clientId: browserId() }, undefined, WRITE_TIMEOUT);
   }
 
   /** Which of these desktops are connected to the cloud right now. */
@@ -931,6 +977,7 @@ export class Api {
       throw new ApiError(401, "this browser is not connected to that desktop");
     }
     const text = body === undefined ? "" : JSON.stringify(body);
+    const writes = method.toUpperCase() !== "GET";
 
     let status: number;
     let answer: string;
@@ -939,20 +986,20 @@ export class Api {
       if (text) {
         headers["content-type"] = "application/json";
       }
-      let response: Response;
-      try {
-        response = await fetch(`${this.#local}${path}`, {
-          method,
-          credentials: "omit",
-          headers,
-          body: text || undefined,
-        });
-      } catch {
+      const result = await this.#agent.request<string>({
+        method: method as HttpMethod,
+        url: path,
+        headers,
+        body: text || undefined,
+        retry: false,
+        timeout: writes ? WRITE_TIMEOUT : undefined,
+      });
+      if (result.error) {
         // Nothing listening: the desktop app was closed.
-        throw new ApiError(0, "the desktop app on this computer is not running");
+        throw transportError(result.error.code, LOCAL_GONE, DESKTOP_SLOW);
       }
-      status = response.status;
-      answer = await response.text();
+      status = result.httpStatus;
+      answer = result.data;
       if (status === 401) {
         this.#onLocalRefused?.(desktopId);
       }
@@ -962,6 +1009,8 @@ export class Api {
         "/api/relay",
         { fingerprint: route.fingerprint, method, path, body: text },
         route.token,
+        writes ? WRITE_TIMEOUT : RELAY_TIMEOUT,
+        DESKTOP_SLOW,
       );
       status = relayed.status;
       answer = relayed.body;
@@ -999,11 +1048,12 @@ export class Api {
     const key = `${desktopId}/${sha}`;
     let pending = this.#images.get(key);
     if (!pending) {
-      pending = fetch(`${this.#local}/api/images/${sha}`, {
-        credentials: "omit",
-        headers: { authorization: `Bearer ${route.token}` },
-      })
-        .then(async (response) => (response.ok ? URL.createObjectURL(await response.blob()) : null))
+      pending = this.#agent
+        .get<Blob>(`/api/images/${sha}`, {
+          headers: { authorization: `Bearer ${route.token}` },
+          responseType: "blob",
+        })
+        .then((result) => (result.error || !succeeded(result.httpStatus) ? null : URL.createObjectURL(result.data)))
         .catch(() => null);
       // A miss is not remembered: the plugin may hand the picture over later.
       pending.then((url) => {

@@ -865,43 +865,59 @@ impl Registry {
         let ids: Vec<String> = self.plugins.keys().cloned().collect();
 
         for id in ids {
-            let settings = self.effective_settings(&id);
-            let entry = self.plugins.get_mut(&id).expect("listed above");
-            let prefix = format!("{id}.");
-            let declared: BTreeSet<String> = entry
-                .plugin
-                .variables()
-                .into_iter()
-                .map(|spec| spec.name)
-                .collect();
-
-            let wanted: Vec<&str> = interested
-                .iter()
-                .filter(|name| declared.contains(*name) || name.starts_with(&prefix))
-                .map(String::as_str)
-                .collect();
-
-            if wanted.is_empty() {
-                continue;
+            match self.sample_plugin(&id, interested, ctx) {
+                Ok(true) => sampled += 1,
+                Ok(false) => {}
+                Err(error) => {
+                    first_error.get_or_insert(error);
+                    sampled += 1;
+                }
             }
-
-            let mut scoped = Ctx {
-                input: &mut *ctx.input,
-                vars: ctx.vars,
-                notifier: &mut *ctx.notifier,
-                settings: &settings,
-                now_ms: ctx.now_ms,
-            };
-            if let Err(error) = entry.plugin.sample(&wanted, &mut scoped) {
-                first_error.get_or_insert(error);
-            }
-            sampled += 1;
         }
 
         match first_error {
             Some(error) => Err(error),
             None => Ok(sampled),
         }
+    }
+
+    pub fn sample_plugin(
+        &mut self,
+        id: &str,
+        interested: &BTreeSet<String>,
+        ctx: &mut Ctx<'_>,
+    ) -> Result<bool, PluginError> {
+        let settings = self.effective_settings(id);
+        let Some(entry) = self.plugins.get_mut(id) else {
+            return Ok(false);
+        };
+        let prefix = format!("{id}.");
+        let declared: BTreeSet<String> = entry
+            .plugin
+            .variables()
+            .into_iter()
+            .map(|spec| spec.name)
+            .collect();
+
+        let wanted: Vec<&str> = interested
+            .iter()
+            .filter(|name| declared.contains(*name) || name.starts_with(&prefix))
+            .map(String::as_str)
+            .collect();
+
+        if wanted.is_empty() {
+            return Ok(false);
+        }
+
+        let mut scoped = Ctx {
+            input: &mut *ctx.input,
+            vars: ctx.vars,
+            notifier: &mut *ctx.notifier,
+            settings: &settings,
+            now_ms: ctx.now_ms,
+        };
+        entry.plugin.sample(&wanted, &mut scoped)?;
+        Ok(true)
     }
 
     /// The catalogue as JSON, for the editor to build its forms from.

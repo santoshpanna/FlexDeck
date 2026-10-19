@@ -29,6 +29,7 @@ export function ShellController({ children }: ShellControllerProps) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [consent, setConsent] = useState<Consent | null>(null);
+  const [consentError, setConsentError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [preview, setPreview] = useState<RepoPreview | null>(null);
   const [logs, setLogs] = useState<Record<string, string[]>>({});
@@ -147,6 +148,7 @@ export function ShellController({ children }: ShellControllerProps) {
     plugins,
     installed,
     consent,
+    consentError,
     catalog: catalog?.plugins ?? null,
     repositories: catalog?.repositories ?? [],
     vettedError: catalog?.vettedError ?? null,
@@ -181,6 +183,7 @@ export function ShellController({ children }: ShellControllerProps) {
       void act(async () => {
         const bytes = await base64(file);
         const inspected = await shell.inspectPlugin(bytes);
+        setConsentError(null);
         setConsent({
           source: { kind: "file", bytes },
           package: inspected.package,
@@ -189,6 +192,7 @@ export function ShellController({ children }: ShellControllerProps) {
         });
       }),
     onPick: (entry: CatalogEntry) => {
+      setConsentError(null);
       setConsent({
         source: { kind: "repository", repo: entry.repo.url, id: entry.id },
         package: {
@@ -232,7 +236,16 @@ export function ShellController({ children }: ShellControllerProps) {
         await loadCatalog();
       }),
     onAccept: () => {
-      if (consent) void act(() => install(consent));
+      if (!consent) return;
+      setConsentError(null);
+      void act(async () => {
+        try {
+          await install(consent);
+        } catch (caught) {
+          setConsentError(describe(caught));
+          throw caught;
+        }
+      });
     },
     onCancel: () => setConsent(null),
     onLink: (path: string) => void act(() => shell.linkPlugin(path)),

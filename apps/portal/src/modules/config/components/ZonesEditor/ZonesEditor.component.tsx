@@ -4,9 +4,9 @@ import { useState } from "react";
 import { Glyph, Label, Segmented, cn } from "@flexdeck/ui";
 
 import { Icon } from "../../../../common/components/Icon/Icon.component.tsx";
-import type { WireConfig, WireWidget } from "../../../../services/api/api.ts";
+import type { VariableChoice, WireConfig, WireWidget } from "../../../../services/api/api.ts";
 import { MUSIC_ZONES, editFace, renameZone, setZones, zoneName } from "../../lib/face.edit.lib.ts";
-import { DraftInput, control } from "../Flow/fields.tsx";
+import { DraftInput, ExpressionInput, control } from "../Flow/fields.tsx";
 import { IconPicker } from "../IconPicker/IconPicker.component.tsx";
 
 type WidgetEdit = (transform: (config: WireConfig, widgetId: string) => WireConfig) => void;
@@ -16,7 +16,7 @@ type WidgetEdit = (transform: (config: WireConfig, widgetId: string) => WireConf
  * each with its own action (set under Does). The rest of the face sits above
  * them.
  */
-export function ZonesEditor({ widget, onEdit }: { widget: WireWidget; onEdit: WidgetEdit }) {
+export function ZonesEditor({ widget, onEdit, variables }: { widget: WireWidget; onEdit: WidgetEdit; variables: readonly VariableChoice[] }) {
   const zones = widget.face?.zones ?? [];
   const [open, setOpen] = useState<number | null>(null);
   const [which, setWhich] = useState<"icon" | "iconOn">("icon");
@@ -67,12 +67,13 @@ export function ZonesEditor({ widget, onEdit }: { widget: WireWidget; onEdit: Wi
             <div className="flex flex-col gap-2">
               <label className="flex items-center gap-2 text-[12px] text-muted">
                 <span className="w-24 shrink-0">Other icon while</span>
-                <DraftInput
-                  aria-label="Other icon while"
+                <ExpressionInput
+                  label="Other icon while"
                   value={zone.when ?? ""}
+                  variables={variables}
                   placeholder="media.current.playing"
                   onCommit={(when) => update(index, { when: when.trim() || undefined })}
-                  className={cn(control, "h-8 flex-1 font-mono")}
+                  className="h-8 flex-1"
                 />
               </label>
               {zone.when ? (

@@ -10,7 +10,7 @@ import { editFace, hasFace, setCustomFace, setKeyFill } from "../../lib/face.edi
 import { fillOf } from "../../lib/fill.lib.ts";
 import { FaceEditor } from "../FaceEditor/FaceEditor.component.tsx";
 import { FaceView } from "../FaceView/FaceView.component.tsx";
-import { IconPicker } from "../IconPicker/IconPicker.component.tsx";
+import { IconField } from "../IconPicker/IconPicker.component.tsx";
 import { KeyGallery } from "../KeyGallery/KeyGallery.component.tsx";
 import { suggestedActions } from "../../lib/presets.lib.ts";
 import { LooksEditor } from "../LooksEditor/LooksEditor.component.tsx";
@@ -388,7 +388,7 @@ function Looks(p: WidgetInspectorProps) {
             error={preview?.error}
             canvas={{ widget, preview }}
           />
-          <ZonesEditor widget={widget} onEdit={onEdit} />
+          <ZonesEditor widget={widget} onEdit={onEdit} variables={variables} />
         </>
       ) : (
         <>
@@ -457,18 +457,23 @@ function SimpleLooks({ widget, variables, onBinding, onEdit, onIcon, previewStat
         {template ? <TemplatePreview text={template} /> : <p className="m-0 text-[11px] text-faint">Put a value in double braces and the tablet keeps it current.</p>}
       </section>
 
-      <section className="flex flex-col gap-2.5">
-        <Label>Icon</Label>
-        <IconPicker value={widget.props?.icon} onPick={onIcon} />
-        <ValueInput
-          label="Icon follows"
-          value={iconTemplate}
-          kinds={["text"]}
-          variables={variables}
-          placeholder="or follow a value: {{media.current.art}}"
-          onCommit={(next) => onEdit((config, id) => setIconTemplate(config, id, next))}
-        />
-      </section>
+      {(widget.states?.looks ?? []).length === 0 ? (
+        <section className="flex flex-col gap-2.5">
+          <Label>Icon</Label>
+          <div className="flex">
+            <IconField label="Icon" value={widget.props?.icon} placeholder={iconTemplate ? `follows ${iconTemplate}` : "No icon"} onPick={onIcon}>
+              <ValueInput
+                label="Icon follows"
+                value={iconTemplate}
+                kinds={["text"]}
+                variables={variables}
+                placeholder="or follow a value: {{media.current.art}}"
+                onCommit={(next) => onEdit((config, id) => setIconTemplate(config, id, next))}
+              />
+            </IconField>
+          </div>
+        </section>
+      ) : null}
 
       <section className="flex flex-col gap-2.5">
         <Label>Text</Label>

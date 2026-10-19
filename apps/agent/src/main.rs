@@ -39,6 +39,7 @@ async fn main() -> ExitCode {
     match run(args).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            tracing::error!("the agent could not start: {error}");
             eprintln!("the agent could not start: {error}");
             ExitCode::FAILURE
         }
@@ -46,6 +47,9 @@ async fn main() -> ExitCode {
 }
 
 async fn run(args: Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if let Err(error) = flexdeck_agent::logging::init(&args.data_dir) {
+        eprintln!("warning: could not open the log file: {error}");
+    }
     let host = Host::assemble(Options {
         data_dir: args.data_dir,
         port: args.port,

@@ -21,3 +21,9 @@ flexdeck-server = { path = "../../crates/flexdeck-server" }
 flexdeck-store = { path = "../../crates/flexdeck-store" }
 open = "5"
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "net"] }
+tracing = "0.1.44"
+tracing-appender = "0.2.5"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "std", "registry", "chrono", "tracing-log"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"

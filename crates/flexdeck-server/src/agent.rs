@@ -1084,10 +1084,10 @@ fn run_upgrades(store: &ConfigStore) {
         Ok(())
     };
     if let Err(error) = apply() {
-        eprintln!("agent: could not move keys onto shared data sources: {error}");
+        tracing::warn!("could not move keys onto shared data sources: {error}");
     }
     if let Err(error) = store.set_meta(crate::upgrade::UPGRADES_KEY, &crate::upgrade::LATEST.to_string()) {
-        eprintln!("agent: could not note the deck upgrades: {error}");
+        tracing::warn!("could not note the deck upgrades: {error}");
     }
 }
 

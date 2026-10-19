@@ -16,6 +16,8 @@
 //! the two entry points want the same words and only one of them is a console
 //! program by nature.
 
+pub mod logging;
+
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -115,6 +117,7 @@ impl Host {
             Err(error) => {
                 // Not fatal: the configuration, the portal and pairing all still
                 // work. Only pressing a button does nothing.
+                tracing::warn!("no input system is available, so actions will do nothing: {error}");
                 eprintln!("warning: no input system is available, so actions will do nothing");
                 eprintln!("         ({error})");
             }
@@ -151,7 +154,10 @@ impl Host {
                     Ok(linked) => {
                         eprintln!("linked plugin '{}' from {}", linked.id, path.display())
                     }
-                    Err(error) => eprintln!("warning: could not link {}: {error}", path.display()),
+                    Err(error) => {
+                        tracing::warn!("could not link {}: {error}", path.display());
+                        eprintln!("warning: could not link {}: {error}", path.display())
+                    }
                 }
             }
         }
@@ -428,11 +434,13 @@ async fn serve_loopback(parts: &HostParts, api: axum::Router) -> Option<AbortOnD
             println!("Serving this computer's browser on http://127.0.0.1:{port}");
             Some(AbortOnDrop(tokio::spawn(async move {
                 if let Err(error) = axum::serve(listener, app).await {
+                    tracing::error!("the same-PC listener stopped: {error}");
                     eprintln!("warning: the same-PC listener stopped: {error}");
                 }
             })))
         }
         Err(error) => {
+            tracing::warn!("could not open http://127.0.0.1:{port} for this computer's browser: {error}");
             eprintln!(
                 "warning: could not open http://127.0.0.1:{port} for this computer's browser \
                  ({error}); pair it with a code instead"

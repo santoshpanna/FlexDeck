@@ -42,6 +42,7 @@ pub mod tunnel;
 pub mod upgrade;
 pub mod web_access;
 pub mod verify;
+pub mod watch;
 pub mod widgets;
 pub mod ws;
 

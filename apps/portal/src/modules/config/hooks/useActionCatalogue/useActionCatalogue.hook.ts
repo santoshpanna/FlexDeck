@@ -1,7 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 
 import { useApi } from "../../../../hooks/useApi/useApi.hook.ts";
 import type { ActionDefinition, PluginEventChoice, VariableChoice } from "../../../../services/api/api.ts";
+import { useDesktopResource } from "../useDesktopResource/useDesktopResource.hook.ts";
 
 export interface ActionCatalogueValue {
   catalogue: ActionDefinition[];
@@ -10,7 +11,16 @@ export interface ActionCatalogueValue {
   /** Every live value a plugin on this desktop owns. */
   variables: VariableChoice[];
   reload: () => Promise<void>;
+  ensure: () => Promise<void>;
 }
+
+interface Answer {
+  actions: ActionDefinition[];
+  events: PluginEventChoice[];
+  variables: VariableChoice[];
+}
+
+const NONE: never[] = [];
 
 /**
  * The actions every plugin on this desktop exposes.
@@ -25,23 +35,16 @@ export interface ActionCatalogueValue {
  */
 export function useActionCatalogue(desktopId: string | null): ActionCatalogueValue {
   const api = useApi();
-  const [catalogue, setCatalogue] = useState<ActionDefinition[]>([]);
-  const [events, setEvents] = useState<PluginEventChoice[]>([]);
-  const [variables, setVariables] = useState<VariableChoice[]>([]);
 
-  const reload = useCallback(async () => {
-    if (!desktopId) {
-      setCatalogue([]);
-      setEvents([]);
-      setVariables([]);
-      return;
-    }
+  const load = useCallback(() => api.plugins(desktopId ?? ""), [api, desktopId]);
+  const { resource, reload, ensure } = useDesktopResource<Answer>(desktopId, "catalogue", load);
+  const answer = desktopId === null ? undefined : resource.value;
 
-    const answer = await api.plugins(desktopId);
-    setCatalogue(answer.actions);
-    setEvents(answer.events);
-    setVariables(answer.variables);
-  }, [api, desktopId]);
-
-  return { catalogue, events, variables, reload };
+  return {
+    catalogue: answer?.actions ?? NONE,
+    events: answer?.events ?? NONE,
+    variables: answer?.variables ?? NONE,
+    reload,
+    ensure,
+  };
 }

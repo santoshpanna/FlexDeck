@@ -33,6 +33,7 @@ tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "
 tokio-tungstenite = { version = "0.30.0", features = ["rustls-tls-webpki-roots"] }
 tower = { version = "0.5.3", features = ["util"] }
 tower-http = { version = "0.7.1", features = ["fs"] }
+tracing = "0.1.44"
 url = "2"
 # `rustls-no-provider`: the agent already links rustls with aws-lc-rs, and a
 # second provider (ureq's default is ring) makes rustls refuse to pick either.

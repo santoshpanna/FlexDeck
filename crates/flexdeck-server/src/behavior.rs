@@ -304,15 +304,8 @@ impl Behavior {
     /// say) has no widgets rather than failing every press: the editor is
     /// where that is reported and fixed.
     pub fn widget_plans(&self) -> Arc<Vec<WidgetPlan>> {
-        let snapshot = self
-            .inner
-            .store
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .snapshot_document(&CONFIG)
-            .ok()
-            .flatten();
-        let Some((rev, json)) = snapshot else {
+        let store = self.inner.store.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(head) = store.rev_document(&CONFIG).ok().flatten() else {
             return Arc::new(Vec::new());
         };
         {
@@ -321,10 +314,15 @@ impl Behavior {
                 .widgets
                 .read()
                 .unwrap_or_else(PoisonError::into_inner);
-            if cached.0 == rev {
+            if cached.0 == head {
                 return Arc::clone(&cached.1);
             }
         }
+        let snapshot = store.snapshot_document(&CONFIG).ok().flatten();
+        drop(store);
+        let Some((rev, json)) = snapshot else {
+            return Arc::new(Vec::new());
+        };
         let fresh = Arc::new(crate::widgets::parse(&json, &self.inner.limits).unwrap_or_default());
         *self
             .inner
@@ -350,7 +348,7 @@ impl Behavior {
         let Ok(json) = serde_json::to_string(&values) else { return };
         let store = self.inner.store.lock().unwrap_or_else(PoisonError::into_inner);
         if let Err(error) = store.set_meta(Self::USER_VARS_KEY, &json) {
-            eprintln!("behavior: could not keep your values: {error}");
+            tracing::warn!("could not keep your values: {error}");
         }
     }
 
@@ -381,7 +379,7 @@ impl Behavior {
         if let Ok(json) = serde_json::to_string(&locale) {
             let store = self.inner.store.lock().unwrap_or_else(PoisonError::into_inner);
             if let Err(error) = store.set_meta(Self::LOCALE_KEY, &json) {
-                eprintln!("behavior: could not keep the formats: {error}");
+                tracing::warn!("could not keep the formats: {error}");
             }
         }
         *self.inner.locale.write().unwrap_or_else(PoisonError::into_inner) = locale;
@@ -580,6 +578,11 @@ impl Behavior {
         ViewerGuard {
             behavior: self.clone(),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn viewer_count(&self) -> usize {
+        self.inner.viewers.load(Ordering::SeqCst)
     }
 
     /// Show a notification on behalf of a plugin.
@@ -826,6 +829,7 @@ impl Behavior {
         gesture: Gesture,
         zone: &str,
     ) -> Result<Interaction, BehaviorError> {
+        let pressing = crate::watch::busy("press", format!("{widget_id} {gesture:?}"), crate::watch::PRESS);
         let plans = self.widget_plans();
         let Some(plan) = plans.iter().find(|plan| plan.widget_id == widget_id) else {
             return Ok(Interaction::default());
@@ -841,9 +845,11 @@ impl Behavior {
             .notifier
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
+        drop(pressing);
 
         let mut interaction = Interaction::default();
         if let Some(index) = plan.flow_index(gesture, zone) {
+            let _flowing = crate::watch::busy("key flow", format!("{widget_id} {gesture:?}"), crate::watch::AUTOMATION);
             let flow = Automation {
                 id: format!("widget:{widget_id}"),
                 name: format!("{widget_id} ({gesture:?})"),
@@ -899,6 +905,7 @@ impl Behavior {
                 )));
             }
             for automation in triggered {
+                let _running = crate::watch::busy("automation", automation.id.clone(), crate::watch::AUTOMATION);
                 let mut sleeper = ThreadSleeper;
                 let _ = self.run_with(
                     &automation,
@@ -912,6 +919,7 @@ impl Behavior {
         }
         drop(notifier_guard);
 
+        let _showing = crate::watch::busy("press result", widget_id.to_string(), crate::watch::PRESS);
         self.push_widget_states(|candidate| {
             candidate.widget_id == widget_id && candidate.is_live()
         });
@@ -1048,10 +1056,23 @@ impl Behavior {
     /// Called from the variable-change subscription set up by [`Self::start`].
     /// Public so a test can drive it directly.
     pub fn on_variable_changed(&self, name: &str) {
-        self.push_widget_states(|plan| plan.reads(name));
+        self.react_to_change(name);
         if flexdeck_vars::is_user_name(name) {
             self.save_user_vars();
         }
+    }
+
+    fn on_variables_changed(&self, names: &[String]) {
+        for name in names {
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.react_to_change(name)));
+        }
+        if names.iter().any(|name| flexdeck_vars::is_user_name(name)) {
+            self.save_user_vars();
+        }
+    }
+
+    fn react_to_change(&self, name: &str) {
+        self.push_widget_states(|plan| plan.reads(name));
         let triggered: Vec<Automation> = {
             let document = self
                 .inner
@@ -1195,6 +1216,7 @@ impl Behavior {
         self.start_sampler(handle);
         self.start_scheduler(handle);
         self.start_sources(handle);
+        crate::watch::spawn_health(handle);
     }
 
     /// The data sources.
@@ -1207,7 +1229,7 @@ impl Behavior {
         let Ok(json) = serde_json::to_string(&self.inner.sources.secrets()) else { return };
         let store = self.inner.store.lock().unwrap_or_else(PoisonError::into_inner);
         if let Err(error) = store.set_meta(crate::sources::SECRETS_KEY, &json) {
-            eprintln!("behavior: could not keep the sources' secrets: {error}");
+            tracing::warn!("could not keep the sources' secrets: {error}");
         }
     }
 
@@ -1322,7 +1344,7 @@ impl Behavior {
         for (widget, (plugin, feed, args)) in &wanted {
             if restarted || feeds.1.get(widget) != Some(&(plugin.clone(), feed.clone(), args.clone())) {
                 if let Err(error) = registry.watch_feed(plugin, widget, feed, args) {
-                    eprintln!("behavior: {widget} could not watch {plugin}/{feed}: {error}");
+                    tracing::warn!("{widget} could not watch {plugin}/{feed}: {error}");
                 }
             }
         }
@@ -1355,7 +1377,11 @@ impl Behavior {
                 // Every few seconds: keys come and go with each edit.
                 if ticks % 3 == 1 {
                     let worker = me.clone();
-                    let _ = tokio::task::spawn_blocking(move || worker.sync_feeds()).await;
+                    let _ = tokio::task::spawn_blocking(move || {
+                        let _busy = crate::watch::busy("feeds", "", crate::watch::BACKGROUND);
+                        worker.sync_feeds()
+                    })
+                    .await;
                 }
                 // A timer whose time is up ends here, and says so.
                 let now_ms = me.inner.clock.now_ms();
@@ -1363,6 +1389,7 @@ impl Behavior {
                     let worker = me.clone();
                     let payload = BTreeMap::from([("name".to_string(), name)]);
                     tokio::task::spawn_blocking(move || {
+                        let _busy = crate::watch::busy("timer", payload["name"].clone(), crate::watch::AUTOMATION);
                         worker.on_plugin_event(flexdeck_plugin::builtin::timer::TIMER_PLUGIN, flexdeck_plugin::builtin::timer::FINISHED, &payload)
                     });
                 }
@@ -1371,6 +1398,7 @@ impl Behavior {
                 for run in due {
                     let worker = me.clone();
                     tokio::task::spawn_blocking(move || {
+                        let _busy = crate::watch::busy("source", crate::sources::base_name(&run.source.id, run.instance.as_deref()), crate::sources::TIMEOUT * 2);
                         let now = worker.inner.clock.now_ms() / 1000;
                         let base = crate::sources::base_name(&run.source.id, run.instance.as_deref());
                         if let Ok(read) = worker.inner.sources.run(&run, now, &worker.locale()) {
@@ -1413,28 +1441,20 @@ impl Behavior {
         let mut changes = self.inner.variables.subscribe();
         handle.spawn(async move {
             loop {
-                match changes.recv().await {
-                    Ok(change) => {
-                        // `AssertUnwindSafe` because we explicitly want a
-                        // panic inside one automation to be caught rather
-                        // than tear down the whole subscription. The
-                        // closure is the only thing that runs in the
-                        // panic-catching scope — the result is discarded
-                        // either way.
-                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            me.on_variable_changed(&change.name);
-                        }));
-                        if result.is_err() {
-                            // The panic was caught. We deliberately do not
-                            // log here: this is an always-on task and a
-                            // bad plugin would spam it. The right place
-                            // to see the panic is `sample_once`'s sibling
-                            // logging below.
-                            continue;
-                        }
-                    }
-                    Err(_error) => continue,
+                let mut names = match changes.recv().await {
+                    Ok(change) => vec![change.name],
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+                };
+                while let Ok(change) = changes.try_recv() {
+                    names.push(change.name);
                 }
+                let worker = me.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    let _busy = crate::watch::busy("changes", format!("{} changed", names.len()), crate::watch::AUTOMATION);
+                    worker.on_variables_changed(&names)
+                })
+                .await;
             }
         });
     }
@@ -1470,13 +1490,17 @@ impl Behavior {
                 // inside it surfaces as a join error rather than killing the loop.
                 let worker = me.clone();
                 let result =
-                    tokio::task::spawn_blocking(move || worker.sample_once(&interested)).await;
+                    tokio::task::spawn_blocking(move || {
+                        let _busy = crate::watch::busy("sample", format!("{} watched", interested.len()), crate::watch::BACKGROUND);
+                        worker.sample_once(&interested)
+                    })
+                    .await;
                 if result.is_err() {
                     // A panic in a plugin's `sample` must not kill the
                     // sampler. Log to stderr — a panic is a bug worth
                     // knowing about, even at the cost of one line per
                     // occurrence. The next tick will retry.
-                    eprintln!("behavior: sampler panicked; continuing");
+                    tracing::error!("sampler panicked; continuing");
                 }
                 // One point per tick, sampled or pushed, so a flat line is
                 // drawn flat rather than not at all.
@@ -1508,6 +1532,7 @@ impl Behavior {
                 // Automations sleep and press keys; neither belongs on an
                 // async worker thread.
                 let _ = tokio::task::spawn_blocking(move || {
+                    let _busy = crate::watch::busy("schedule", "", crate::watch::AUTOMATION);
                     worker.run_due_schedules(local_now());
                 })
                 .await;
@@ -1586,11 +1611,10 @@ impl Behavior {
     /// Sample once on the current thread. Public only for tests; the engine
     /// drives it on a timer from `start_sampler`.
     pub(crate) fn sample_once(&self, interested: &BTreeSet<String>) {
-        let mut registry = self
-            .inner
-            .registry
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let ids: Vec<String> = {
+            let registry = self.inner.registry.lock().unwrap_or_else(PoisonError::into_inner);
+            registry.ids().into_iter().map(str::to_string).collect()
+        };
 
         let mut remote = RemoteExecutor::new(self.inner.executor.clone());
         let now_ms = self.inner.clock.now_ms();
@@ -1601,7 +1625,8 @@ impl Behavior {
         let mut recorder = RecordingNotifier::new();
         let settings = BTreeMap::new();
 
-        let _ = {
+        for id in ids {
+            let mut registry = self.inner.registry.lock().unwrap_or_else(PoisonError::into_inner);
             let mut ctx = flexdeck_plugin::Ctx {
                 input: &mut remote,
                 vars: &self.inner.variables,
@@ -1609,8 +1634,8 @@ impl Behavior {
                 settings: &settings,
                 now_ms,
             };
-            registry.sample(interested, &mut ctx)
-        };
+            let _ = registry.sample_plugin(&id, interested, &mut ctx);
+        }
     }
 
     /// The union of every variable name an automation in the cached document
@@ -1906,6 +1931,33 @@ mod tests {
     }
 
     #[test]
+    fn a_key_whose_flow_waits_is_timed_as_a_flow_not_as_a_slow_press() {
+        let behavior = behavior();
+        store_config(
+            &behavior,
+            &deck(serde_json::json!([{"id": "waiting-key", "flows": [
+                {"trigger": {"gesture": "GESTURE_SHORT_PRESS"}, "blocks": [
+                    {"block": "wait", "ms": {"number": 300.0}}
+                ]}
+            ]}])),
+        );
+        behavior.reload().unwrap();
+        let presser = behavior.clone();
+        let press = std::thread::spawn(move || presser.interact("waiting-key", Gesture::ShortPress).unwrap());
+        let waiting = |what: &str| {
+            crate::watch::running_details(what).iter().any(|detail| detail.starts_with("waiting-key "))
+        };
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while !waiting("key flow") && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(waiting("key flow"), "the wait is counted as the key's flow");
+        assert!(!waiting("press"), "the wait is not counted against the press");
+        assert!(press.join().unwrap().ran);
+        assert!(!waiting("key flow"));
+    }
+
+    #[test]
     fn pressing_with_no_configuration_or_an_unknown_widget_runs_nothing() {
         let behavior = behavior();
         assert_eq!(
@@ -1957,6 +2009,46 @@ mod tests {
         assert!(interaction.ran);
         let failure = interaction.failure.expect("the press reports a failure");
         assert!(failure.contains("nobody"), "{failure}");
+    }
+
+    #[test]
+    fn an_automation_that_waits_does_not_hold_up_the_async_workers() {
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let behavior = behavior();
+        let automations = serde_json::json!({
+            "schema": 1, "rev": 0,
+            "automations": [{
+                "id": "slow",
+                "name": "slow",
+                "enabled": true,
+                "trigger": { "on": "variables", "names": ["system.audio.volume"] },
+                "body": [
+                    { "block": "wait", "ms": { "number": 500.0 } },
+                    { "block": "setVariable", "name": "example.counter", "value": { "number": 1.0 } }
+                ]
+            }]
+        })
+        .to_string();
+        store_automations(&behavior, &automations);
+        behavior.reload().unwrap();
+
+        runtime.block_on(async {
+            behavior.start_subscription(&tokio::runtime::Handle::current());
+            tokio::task::yield_now().await;
+            let started = std::time::Instant::now();
+            behavior.inner.variables.refresh("system.audio.volume", Value::Number(7.0)).unwrap();
+            tokio::task::yield_now().await;
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            assert!(started.elapsed() < std::time::Duration::from_millis(300), "{:?}", started.elapsed());
+
+            for _ in 0..100 {
+                if behavior.inner.variables.get("example.counter") == Some(Value::Number(1.0)) {
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            panic!("the automation never finished");
+        });
     }
 
     #[test]

@@ -484,7 +484,10 @@ export function PluginsPanel({ desktopId, onChanged }: PluginsPanelProps): React
                         </span>
                       </span>
                     </button>
-                    <Key size="sm" tone={action.primary ? "signal" : "default"} disabled={busy || !action.enabled} onClick={() => setPending(pendingFromEntry(entry))}>
+                    <Key size="sm" tone={action.primary ? "signal" : "default"} disabled={busy || !action.enabled} onClick={() => {
+                      setError(null);
+                      setPending(pendingFromEntry(entry));
+                    }}>
                       {action.label}
                     </Key>
                   </div>
@@ -574,6 +577,7 @@ export function PluginsPanel({ desktopId, onChanged }: PluginsPanelProps): React
                 ? "Plugins run as programs on your desktop. It checks the download matches what the repository listed before running anything."
                 : "Plugins run as programs on your desktop."}
             </p>
+            {error ? <Notice>{error}</Notice> : null}
             <div className="flex gap-2.5">
               <Key size="lg" className="flex-1" disabled={busy} onClick={() => setPending(null)}>
                 Cancel

@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useStore } from "@questorylabs/qhttp/react";
+import { useCallback, useMemo } from "react";
 
 import { useApi } from "../../../../hooks/useApi/useApi.hook.ts";
 import { ApiError, type Automation, type AutomationDocument, type Run } from "../../../../services/api/api.ts";
+import { readingOf } from "../../lib/resource.lib.ts";
+import { useDesktopResource } from "../useDesktopResource/useDesktopResource.hook.ts";
 
 /**
  * What the document read is doing.
@@ -22,18 +25,13 @@ export interface AutomationsValue {
   /// Re-read the document. Throws on failure; the controller already has the
   /// page-wide error surface.
   reload: () => Promise<void>;
+  ensure: () => Promise<void>;
   /// Replace the entire document. The agent stamps its own `rev`; the client
   /// never writes the document's revision number itself.
   put: (next: AutomationDocument) => Promise<void>;
   /// Dry-run one automation. The trace comes back as the same wire shape the
   /// editor renders, so no translation is needed in the UI.
   dryRun: (automationId: string) => Promise<Run>;
-}
-
-interface Reading {
-  desktopId: string | null;
-  status: AutomationsStatus;
-  document: AutomationDocument | null;
 }
 
 /// An empty-but-valid stub. The editor renders this as "no automations yet".
@@ -49,62 +47,44 @@ const EMPTY: AutomationDocument = { schema: 1, rev: 0, automations: [] };
  */
 export function useAutomations(desktopId: string | null): AutomationsValue {
   const api = useApi();
-  const [reading, setReading] = useState<Reading>({
-    desktopId: null,
-    status: "idle",
-    document: null,
-  });
+  const store = useStore();
 
-  /// Which read is the current one. A response that is no longer the latest is
-  /// dropped so a slow read of the previous desktop does not clobber the new
-  /// desktop's state.
-  const latest = useRef(0);
-
-  const reload = useCallback(async () => {
-    if (desktopId === null) {
-      setReading({ desktopId: null, status: "idle", document: null });
-      return;
-    }
-    const ticket = ++latest.current;
-    // A re-read of what is already shown keeps showing it, rather than blanking
-    // the automations (and anything drawn from them) until the answer lands.
-    setReading((previous) =>
-      previous.desktopId === desktopId && previous.document !== null ? previous : { desktopId, status: "loading", document: null },
-    );
+  const load = useCallback(async (): Promise<AutomationDocument | null> => {
     try {
-      const document = await api.automations(desktopId);
-      if (ticket !== latest.current) return;
-      const isEmpty = (document.automations ?? []).length === 0;
-      setReading({
-        desktopId,
-        status: isEmpty ? "empty" : "loaded",
-        document: isEmpty ? EMPTY : document,
-      });
+      return await api.automations(desktopId ?? "");
     } catch (cause) {
-      if (ticket !== latest.current) return;
       // 404 means "no document yet" — treat as an empty stub, not a failure.
       // The agent's storage layer returns this on first run.
-      if (cause instanceof ApiError && cause.status === 404) {
-        setReading({ desktopId, status: "empty", document: EMPTY });
-        return;
-      }
-      setReading({ desktopId, status: "failed", document: null });
+      if (cause instanceof ApiError && cause.status === 404) return null;
       throw cause;
     }
   }, [api, desktopId]);
+
+  const { resource, reload, ensure } = useDesktopResource<AutomationDocument | null>(desktopId, "automations", load);
+  const status = readingOf(desktopId, resource, (document) => (document?.automations ?? []).length === 0);
+  const value = resource.value;
+  const document = useMemo(() => {
+    if (status === "loaded") return value ?? null;
+    if (status === "empty") return value ? { ...EMPTY, rev: value.rev } : EMPTY;
+    return null;
+  }, [status, value]);
 
   const put = useCallback(
     async (next: AutomationDocument) => {
       if (desktopId === null) throw new Error("no desktop selected");
       const answer = await api.putAutomations(desktopId, next);
-      // Re-read so the response's `rev` wins; the client's input was advisory.
-      setReading((prev) =>
-        prev.document === null
-          ? prev
-          : { ...prev, document: { ...prev.document, rev: answer.rev } },
+      const id = [desktopId, "automations"];
+      const shown = store.snapshot<AutomationDocument | null>(id);
+      if (shown.busy) {
+        await store.reload(id, load).catch(() => undefined);
+        return;
+      }
+      if (shown.value === undefined || shown.error !== null) return;
+      store.update<AutomationDocument | null>(id, (previous) =>
+        previous ? { ...previous, rev: answer.rev } : { ...EMPTY, rev: answer.rev },
       );
     },
-    [api, desktopId],
+    [api, store, desktopId, load],
   );
 
   const dryRun = useCallback(
@@ -115,16 +95,11 @@ export function useAutomations(desktopId: string | null): AutomationsValue {
     [api, desktopId],
   );
 
-  useEffect(() => {
-    void reload().catch(() => {
-      // The error is already on the reading's status; nothing else to do.
-    });
-  }, [reload]);
-
   return {
-    document: reading.document,
-    status: reading.status,
+    document,
+    status,
     reload,
+    ensure,
     put,
     dryRun,
   };

@@ -131,6 +131,18 @@ export function iconByName(name: string): IconDefinition | null {
   return BY_NAME.get(name) ?? null;
 }
 
+export function byCategory<T extends { category?: string }>(icons: readonly T[]): [string | null, T[]][] {
+  if (!icons.some((icon) => icon.category)) return icons.length ? [[null, [...icons]]] : [];
+  const groups = new Map<string, T[]>();
+  for (const icon of icons) {
+    const category = icon.category || "Other";
+    groups.set(category, [...(groups.get(category) ?? []), icon]);
+  }
+  const other = groups.get("Other");
+  groups.delete("Other");
+  return [...groups, ...(other ? [["Other", other] as [string, T[]]] : [])];
+}
+
 /// Icons whose name or title contains the query. An empty query returns them all.
 export function searchIcons(query: string): IconDefinition[] {
   const needle = query.trim().toLowerCase();

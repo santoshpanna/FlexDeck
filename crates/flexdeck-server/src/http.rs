@@ -370,6 +370,9 @@ impl ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        if self.status.is_server_error() {
+            tracing::error!(status = self.status.as_u16(), "{}", self.message);
+        }
         (self.status, Json(json!({ "error": self.message }))).into_response()
     }
 }
@@ -544,6 +547,7 @@ async fn argument_choices(
     let registry = Arc::clone(agent.behavior().registry());
     // The plugin is a process with a deadline of seconds: not on a worker.
     let answer = tokio::task::spawn_blocking(move || {
+        let _busy = crate::watch::busy("choices", format!("{}/{}", query.plugin, query.action), crate::watch::PLUGIN_WORK);
         let action = flexdeck_protocol::Action {
             plugin: query.plugin,
             action: query.action,
@@ -595,9 +599,12 @@ impl From<PluginsError> for ApiError {
 async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, PluginsError> + Send + 'static,
 ) -> Result<Result<T, PluginsError>, ApiError> {
-    tokio::task::spawn_blocking(work)
-        .await
-        .map_err(|error| ApiError::internal(error.to_string()))
+    tokio::task::spawn_blocking(move || {
+        let _busy = crate::watch::busy("plugin work", std::any::type_name_of_val(&work), crate::watch::PLUGIN_WORK);
+        work()
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))
 }
 
 /// Where a package comes from.
@@ -961,13 +968,16 @@ async fn plugin_settings(
 ) -> Result<Json<Value>, ApiError> {
     let worker = Arc::clone(&agent);
     let id = request.id.clone();
-    tokio::task::spawn_blocking(move || worker.set_plugin_settings(&id, request.values))
-        .await
-        .map_err(|error| ApiError::internal(error.to_string()))?
-        .map_err(|error| match error {
-            AgentError::Plugin(error) => ApiError::bad_request(error.to_string()),
-            other => ApiError::from(other),
-        })?;
+    tokio::task::spawn_blocking(move || {
+        let _busy = crate::watch::busy("plugin settings", id.clone(), crate::watch::PLUGIN_WORK);
+        worker.set_plugin_settings(&id, request.values)
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?
+    .map_err(|error| match error {
+        AgentError::Plugin(error) => ApiError::bad_request(error.to_string()),
+        other => ApiError::from(other),
+    })?;
     Ok(Json(json!({ "id": request.id })))
 }
 
@@ -1266,6 +1276,7 @@ async fn test_source(
     }
     let behavior = agent.behavior().clone();
     let answer = tokio::task::spawn_blocking(move || {
+        let _busy = crate::watch::busy("source test", request.source.id.clone(), crate::sources::TIMEOUT * 2);
         let mut args: std::collections::BTreeMap<String, String> =
             request.source.args.iter().map(|a| (a.name.clone(), a.default.clone())).collect();
         args.extend(request.args);

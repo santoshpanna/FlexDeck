@@ -57,7 +57,7 @@ const MAX_CLIENT_MESSAGE_BYTES: usize = 16 * 1024;
 /// browser exactly as they do for a tablet on screen.
 #[derive(Default)]
 pub struct RemoteWatch {
-    lease: Mutex<Option<(Instant, ViewerGuard)>>,
+    lease: Arc<Mutex<Option<(Instant, ViewerGuard)>>>,
 }
 
 impl std::fmt::Debug for RemoteWatch {
@@ -69,17 +69,34 @@ impl std::fmt::Debug for RemoteWatch {
 impl RemoteWatch {
     /// Start, or extend, the lease.
     pub fn renew(&self, agent: &Agent) {
-        let mut lease = self.lease.lock().unwrap_or_else(PoisonError::into_inner);
-        let guard = match lease.take() {
-            Some((_, guard)) => guard,
-            None => agent.behavior().viewer(),
-        };
-        *lease = Some((Instant::now() + LEASE, guard));
+        self.renew_for(agent, LEASE);
+    }
+
+    fn renew_for(&self, agent: &Agent, lease: Duration) {
+        {
+            let mut held = self.lease.lock().unwrap_or_else(PoisonError::into_inner);
+            let guard = match held.take() {
+                Some((_, guard)) => guard,
+                None => agent.behavior().viewer(),
+            };
+            *held = Some((Instant::now() + lease, guard));
+        }
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            let held = Arc::clone(&self.lease);
+            handle.spawn(async move {
+                tokio::time::sleep(lease).await;
+                Self::expire(&held);
+            });
+        }
     }
 
     /// Whether the lease still holds. One that ran out is let go here.
     pub fn is_watched(&self) -> bool {
-        let mut lease = self.lease.lock().unwrap_or_else(PoisonError::into_inner);
+        Self::expire(&self.lease)
+    }
+
+    fn expire(lease: &Mutex<Option<(Instant, ViewerGuard)>>) -> bool {
+        let mut lease = lease.lock().unwrap_or_else(PoisonError::into_inner);
         if lease.as_ref().is_some_and(|(until, _)| Instant::now() < *until) {
             return true;
         }
@@ -535,6 +552,16 @@ mod tests {
         let status = response.status();
         let bytes = axum::body::to_bytes(response.into_body(), 1 << 20).await.expect("a body");
         (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    }
+
+    #[tokio::test]
+    async fn a_lease_nobody_renews_stops_counting_as_a_viewer_on_its_own() {
+        let agent = agent();
+        let watch = RemoteWatch::default();
+        watch.renew_for(&agent, Duration::from_millis(50));
+        assert_eq!(agent.behavior().viewer_count(), 1);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(agent.behavior().viewer_count(), 0, "released without anyone asking whether it is watched");
     }
 
     #[tokio::test]

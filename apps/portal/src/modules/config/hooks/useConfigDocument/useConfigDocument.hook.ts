@@ -1,7 +1,9 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback } from "react";
 
 import { useApi } from "../../../../hooks/useApi/useApi.hook.ts";
 import { ApiError, type WireConfig } from "../../../../services/api/api.ts";
+import { readingOf } from "../../lib/resource.lib.ts";
+import { useDesktopResource } from "../useDesktopResource/useDesktopResource.hook.ts";
 
 /**
  * What the document read is doing.
@@ -26,16 +28,10 @@ export interface ConfigDocumentValue {
    * give the page two places to disagree about what went wrong.
    */
   reload: () => Promise<void>;
+  ensure: () => Promise<void>;
   put: (next: WireConfig) => Promise<void>;
   undo: () => Promise<void>;
   redo: () => Promise<void>;
-}
-
-/// One desktop's outcome.
-interface Reading {
-  desktopId: string | null;
-  status: DocumentStatus;
-  config: WireConfig | null;
 }
 
 /**
@@ -46,71 +42,22 @@ interface Reading {
  */
 export function useConfigDocument(desktopId: string | null): ConfigDocumentValue {
   const api = useApi();
-  const [reading, setReading] = useState<Reading>({
-    desktopId: null,
-    status: "idle",
-    config: null,
-  });
 
-  /// Which read is the current one. A response that is no longer the latest is
-  /// dropped: switching desktops with a read in flight would otherwise let the
-  /// SLOWER answer land last and draw one machine's deck while the writes went to
-  /// the other.
-  const latest = useRef(0);
-
-  const reload = useCallback(async () => {
-    const request = ++latest.current;
-
-    // No desktop chosen yet. There is nothing to read, and asking would be a
-    // request for an id that does not exist.
-    if (!desktopId) {
-      setReading({ desktopId: null, status: "idle", config: null });
-      return;
-    }
-
-    // A re-read of the deck already on screen (every edit ends in one) keeps it
-    // on screen: dropping to "loading" would unmount the editor and redraw it
-    // from nothing, which reads as the whole page refreshing.
-    setReading((previous) =>
-      previous.desktopId === desktopId && previous.status === "loaded" ? previous : { ...previous, status: "loading" },
-    );
-
+  const load = useCallback(async (): Promise<WireConfig | null> => {
     try {
-      const config = await api.config(desktopId);
-
-      if (request !== latest.current) {
-        return;
-      }
-
-      setReading({ desktopId, status: "loaded", config });
+      return await api.config(desktopId ?? "");
     } catch (cause) {
-      if (request !== latest.current) {
-        return;
-      }
-
       // A brand-new agent has no document until the first edit, and that is a
       // 404. A state, not a failure.
       if (cause instanceof ApiError && cause.status === 404) {
-        setReading({ desktopId, status: "empty", config: null });
-        return;
+        return null;
       }
-
-      // Drop the document rather than leaving the PREVIOUS desktop's on screen.
-      // Keeping it would draw one machine's deck while every write targeted
-      // another, and the only sign of that would be a deck that changes by itself.
-      setReading({ desktopId, status: "failed", config: null });
       throw cause;
     }
   }, [api, desktopId]);
 
-  // A document belongs to the desktop it was read FROM. Anything else is not this
-  // desktop's deck, however recently it arrived; and a desktop we have no outcome
-  // for yet is still being read, because the controller re-reads on every change
-  // of selection.
-  const current: Reading =
-    reading.desktopId === desktopId
-      ? reading
-      : { desktopId, status: desktopId === null ? "idle" : "loading", config: null };
+  const { resource, reload, ensure } = useDesktopResource<WireConfig | null>(desktopId, "config", load);
+  const status = readingOf(desktopId, resource, (value) => value === null);
 
   const put = useCallback(
     async (next: WireConfig) => {
@@ -134,9 +81,10 @@ export function useConfigDocument(desktopId: string | null): ConfigDocumentValue
   }, [api, desktopId]);
 
   return {
-    config: current.config,
-    status: current.status,
+    config: status === "loaded" ? (resource.value ?? null) : null,
+    status,
     reload,
+    ensure,
     put,
     undo,
     redo,

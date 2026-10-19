@@ -101,6 +101,9 @@ fn main() {
             plugins::plugin_log,
         ])
         .setup(move |app| {
+            if let Err(error) = flexdeck_agent::logging::init(&options.data_dir) {
+                eprintln!("warning: could not open the log file: {error}");
+            }
             // Assembled on Tauri's runtime, because enabling web access spawns
             // the tunnel task and a spawn needs a reactor to land on.
             let host = tauri::async_runtime::block_on(async { Host::assemble(options) })
@@ -183,6 +186,7 @@ fn main() {
                         return;
                     }
                     if let Some(message) = &error {
+                        tracing::error!("the agent stopped: {message}");
                         eprintln!("the agent stopped: {message}");
                     }
                     *current = error;

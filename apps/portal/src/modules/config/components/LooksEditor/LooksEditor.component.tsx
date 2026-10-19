@@ -22,7 +22,8 @@ import { FACE_SWATCHES, INK_SWATCHES } from "../../lib/face.lib.ts";
 import { HOLD_DOWN, HOLD_UP, SLOT_GESTURES, gestureBlocks, holdsOf } from "../../lib/flow.lib.ts";
 import { ColorPicker } from "../FillPicker/ColorPicker.component.tsx";
 import { FaceEditor } from "../FaceEditor/FaceEditor.component.tsx";
-import { DraftInput, VariableInput, control } from "../Flow/fields.tsx";
+import { IconField } from "../IconPicker/IconPicker.component.tsx";
+import { DraftInput, ValueInput, VariableInput, control } from "../Flow/fields.tsx";
 
 type WidgetEdit = (transform: (config: WireConfig, widgetId: string) => WireConfig) => void;
 
@@ -153,11 +154,11 @@ export function LooksEditor({
                     <>
                       <div className="flex items-center gap-2">
                         <span className="w-14 shrink-0 text-[12px] text-muted">Says</span>
-                        <DraftInput aria-label="Says" value={look.label ?? ""} placeholder="the key's own words" onCommit={(label) => onEdit((config, id) => updateLook(config, id, look.id, { label }))} className={cn(control, "h-8 flex-1")} />
+                        <ValueInput label="Says" value={look.label ?? ""} variables={variables} placeholder="the key's own words" onCommit={(label) => onEdit((config, id) => updateLook(config, id, look.id, { label }))} className="h-8 flex-1" />
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="w-14 shrink-0 text-[12px] text-muted">Icon</span>
-                        <DraftInput aria-label="Icon" value={look.icon ?? ""} placeholder="the key's own icon" onCommit={(icon) => onEdit((config, id) => updateLook(config, id, look.id, { icon }))} className={cn(control, "h-8 flex-1 font-mono")} />
+                        <IconField label={`${lookName(look, index)} icon`} value={look.icon} fallback={widget.props?.icon} placeholder="the key's own icon" onPick={(icon) => onEdit((config, id) => updateLook(config, id, look.id, { icon: icon ?? "" }))} />
                       </div>
                       <ColorPicker label="Face" swatches={FACE_SWATCHES} value={look.bgColor} onChange={(bgColor) => onEdit((config, id) => updateLook(config, id, look.id, { bgColor }))} />
                       <ColorPicker label="Text" swatches={INK_SWATCHES} value={look.fgColor} onChange={(fgColor) => onEdit((config, id) => updateLook(config, id, look.id, { fgColor }))} />

@@ -49,6 +49,8 @@ const PUSH_BUFFER: usize = 64;
 /// Finite, because "no answer" must eventually become an answer.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
+pub const WRITE_TIMEOUT: Duration = Duration::from_secs(120);
+
 /// Why a request could not be relayed.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RelayError {
@@ -105,12 +107,13 @@ struct Parts {
 pub struct Hub {
     tunnels: Mutex<HashMap<String, Tunnel>>,
     timeout: Duration,
+    write_timeout: Duration,
     generations: AtomicU64,
 }
 
 impl Default for Hub {
     fn default() -> Self {
-        Self::new(DEFAULT_TIMEOUT)
+        Self::with_timeouts(DEFAULT_TIMEOUT, WRITE_TIMEOUT)
     }
 }
 
@@ -120,9 +123,14 @@ impl Hub {
     /// The timeout is a parameter so a test can prove the give-up path in
     /// milliseconds instead of seconds.
     pub fn new(timeout: Duration) -> Self {
+        Self::with_timeouts(timeout, timeout)
+    }
+
+    pub fn with_timeouts(timeout: Duration, write_timeout: Duration) -> Self {
         Self {
             tunnels: Mutex::new(HashMap::new()),
             timeout,
+            write_timeout,
             generations: AtomicU64::new(0),
         }
     }
@@ -279,7 +287,12 @@ impl Hub {
             return Err(RelayError::Closed);
         }
 
-        match tokio::time::timeout(self.timeout, receiver).await {
+        let wait = if method.eq_ignore_ascii_case("GET") {
+            self.timeout
+        } else {
+            self.write_timeout
+        };
+        match tokio::time::timeout(wait, receiver).await {
             Ok(Ok(response)) => Ok(response),
 
             // The sender was dropped, so the tunnel went away mid-flight.
@@ -606,6 +619,38 @@ mod tests {
         assert_eq!(asking.await.expect("ran"), Err(RelayError::Timeout));
         // The tunnel is still fine: one slow request is not a dead desktop.
         assert!(hub.is_online(DESKTOP));
+    }
+
+    #[tokio::test]
+    async fn a_write_waits_longer_than_a_read() {
+        let hub = Arc::new(Hub::with_timeouts(
+            Duration::from_millis(20),
+            Duration::from_secs(5),
+        ));
+        let mut frames = hub.attach(DESKTOP);
+
+        let reading = {
+            let hub = Arc::clone(&hub);
+            tokio::spawn(async move {
+                hub.request(DESKTOP, "GET", "/api/status", String::new(), "")
+                    .await
+            })
+        };
+        let _read = next_request(&mut frames).await;
+        assert_eq!(reading.await.expect("ran"), Err(RelayError::Timeout));
+
+        let writing = {
+            let hub = Arc::clone(&hub);
+            tokio::spawn(async move {
+                hub.request(DESKTOP, "PUT", "/api/config", "{}".to_string(), "")
+                    .await
+            })
+        };
+        let write = next_request(&mut frames).await;
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        hub.resolve(DESKTOP, answer(write.id, "{\"rev\":2}"));
+        let response = writing.await.expect("ran").expect("still waited for");
+        assert_eq!(response.body, "{\"rev\":2}");
     }
 
     #[tokio::test]
