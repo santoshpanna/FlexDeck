@@ -972,6 +972,58 @@ impl Repositories {
         ))
     }
 
+    pub fn icon_packs(&self, installed: &[String]) -> Vec<Value> {
+        let rows = self.list();
+        let state = lock(&self.state);
+        rows.iter()
+            .filter(|row| row.enabled)
+            .filter_map(|row| Some((row, state.repos.get(&row.url)?.index.as_ref()?)))
+            .flat_map(|(row, index)| {
+                index.icon_packs.iter().map(move |pack| {
+                    let mut entry = serde_json::to_value(pack).expect("an entry serialises");
+                    entry["repo"] = json!({ "url": row.url, "name": row.name, "kind": row.kind });
+                    entry["installed"] = json!(
+                        installed.contains(&pack.id)
+                            || installed.contains(&crate::media::pack_id(&pack.name))
+                    );
+                    entry
+                })
+            })
+            .collect()
+    }
+
+    pub fn fetch_icon_pack(&self, repo_url: &str, id: &str) -> Result<Vec<u8>, PluginsError> {
+        abi::validate_id(id)?;
+        if self.kind_of(repo_url).is_none() {
+            return Err(PluginsError::Repository(format!(
+                "{repo_url} is not one of this desktop's repositories"
+            )));
+        }
+        let pack = lock(&self.state)
+            .repos
+            .get(repo_url)
+            .and_then(|cached| cached.index.as_ref())
+            .and_then(|index| index.icon_pack(id).cloned())
+            .ok_or_else(|| {
+                PluginsError::Repository(format!("{repo_url} does not list the icon pack '{id}'"))
+            })?;
+        if pack.package.size > crate::media::MAX_PACK as u64 {
+            return Err(PluginsError::Repository(format!(
+                "the icon pack '{id}' is larger than {} MB",
+                crate::media::MAX_PACK / 1024 / 1024
+            )));
+        }
+        let bytes = crate::plugins::download(&resolve(repo_url, &pack.package.url)?)?;
+        let actual = crate::plugins::sha256_hex(&bytes);
+        if !actual.eq_ignore_ascii_case(&pack.package.sha256) {
+            return Err(PluginsError::Checksum {
+                expected: pack.package.sha256,
+                actual,
+            });
+        }
+        Ok(bytes)
+    }
+
     /// Installed plugins whose own repository lists a newer version.
     ///
     /// Only the repository a plugin came from is asked: another repository
@@ -1177,5 +1229,48 @@ mod tests {
             repos.updates(&[file]).is_empty(),
             "a file install has no repository"
         );
+    }
+
+    #[test]
+    fn icon_packs_list_from_enabled_repositories_and_only_theirs_download() {
+        let dir = tempfile::tempdir().unwrap();
+        let repos = repositories(dir.path());
+        let official = "https://official.example/repository.min.json";
+        let index = RepoIndex::parse(
+            json!({ "schema": 1, "repo": { "name": "r" }, "iconPacks": [{
+                "id": "essentials", "name": "Essentials", "version": "2.0.0", "count": 5,
+                "package": { "url": "essentials.zip", "sha256": "0".repeat(64) }
+            }, {
+                "id": "my-icons", "name": "Cool Set", "version": "1.0.0",
+                "package": { "url": "my-icons.zip", "sha256": "0".repeat(64), "size": 1u64 << 40 }
+            }]})
+            .to_string()
+            .as_bytes(),
+        )
+        .unwrap()
+        .index;
+        lock(&repos.state).repos.insert(
+            official.into(),
+            Cached {
+                index: Some(index),
+                ..Cached::default()
+            },
+        );
+        let packs = repos.icon_packs(&["essentials".into(), "cool-set".into()]);
+        assert_eq!(packs.len(), 2);
+        assert_eq!(packs[0]["repo"]["url"], official);
+        assert_eq!(packs[0]["installed"], true);
+        assert_eq!(
+            packs[1]["installed"], true,
+            "installed under the id its name gives"
+        );
+        assert_eq!(repos.icon_packs(&[])[0]["installed"], false);
+        let too_big = repos.fetch_icon_pack(official, "my-icons").unwrap_err();
+        assert!(too_big.to_string().contains("larger than"), "{too_big}");
+        assert!(repos
+            .fetch_icon_pack("https://other.example/repository.min.json", "essentials")
+            .is_err());
+        assert!(repos.fetch_icon_pack(official, "missing").is_err());
+        assert!(repos.fetch_icon_pack(official, "Bad Id").is_err());
     }
 }

@@ -232,7 +232,7 @@ pub struct Packs {
     dir: PathBuf,
 }
 
-fn pack_id(name: &str) -> String {
+pub(crate) fn pack_id(name: &str) -> String {
     let id: String = name
         .to_lowercase()
         .chars()

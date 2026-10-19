@@ -10,6 +10,7 @@
  *                                 work: run as the app runs it, checked at every step
  *   flexdeck-plugin repo  <dir>   write repository.min.json for the .fdpkg files in <dir>
  *       [--out dir] [--name "…"] [--description "…"] [--website url] [--icons dir]
+ *       [--icon-packs dir]
  *
  * To run a plugin while writing it, link its folder from the flexdeck window
  * (Plugins → Link a folder) or start the agent with
@@ -77,9 +78,11 @@ async function main(): Promise<number> {
         description: options.description,
         website: options.website,
         icons: options.icons,
+        iconPacks: options["icon-packs"],
       });
       console.log(`wrote repository.min.json: ${index.repo.name}, ${index.plugins.length} plugins`);
       for (const plugin of index.plugins) console.log(`  ${plugin.id} ${plugin.version}  sha256 ${plugin.package.sha256}`);
+      for (const pack of index.iconPacks ?? []) console.log(`  icon pack ${pack.id} ${pack.version}  sha256 ${pack.package.sha256}`);
       return 0;
     }
     default:

@@ -49,6 +49,17 @@ pub enum RepoError {
     Duplicate(String),
 }
 
+fn package_problem(id: &str, package: &RepoPackage) -> Option<String> {
+    let sha = &package.sha256;
+    if sha.len() != 64 || !sha.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Some(format!("{id}: the package checksum is not a SHA-256"));
+    }
+    if package.url.trim().is_empty() {
+        return Some(format!("{id}: there is no package address"));
+    }
+    None
+}
+
 /// What a repository says about itself.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -114,17 +125,7 @@ impl RepoPlugin {
         if let Err(error) = validate_version(&self.version) {
             return Some(format!("{}: {error}", self.id));
         }
-        let sha = &self.package.sha256;
-        if sha.len() != 64 || !sha.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Some(format!(
-                "{}: the package checksum is not a SHA-256",
-                self.id
-            ));
-        }
-        if self.package.url.trim().is_empty() {
-            return Some(format!("{}: there is no package address", self.id));
-        }
-        None
+        package_problem(&self.id, &self.package)
     }
 
     /// The icon closest to `size` pixels without going under, or the largest,
@@ -145,6 +146,33 @@ impl RepoPlugin {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoIconPack {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub author: String,
+    #[serde(default)]
+    pub count: u32,
+    pub package: RepoPackage,
+}
+
+impl RepoIconPack {
+    pub fn problem(&self) -> Option<String> {
+        if let Err(error) = validate_id(&self.id) {
+            return Some(format!("icon pack {error}"));
+        }
+        if let Err(error) = validate_version(&self.version) {
+            return Some(format!("icon pack {}: {error}", self.id));
+        }
+        package_problem(&format!("icon pack {}", self.id), &self.package)
+    }
+}
+
 /// A whole `repository.min.json`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -153,6 +181,8 @@ pub struct RepoIndex {
     pub repo: RepoMeta,
     #[serde(default)]
     pub plugins: Vec<RepoPlugin>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub icon_packs: Vec<RepoIconPack>,
 }
 
 /// An index, and what had to be left out of it.
@@ -170,6 +200,8 @@ struct RawIndex {
     repo: Option<RepoMeta>,
     #[serde(default)]
     plugins: Vec<serde_json::Value>,
+    #[serde(default, rename = "iconPacks")]
+    icon_packs: Vec<serde_json::Value>,
 }
 
 impl RepoIndex {
@@ -210,11 +242,32 @@ impl RepoIndex {
             }
             plugins.push(plugin);
         }
+        let mut packs_seen = BTreeSet::new();
+        let mut icon_packs = Vec::new();
+        for (position, value) in raw.icon_packs.into_iter().enumerate() {
+            let pack: RepoIconPack = match serde_json::from_value(value) {
+                Ok(pack) => pack,
+                Err(error) => {
+                    dropped.push(format!("icon pack entry {}: {error}", position + 1));
+                    continue;
+                }
+            };
+            if let Some(problem) = pack.problem() {
+                dropped.push(problem);
+                continue;
+            }
+            if !packs_seen.insert(pack.id.clone()) {
+                dropped.push(format!("icon pack {}: listed more than once", pack.id));
+                continue;
+            }
+            icon_packs.push(pack);
+        }
         Ok(Parsed {
             index: RepoIndex {
                 schema: raw.schema,
                 repo: raw.repo.unwrap_or_default(),
                 plugins,
+                icon_packs,
             },
             dropped,
         })
@@ -222,6 +275,10 @@ impl RepoIndex {
 
     pub fn plugin(&self, id: &str) -> Option<&RepoPlugin> {
         self.plugins.iter().find(|plugin| plugin.id == id)
+    }
+
+    pub fn icon_pack(&self, id: &str) -> Option<&RepoIconPack> {
+        self.icon_packs.iter().find(|pack| pack.id == id)
     }
 }
 
@@ -373,6 +430,37 @@ mod tests {
         let parsed = RepoIndex::parse(bytes.to_string().as_bytes()).unwrap();
         assert_eq!(parsed.index.plugins.len(), 1);
         assert!(parsed.dropped.is_empty());
+    }
+
+    fn pack(id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id, "name": id, "version": "2.0.0", "count": 3,
+            "package": { "url": format!("{id}.zip"), "sha256": SHA }
+        })
+    }
+
+    #[test]
+    fn icon_packs_list_beside_plugins_and_bad_ones_are_dropped() {
+        let bytes = serde_json::json!({
+            "schema": 1, "repo": { "name": "x" },
+            "plugins": [entry("obs", "1.0.0")],
+            "iconPacks": [pack("essentials"), pack("essentials"), pack("Bad Id"), { "id": "nameless" }]
+        });
+        let parsed = RepoIndex::parse(bytes.to_string().as_bytes()).unwrap();
+        assert_eq!(parsed.index.plugins.len(), 1);
+        assert_eq!(parsed.index.icon_packs.len(), 1);
+        assert_eq!(parsed.index.icon_pack("essentials").unwrap().count, 3);
+        assert_eq!(parsed.dropped.len(), 3, "{:?}", parsed.dropped);
+    }
+
+    #[test]
+    fn an_index_without_icon_packs_writes_none() {
+        let parsed = RepoIndex::parse(&index(vec![entry("obs", "1.0.0")])).unwrap();
+        assert!(parsed.index.icon_packs.is_empty());
+        assert!(serde_json::to_value(&parsed.index)
+            .unwrap()
+            .get("iconPacks")
+            .is_none());
     }
 
     #[test]

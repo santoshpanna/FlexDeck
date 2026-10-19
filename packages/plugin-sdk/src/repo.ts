@@ -45,10 +45,21 @@ export interface RepoPlugin {
   package: RepoPackage;
 }
 
+export interface RepoIconPack {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  count: number;
+  package: RepoPackage;
+}
+
 export interface RepoIndex {
   schema: number;
   repo: { name: string; description: string; website?: string; icon?: string };
   plugins: RepoPlugin[];
+  iconPacks?: RepoIconPack[];
 }
 
 export interface RepoOptions {
@@ -59,6 +70,7 @@ export interface RepoOptions {
   website?: string;
   /** A folder of `<id>.png` and `<id>-<size>.png` icons. */
   icons?: string;
+  iconPacks?: string;
   /** The time stamped on new versions. Default: now. */
   now?: Date;
 }
@@ -123,6 +135,42 @@ function iconsFor(id: string, iconDir: string | undefined, out: string): Pick<Re
   return result;
 }
 
+function iconPacksIn(dir: string | undefined, out: string, before: RepoIconPack[]): RepoIconPack[] {
+  if (!dir || !existsSync(dir)) return [];
+  const old = new Map(before.map((pack) => [pack.id, pack]));
+  const packs: RepoIconPack[] = [];
+  for (const name of readdirSync(dir).filter((name) => name.endsWith(".zip")).sort()) {
+    const id = name.slice(0, -".zip".length);
+    if (!isValidId(id)) throw new Error(`${name}: '${id}' is not a usable id`);
+    const file = join(dir, name);
+    const bytes = readFileSync(file);
+    const base = unzipEntry(bytes, `${id}/manifest.json`) ? `${id}/` : "";
+    const raw = unzipEntry(bytes, `${base}manifest.json`);
+    if (!raw) throw new Error(`${name} has no manifest.json`);
+    const manifest = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+    const field = (key: string) => [manifest[key], manifest[key.toLowerCase()]].find((value) => typeof value === "string") ?? "";
+    const version = field("Version");
+    if (!/^\d[0-9A-Za-z.+-]*$/.test(version) || version.includes("..")) throw new Error(`${name}: '${version}' is not a usable version`);
+    const listed = unzipEntry(bytes, `${base}icons.json`);
+    const icons: unknown = listed ? JSON.parse(listed.toString("utf8")) : [];
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const previous = old.get(id);
+    if (previous && previous.version === version && previous.package.sha256 !== sha256) {
+      throw new Error(`icon pack ${id} ${version} is already published with different bytes; a published version never changes, so bump the version`);
+    }
+    packs.push({
+      id,
+      name: field("Name") || id,
+      version,
+      description: field("Description"),
+      author: field("Author"),
+      count: Array.isArray(icons) ? icons.length : 0,
+      package: { url: address(out, file), sha256, size: bytes.length },
+    });
+  }
+  return packs;
+}
+
 /** Build the index for every `.fdpkg` in `packages`, write both files, and return it. */
 export function buildRepository(packages: string, options: RepoOptions = {}): RepoIndex {
   const packagesDir = resolve(packages);
@@ -179,6 +227,8 @@ export function buildRepository(packages: string, options: RepoOptions = {}): Re
     },
     plugins,
   };
+  const iconPacks = iconPacksIn(options.iconPacks && resolve(options.iconPacks), out, previous?.iconPacks ?? []);
+  if (iconPacks.length > 0) index.iconPacks = iconPacks;
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, "repository.min.json"), JSON.stringify(index));
   writeFileSync(join(out, "repository.json"), `${JSON.stringify(index, null, 2)}\n`);

@@ -4,7 +4,7 @@ import { Glyph, Label, Sheet, cn } from "@flexdeck/ui";
 
 import { Icon } from "../../../../common/components/Icon/Icon.component.tsx";
 import { byCategory, searchIcons } from "../../../../common/icons/icons.lib.ts";
-import { fileAsBase64, type IconPack, type IconPackSummary } from "../../../../services/api/api.ts";
+import { fileAsBase64, type IconPack, type IconPackSummary, type RepositoryIconPack } from "../../../../services/api/api.ts";
 import { control } from "../Flow/fields.tsx";
 import { uploadPicture, useDesk } from "../PicturePicker/PicturePicker.component.tsx";
 
@@ -21,6 +21,7 @@ export function IconPicker({ value, onPick }: { value: string | undefined; onPic
   const [source, setSource] = useState("bundled");
   const [query, setQuery] = useState("");
   const [packs, setPacks] = useState<IconPackSummary[]>([]);
+  const [available, setAvailable] = useState<RepositoryIconPack[]>([]);
   const [pack, setPack] = useState<IconPack | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -34,8 +35,27 @@ export function IconPicker({ value, onPick }: { value: string | undefined; onPic
       .then((answer) => setPacks(answer.packs ?? []))
       .catch(() => {});
   };
+  const loadAvailable = () => {
+    if (!api || !desktopId) return;
+    void api
+      .repositoryIconPacks(desktopId)
+      .then((answer) => setAvailable((answer.packs ?? []).filter((p) => !p.installed)))
+      .catch(() => {});
+  };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(loadPacks, [api, desktopId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(loadAvailable, [api, desktopId]);
+
+  const added = (installed: { pack: IconPackSummary; skipped: string[] }) => {
+    loadPacks();
+    loadAvailable();
+    setSource(installed.pack.id);
+    setNotice(
+      `Added ${installed.pack.count} icons from ${installed.pack.name}` +
+        (installed.skipped.length ? ` — ${installed.skipped.length} could not be used (${installed.skipped[0]})` : "."),
+    );
+  };
   useEffect(() => {
     setPack(null);
     if (source === "bundled" || !api || !desktopId) return;
@@ -104,6 +124,26 @@ export function IconPicker({ value, onPick }: { value: string | undefined; onPic
           <button type="button" disabled={busy !== null} onClick={() => zip.current?.click()} className="flex items-center gap-1 text-[12px] text-signal hover:underline disabled:opacity-50">
             <Glyph name="plus" size={11} /> {busy === "pack" ? "Adding…" : "Add an icon pack"}
           </button>
+          {available.map((p) => (
+            <button
+              key={`${p.repo.url} ${p.id}`}
+              type="button"
+              disabled={busy !== null}
+              title={`${p.count} icons from ${p.repo.name}`}
+              onClick={() => {
+                setBusy(`repo:${p.id}`);
+                setNotice(null);
+                api
+                  .installRepositoryIconPack(desktopId, p.repo.url, p.id)
+                  .then(added)
+                  .catch((problem: unknown) => setNotice(String(problem instanceof Error ? problem.message : problem)))
+                  .finally(() => setBusy(null));
+              }}
+              className="flex items-center gap-1 text-[12px] text-signal hover:underline disabled:opacity-50"
+            >
+              <Glyph name="plus" size={11} /> {busy === `repo:${p.id}` ? "Adding…" : p.name}
+            </button>
+          ))}
           {source !== "bundled" ? (
             <button
               type="button"
@@ -111,6 +151,7 @@ export function IconPicker({ value, onPick }: { value: string | undefined; onPic
                 void api.removeIconPack(desktopId, source).then(() => {
                   setSource("bundled");
                   loadPacks();
+                  loadAvailable();
                 });
               }}
               className="ml-auto text-[11px] text-muted hover:text-bad"
@@ -147,14 +188,7 @@ export function IconPicker({ value, onPick }: { value: string | undefined; onPic
               setNotice(null);
               fileAsBase64(file)
                 .then((data) => api.installIconPack(desktopId, data))
-                .then((installed) => {
-                  loadPacks();
-                  setSource(installed.pack.id);
-                  setNotice(
-                    `Added ${installed.pack.count} icons from ${installed.pack.name}` +
-                      (installed.skipped.length ? ` — ${installed.skipped.length} could not be used (${installed.skipped[0]})` : "."),
-                  );
-                })
+                .then(added)
                 .catch((problem: unknown) => setNotice(String(problem instanceof Error ? problem.message : problem)))
                 .finally(() => setBusy(null));
             }}

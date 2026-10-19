@@ -220,9 +220,21 @@ The format (schema 1):
     "icon": "icons/weather.png",
     "icons": { "64": "icons/weather-64.png", "256": "icons/weather-256.png" },
     "package": { "url": "packages/weather-0.1.0.fdpkg", "sha256": "…", "size": 12345 }
+  }],
+  "iconPacks": [{
+    "id": "my-icons", "name": "My icons", "version": "1.0.0",
+    "description": "…", "author": "…", "count": 120,
+    "package": { "url": "packs/my-icons.zip", "sha256": "…", "size": 54321 }
   }]
 }
 ```
+
+`iconPacks` is optional. Pass `--icon-packs <dir>` to `flexdeck-plugin repo` to list
+every `<id>.zip` in that folder; each zip needs a `manifest.json` (`Name`, `Author`,
+`Version`), at its root or in an `<id>/` folder, and an `icons.json` beside it gives
+the count. The icon picker offers the packs from every enabled repository and
+refuses a zip whose SHA-256 differs from its entry. A bad or repeated pack entry is
+hidden; it never hides the plugins.
 
 | Field | Notes |
 | --- | --- |

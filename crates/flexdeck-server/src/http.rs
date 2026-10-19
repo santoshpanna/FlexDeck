@@ -97,6 +97,11 @@ fn api_router(agent: Arc<Agent>) -> Router {
         .route("/api/plugins/catalog", get(plugin_catalog))
         .route("/api/plugins/updates", get(plugin_updates))
         .route("/api/plugins/repositories", get(list_repositories))
+        .route("/api/plugins/iconpacks", get(repository_packs))
+        .route(
+            "/api/plugins/iconpacks/install",
+            post(install_repository_pack),
+        )
         .route(
             "/api/plugins/repositories/preview",
             post(preview_repository),
@@ -722,6 +727,48 @@ async fn plugin_catalog(
     })
     .await??;
     Ok(Json(catalog))
+}
+
+async fn repository_packs(State(agent): State<Arc<Agent>>) -> Result<Json<Value>, ApiError> {
+    let repos = repositories(&agent)?;
+    let installed: Vec<String> = agent
+        .media()
+        .map(|media| media.packs.list().into_iter().map(|pack| pack.id).collect())
+        .unwrap_or_default();
+    let packs = blocking(move || {
+        repos.refresh(false);
+        Ok(json!({ "packs": repos.icon_packs(&installed) }))
+    })
+    .await??;
+    Ok(Json(packs))
+}
+
+#[derive(Debug, Deserialize)]
+struct RepositoryPack {
+    repo: String,
+    id: String,
+}
+
+async fn install_repository_pack(
+    State(agent): State<Arc<Agent>>,
+    Json(request): Json<RepositoryPack>,
+) -> Result<Json<Value>, ApiError> {
+    let repos = repositories(&agent)?;
+    let bytes = blocking(move || {
+        repos.refresh(false);
+        repos.fetch_icon_pack(&request.repo, &request.id)
+    })
+    .await??;
+    let installed = tokio::task::spawn_blocking(move || {
+        let media = agent
+            .media()
+            .ok_or_else(|| "this desktop has nowhere to keep pictures".to_string())?;
+        media.packs.install(&bytes, &media.pictures)
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?
+    .map_err(ApiError::bad_request)?;
+    Ok(Json(serde_json::to_value(installed)?))
 }
 
 async fn plugin_updates(State(agent): State<Arc<Agent>>) -> Result<Json<Value>, ApiError> {
@@ -2211,6 +2258,11 @@ mod tests {
             post("/api/plugins/repositories/toggle", json!({"url": "x"})),
             post("/api/plugins/repositories/refresh", json!({})),
             get("/api/plugins/catalog"),
+            get("/api/plugins/iconpacks"),
+            post(
+                "/api/plugins/iconpacks/install",
+                json!({"repo": "x", "id": "essentials"}),
+            ),
             // Asking a plugin runs its code; a tablet has no editor to ask for.
             post(
                 "/api/plugins/choices",

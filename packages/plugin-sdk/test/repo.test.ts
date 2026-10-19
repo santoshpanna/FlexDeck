@@ -81,6 +81,32 @@ test("a published version that comes back with different bytes is refused", () =
   assert.throws(() => buildRepository(dir), /never changes/);
 });
 
+function iconPack(dir: string, version: string, icons = 2): Buffer {
+  return zip([
+    { name: `${dir}/manifest.json`, data: Buffer.from(JSON.stringify({ Name: "Essentials", Author: "FlexDeck", Version: version })) },
+    { name: `${dir}/icons.json`, data: Buffer.from(JSON.stringify(Array.from({ length: icons }, (_, n) => ({ path: `${n}.svg` })))) },
+  ]);
+}
+
+test("icon packs are listed beside the plugins, and left out when there are none", () => {
+  const dir = scratch();
+  mkdirSync(join(dir, "packages"));
+  writeFileSync(join(dir, "packages", "obs-1.0.0.fdpkg"), fdpkg("obs", "1.0.0"));
+  assert.equal(buildRepository(join(dir, "packages"), { out: dir }).iconPacks, undefined);
+  mkdirSync(join(dir, "packs"));
+  writeFileSync(join(dir, "packs", "essentials.zip"), iconPack("essentials", "2.0.0", 3));
+  const index = buildRepository(join(dir, "packages"), { out: dir, iconPacks: join(dir, "packs") });
+  assert.equal(index.plugins.length, 1);
+  assert.deepEqual(
+    { ...index.iconPacks![0]!, package: { ...index.iconPacks![0]!.package, sha256: "" } },
+    { id: "essentials", name: "Essentials", version: "2.0.0", description: "", author: "FlexDeck", count: 3, package: { url: "packs/essentials.zip", sha256: "", size: index.iconPacks![0]!.package.size } },
+  );
+  writeFileSync(join(dir, "packs", "essentials.zip"), iconPack("essentials", "2.0.0", 4));
+  assert.throws(() => buildRepository(join(dir, "packages"), { out: dir, iconPacks: join(dir, "packs") }), /different bytes/);
+  writeFileSync(join(dir, "packs", "essentials.zip"), zip([{ name: "readme.txt", data: Buffer.from("x") }]));
+  assert.throws(() => buildRepository(join(dir, "packages"), { out: dir, iconPacks: join(dir, "packs") }), /no manifest\.json/);
+});
+
 test("versions order numerically, like the agent", () => {
   assert.ok(versionOrder("1.10.0", "1.9.0") > 0);
   assert.ok(versionOrder("1.0.0-beta", "1.0.0") < 0);

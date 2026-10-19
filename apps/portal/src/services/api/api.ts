@@ -332,6 +332,16 @@ export interface IconPack extends IconPackSummary {
   icons: IconPackIcon[];
 }
 
+export interface RepositoryIconPack {
+  id: string;
+  name: string;
+  version: string;
+  author: string;
+  count: number;
+  installed: boolean;
+  repo: { url: string; name: string; kind: string };
+}
+
 /** Read a file the person chose as base64, for an upload. */
 export function fileAsBase64(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -1308,6 +1318,16 @@ export class Api {
   /** Install a zip of icons (bytes as base64). */
   installIconPack(desktopId: string, data: string): Promise<{ pack: IconPackSummary; skipped: string[] }> {
     return this.relay(desktopId, "POST", "/api/iconpacks", { data });
+  }
+
+  repositoryIconPacks(desktopId: string): Promise<{ packs?: RepositoryIconPack[] }> {
+    return this.relay(desktopId, "GET", "/api/plugins/iconpacks");
+  }
+
+  async installRepositoryIconPack(desktopId: string, repo: string, id: string): Promise<{ pack: IconPackSummary; skipped: string[] }> {
+    const installed = await this.relay<{ pack: IconPackSummary; skipped: string[] }>(desktopId, "POST", "/api/plugins/iconpacks/install", { repo, id });
+    this.#packs.delete(`${desktopId}/${installed.pack.id}`);
+    return installed;
   }
 
   removeIconPack(desktopId: string, id: string): Promise<unknown> {
