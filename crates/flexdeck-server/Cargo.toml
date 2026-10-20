@@ -21,7 +21,7 @@ flexdeck-store = { path = "../flexdeck-store" }
 flexdeck-tunnel = { path = "../flexdeck-tunnel" }
 flexdeck-vars = { path = "../flexdeck-vars" }
 futures-util = "0.3.34"
-base64 = "0.22"
+base64 = "0.23"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 hex = "0.4"
 json-patch = "4.2.0"
