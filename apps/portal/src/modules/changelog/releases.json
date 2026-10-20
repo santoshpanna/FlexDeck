@@ -2,6 +2,78 @@
   "next": [],
   "releases": [
     {
+      "version": "v0.1.0-rc.11",
+      "platforms": [
+        "desktop",
+        "android",
+        "server"
+      ],
+      "hash": "8679ca594784bbca7a72a9b022d82dba43511a6c",
+      "date": "2026-10-21",
+      "title": "Add coding-agent deck editing, deck files, and SDK conditions",
+      "blurb": "",
+      "groups": [
+        {
+          "name": "Added",
+          "items": [
+            {
+              "area": "DESKTOP",
+              "text": "Add Coding agents in Setup to create and revoke tokens for AI coding tools."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Serve an MCP endpoint on this computer so coding agents can edit the deck and automations."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Ask before an agent adds a program launch, and refuse launches driven by variables or sliders."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Export the deck to a file and import it with Replace or Append."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Preview a deck file's pages and warnings before importing it."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Install icon packs from plugin repositories in the Plugins panel."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Add a site footer to public pages."
+            },
+            {
+              "area": "PLUGINS",
+              "text": "Let plugins light keys with a condition (active.when) instead of only a value."
+            },
+            {
+              "area": "PLUGINS",
+              "text": "Hide internal settings, add per-setting help, and link a plugin guide."
+            }
+          ]
+        },
+        {
+          "name": "Fixed",
+          "items": [
+            {
+              "area": "EDITOR",
+              "text": "Keep rapid config edits in order so quick changes do not conflict."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Keep the changelog version label readable on long version numbers."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Publish llms.txt and per-page search metadata for public pages."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.1.0-rc.10",
       "platforms": [
         "desktop",

@@ -2,6 +2,28 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
+## v0.1.0-rc.11 — 2026-10-21
+
+**Add coding-agent deck editing, deck files, and SDK conditions**
+
+### Added
+
+- **desktop** Add Coding agents in Setup to create and revoke tokens for AI coding tools.
+- **desktop** Serve an MCP endpoint on this computer so coding agents can edit the deck and automations.
+- **desktop** Ask before an agent adds a program launch, and refuse launches driven by variables or sliders.
+- **editor** Export the deck to a file and import it with Replace or Append.
+- **editor** Preview a deck file's pages and warnings before importing it.
+- **editor** Install icon packs from plugin repositories in the Plugins panel.
+- **editor** Add a site footer to public pages.
+- **plugins** Let plugins light keys with a condition (active.when) instead of only a value.
+- **plugins** Hide internal settings, add per-setting help, and link a plugin guide.
+
+### Fixed
+
+- **editor** Keep rapid config edits in order so quick changes do not conflict.
+- **editor** Keep the changelog version label readable on long version numbers.
+- **editor** Publish llms.txt and per-page search metadata for public pages.
+
 ## v0.1.0-rc.10 — 2026-10-20
 
 **Keep key presses fast while a plugin is busy, choose how much gets logged, and help search engines find the site**
