@@ -1,28 +1,82 @@
 {
-  "next": [
+  "next": [],
+  "releases": [
     {
-      "name": "Added",
-      "items": [
+      "version": "v0.1.0-rc.10",
+      "platforms": [
+        "desktop",
+        "android",
+        "server"
+      ],
+      "hash": "023ef9e447f67bc73217afc7eec40ae2b0ab9727",
+      "date": "2026-10-20",
+      "title": "Keep key presses fast while a plugin is busy, choose how much gets logged, and help search engines find the site",
+      "blurb": "",
+      "groups": [
         {
-          "area": "EDITOR",
-          "text": "The icon picker lists icon packs from your plugin repositories and installs them in a click."
+          "name": "Added",
+          "items": [
+            {
+              "area": "EDITOR",
+              "text": "The icon picker lists icon packs from your plugin repositories and installs them in a click."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Download repository icon packs with a checksum and size check, and never install the same pack twice."
+            },
+            {
+              "area": "PLUGINS",
+              "text": "Flexdeck-plugin repo --icon-packs lists icon pack zips in repository.json beside the plugins."
+            },
+            {
+              "area": "PLUGINS",
+              "text": "The Rust plugin ABI reads the iconPacks list in a repository index."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Choose how much FlexDeck logs in Settings, from errors only to every plugin call; Info is the default."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "The log notes when a key waited for a plugin and when a plugin was slow to answer."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "The title bar shows which version of FlexDeck you're running."
+            },
+            {
+              "area": "EDITOR",
+              "text": "Each public page has its own title, description and link preview, and the site publishes a sitemap so search engines can find every page."
+            }
+          ]
         },
         {
-          "area": "DESKTOP",
-          "text": "Download repository icon packs with a checksum and size check, and never install the same pack twice."
-        },
-        {
-          "area": "PLUGINS",
-          "text": "Flexdeck-plugin repo --icon-packs lists icon pack zips in repository.json beside the plugins."
-        },
-        {
-          "area": "PLUGINS",
-          "text": "The Rust plugin ABI reads the iconPacks list in a repository index."
+          "name": "Fixed",
+          "items": [
+            {
+              "area": "DESKTOP",
+              "text": "A key press only waits for the plugin it uses, so one slow plugin no longer delays every key by seconds."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "A flow with waits in it no longer holds up other keys while it waits."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Reinstalling or reloading a plugin while a flow is waiting no longer makes the flow's next step fail."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "Saving a plugin's settings, or removing or reloading a plugin, no longer pauses your keys while that plugin is busy."
+            },
+            {
+              "area": "EDITOR",
+              "text": "A mistyped address shows a not-found page instead of the home page."
+            }
+          ]
         }
       ]
-    }
-  ],
-  "releases": [
+    },
     {
       "version": "v0.1.0-rc.9",
       "platforms": [

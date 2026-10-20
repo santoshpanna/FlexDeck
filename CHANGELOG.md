@@ -2,7 +2,9 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
-## Next
+## v0.1.0-rc.10 — 2026-10-20
+
+**Keep key presses fast while a plugin is busy, choose how much gets logged, and help search engines find the site**
 
 ### Added
 
@@ -10,6 +12,18 @@ Generated from commit history by `pnpm changelog`. Do not edit by hand.
 - **desktop** Download repository icon packs with a checksum and size check, and never install the same pack twice.
 - **plugins** Flexdeck-plugin repo --icon-packs lists icon pack zips in repository.json beside the plugins.
 - **plugins** The Rust plugin ABI reads the iconPacks list in a repository index.
+- **desktop** Choose how much FlexDeck logs in Settings, from errors only to every plugin call; Info is the default.
+- **desktop** The log notes when a key waited for a plugin and when a plugin was slow to answer.
+- **desktop** The title bar shows which version of FlexDeck you're running.
+- **editor** Each public page has its own title, description and link preview, and the site publishes a sitemap so search engines can find every page.
+
+### Fixed
+
+- **desktop** A key press only waits for the plugin it uses, so one slow plugin no longer delays every key by seconds.
+- **desktop** A flow with waits in it no longer holds up other keys while it waits.
+- **desktop** Reinstalling or reloading a plugin while a flow is waiting no longer makes the flow's next step fail.
+- **desktop** Saving a plugin's settings, or removing or reloading a plugin, no longer pauses your keys while that plugin is busy.
+- **editor** A mistyped address shows a not-found page instead of the home page.
 
 ## v0.1.0-rc.9 — 2026-10-19
 
