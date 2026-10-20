@@ -7,7 +7,7 @@ import { Field, HoldToConfirm, Input, Key, Label, Led, Notice, Plate, Readout, S
 import { useTheme } from "../../hooks/useTheme.hook.ts";
 import { kindLabel, relativeDate } from "../../lib/plugins.lib.ts";
 import { webAccessSummary } from "../../lib/status.lib.ts";
-import type { WindowPrefs } from "../../lib/types.ts";
+import type { LogLevel, WindowPrefs } from "../../lib/types.ts";
 import type { ShellViewProps } from "../../view/shell.view.tsx";
 
 /** Everything that is set once and then left alone. */
@@ -25,6 +25,9 @@ export function SetupScreen({ p }: { p: ShellViewProps }) {
       </Section>
       <Section title="Appearance">
         <Appearance />
+      </Section>
+      <Section title="Log detail">
+        <LogDetail p={p} />
       </Section>
       <Section title="This computer">
         <Plate depth="well" pad="sm" className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 font-mono text-[11px]">
@@ -247,7 +250,7 @@ function Repositories({ p }: { p: ShellViewProps }) {
   );
 }
 
-const STARTUP: readonly { key: keyof WindowPrefs; title: string; detail: string }[] = [
+const STARTUP: readonly { key: Exclude<keyof WindowPrefs, "logLevel" | "logLevelOverridden">; title: string; detail: string }[] = [
   { key: "autostart", title: "Start with this computer", detail: "Open when you sign in, so decks can connect without you opening it." },
   { key: "startMinimized", title: "Start minimized", detail: "Open to the tray instead of showing this window." },
   {
@@ -290,4 +293,31 @@ const THEMES: readonly { value: ThemePreference; label: string }[] = [
 function Appearance() {
   const { preference, setPreference } = useTheme();
   return <Segmented label="Appearance" value={preference} onChange={setPreference} options={THEMES} className="self-start" />;
+}
+
+const LOG_LEVELS: readonly { value: LogLevel; label: string }[] = [
+  { value: "error", label: "Errors" },
+  { value: "warn", label: "Warnings" },
+  { value: "info", label: "Info" },
+  { value: "debug", label: "Debug" },
+  { value: "trace", label: "Trace" },
+];
+
+function LogDetail({ p }: { p: ShellViewProps }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Segmented
+        label="Log detail"
+        value={p.windowPrefs?.logLevel ?? "info"}
+        onChange={(logLevel) => p.onSetWindowPrefs({ logLevel })}
+        options={LOG_LEVELS}
+        className="self-start"
+      />
+      <p className="m-0 text-[12px] leading-relaxed text-muted">
+        {p.windowPrefs?.logLevelOverridden
+          ? "FLEXDECK_LOG is set on this computer, so it decides what is logged instead."
+          : "Debug and Trace record every plugin call. Use them while chasing a problem."}
+      </p>
+    </div>
+  );
 }

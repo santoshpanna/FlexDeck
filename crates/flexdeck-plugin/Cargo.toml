@@ -13,6 +13,7 @@ flexdeck-protocol = { path = "../flexdeck-protocol" }
 flexdeck-vars = { path = "../flexdeck-vars" }
 serde_json = { workspace = true }
 thiserror = "2.0.21"
+tracing = "0.1.44"
 open = "5"
 notify-rust = "4"
 # The `time` built-in formats local time.

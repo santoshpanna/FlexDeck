@@ -50,6 +50,7 @@ jobs:
       - name: Build
         run: |
           pnpm --filter @flexdeck/portal build
+          pnpm --filter @flexdeck/portal build:ssr
           node apps/portal/scripts/vercel-output.ts
 
       - name: Deploy

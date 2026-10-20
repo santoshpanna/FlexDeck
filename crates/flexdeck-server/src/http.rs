@@ -549,7 +549,7 @@ async fn argument_choices(
     State(agent): State<Arc<Agent>>,
     Json(query): Json<ChoicesQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    let registry = Arc::clone(agent.behavior().registry());
+    let registry = agent.behavior().registry_snapshot();
     // The plugin is a process with a deadline of seconds: not on a worker.
     let answer = tokio::task::spawn_blocking(move || {
         let _busy = crate::watch::busy("choices", format!("{}/{}", query.plugin, query.action), crate::watch::PLUGIN_WORK);
@@ -558,10 +558,7 @@ async fn argument_choices(
             action: query.action,
             args: query.args,
         };
-        registry
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .choices(&action)
+        registry.choices(&action)
     })
     .await
     .map_err(|error| ApiError::internal(error.to_string()))?;

@@ -1,8 +1,10 @@
 import { useEffect } from "react";
 
-/** The tab's title while this page is shown: "<title> · flexdeck", or just "flexdeck". */
+import { pageTitle } from "../../common/site/seo.ts";
+
+/** The tab's title while this page is shown: "<title> · flexdeck", or the home page's title. */
 export function useDocumentTitle(title?: string) {
   useEffect(() => {
-    document.title = title ? `${title} · flexdeck` : "flexdeck";
+    document.title = pageTitle(title);
   }, [title]);
 }

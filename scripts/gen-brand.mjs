@@ -6,7 +6,7 @@
  * something nobody can regenerate:
  *
  *   desktop  apps/desktop/src-tauri/icons/   .ico + the PNG set `bundle.icon` lists
- *   portal   apps/portal/public/             favicon.svg, favicon.ico, apple-touch-icon.png
+ *   portal   apps/portal/public/             favicon.svg, favicon.ico, apple-touch-icon.png, icon-512.png
  *   android  android/app/src/main/res/       adaptive icon (vector + monochrome), legacy PNGs
  *
  * Rasterised here with no dependencies: each pixel is supersampled against the
@@ -226,7 +226,8 @@ const pub = ["apps", "portal", "public"];
 writeFileSync(out(...pub, "favicon.svg"), svg);
 writeFileSync(out(...pub, "favicon.ico"), ico([16, 32, 48]));
 writePng([...pub, "apple-touch-icon.png"], 180, { radius: 0 });
-note("portal favicon.svg, favicon.ico, apple-touch-icon.png");
+writePng([...pub, "icon-512.png"], 512);
+note("portal favicon.svg, favicon.ico, apple-touch-icon.png, icon-512.png");
 
 // Android: adaptive icon (API 26+, monochrome for themed icons on 33+), and
 // legacy PNGs for older launchers.

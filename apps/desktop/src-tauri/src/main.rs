@@ -101,7 +101,8 @@ fn main() {
             plugins::plugin_log,
         ])
         .setup(move |app| {
-            if let Err(error) = flexdeck_agent::logging::init(&options.data_dir) {
+            let prefs = startup::load(app.handle());
+            if let Err(error) = flexdeck_agent::logging::init(&options.data_dir, prefs.log_level.as_str()) {
                 eprintln!("warning: could not open the log file: {error}");
             }
             // Assembled on Tauri's runtime, because enabling web access spawns
@@ -222,7 +223,6 @@ fn main() {
 
             // The window is created hidden, so starting to the tray never
             // flashes it on screen first.
-            let prefs = startup::load(app.handle());
             app.manage(startup::PrefsState(std::sync::Mutex::new(prefs)));
             if !prefs.start_minimized {
                 if let Some(window) = app.get_webview_window("main") {

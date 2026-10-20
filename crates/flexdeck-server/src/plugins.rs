@@ -314,7 +314,7 @@ impl PluginManager {
 
     /// Installed plugins with their live state, for the UI.
     pub fn installed_json(&self) -> serde_json::Value {
-        let registry = lock(&self.registry);
+        let registry = lock(&self.registry).clone();
         let failures = lock(&self.failures).clone();
         let plugins: Vec<serde_json::Value> = self
             .installed()
@@ -410,7 +410,7 @@ impl PluginManager {
         if directory.exists() {
             // The same build again: stop it first, since its files are about
             // to be replaced underneath it.
-            lock(&self.registry).unregister(&package.id, &self.vars);
+            self.unregister(&package.id);
             std::fs::remove_dir_all(&directory)?;
         }
         std::fs::create_dir_all(&directory)?;
@@ -584,7 +584,7 @@ impl PluginManager {
             return Err(PluginsError::NotInstalled(id.to_string()));
         };
         let record = records.remove(index);
-        lock(&self.registry).unregister(id, &self.vars);
+        self.unregister(id);
         lock(&self.failures).remove(id);
         self.save(&records)?;
         if !matches!(record.source, Source::Dev { .. }) {
@@ -608,7 +608,7 @@ impl PluginManager {
         if enabled {
             self.start(&record)?;
         } else {
-            lock(&self.registry).unregister(id, &self.vars);
+            self.unregister(id);
             lock(&self.failures).remove(id);
         }
         self.upsert(record)?;
@@ -627,7 +627,7 @@ impl PluginManager {
             .into_iter()
             .find(|record| record.id == id)
             .ok_or_else(|| PluginsError::NotInstalled(id.to_string()))?;
-        lock(&self.registry).unregister(id, &self.vars);
+        self.unregister(id);
         self.start(&record)
     }
 
@@ -679,9 +679,19 @@ impl PluginManager {
     /// Stop every installed plugin, for shutdown.
     pub fn stop_all(&self) {
         self.stopping.store(true, Ordering::SeqCst);
-        let mut registry = lock(&self.registry);
-        for record in self.installed() {
-            registry.unregister(&record.id, &self.vars);
+        let retired: Vec<_> = {
+            let mut registry = lock(&self.registry);
+            self.installed().iter().filter_map(|record| registry.retire(&record.id, &self.vars)).collect()
+        };
+        for plugin in retired {
+            plugin.shut_down(&self.vars);
+        }
+    }
+
+    fn unregister(&self, id: &str) {
+        let retired = lock(&self.registry).retire(id, &self.vars);
+        if let Some(plugin) = retired {
+            plugin.shut_down(&self.vars);
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -9,16 +9,54 @@ use tracing_subscriber::filter::Targets;
 use tracing_subscriber::fmt::time::ChronoLocal;
 use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::prelude::*;
+use tracing_subscriber::{reload, Registry};
 
 pub const KEEP_DAYS: u64 = 7;
 pub const DAILY_BYTES: u64 = 50 * 1024 * 1024;
 const PREFIX: &str = "flexdeck";
 const SUFFIX: &str = "log";
-const DEFAULT_FILTER: &str = "warn,flexdeck_server=info,flexdeck_agent=info,flexdeck_desktop=info,flexdeck_plugin_host=info,flexdeck_cloud=info,panic=error";
+pub const LEVELS: [&str; 5] = ["error", "warn", "info", "debug", "trace"];
+pub const DEFAULT_LEVEL: &str = "info";
+const OWN_TARGETS: [&str; 6] = [
+    "flexdeck_server",
+    "flexdeck_agent",
+    "flexdeck_desktop",
+    "flexdeck_plugin_host",
+    "flexdeck_plugin",
+    "flexdeck_cloud",
+];
 const FILTER_ENV: &str = "FLEXDECK_LOG";
 const DAY: u64 = 24 * 60 * 60;
 
-pub fn init(data_dir: &Path) -> Result<PathBuf, String> {
+static FILTER: OnceLock<reload::Handle<Targets, Registry>> = OnceLock::new();
+
+pub fn filter_for(level: &str) -> Result<Targets, String> {
+    if !LEVELS.contains(&level) {
+        return Err(format!("unknown log level: {level}"));
+    }
+    let base = if level == "error" { "error" } else { "warn" };
+    let own = OWN_TARGETS.iter().map(|target| format!("{target}={level}")).collect::<Vec<_>>().join(",");
+    Targets::from_str(&format!("{base},{own},panic=error")).map_err(|error| error.to_string())
+}
+
+pub fn overridden() -> bool {
+    std::env::var_os(FILTER_ENV).is_some()
+}
+
+pub fn set_level(level: &str) -> Result<(), String> {
+    let filter = filter_for(level)?;
+    if overridden() {
+        return Ok(());
+    }
+    let Some(handle) = FILTER.get() else {
+        return Ok(());
+    };
+    handle.reload(filter).map_err(|error| error.to_string())?;
+    tracing::info!(level, "log level set");
+    Ok(())
+}
+
+pub fn init(data_dir: &Path, level: &str) -> Result<PathBuf, String> {
     let dir = data_dir.join("logs");
     std::fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
     prune(&dir, SystemTime::now());
@@ -32,7 +70,9 @@ pub fn init(data_dir: &Path) -> Result<PathBuf, String> {
     let filter = std::env::var(FILTER_ENV)
         .ok()
         .and_then(|value| Targets::from_str(&value).ok())
-        .unwrap_or_else(|| Targets::from_str(DEFAULT_FILTER).expect("the default filter parses"));
+        .or_else(|| filter_for(level).ok())
+        .unwrap_or_else(|| filter_for(DEFAULT_LEVEL).expect("the default filter parses"));
+    let (filter, handle) = reload::Layer::new(filter);
     let sink = Capped::new(file, dir.clone(), DAILY_BYTES);
     let layer = tracing_subscriber::fmt::layer()
         .with_writer(sink)
@@ -44,6 +84,7 @@ pub fn init(data_dir: &Path) -> Result<PathBuf, String> {
         .with_thread_names(true)
         .with_filter(filter);
     tracing_subscriber::registry().with(layer).try_init().map_err(|error| error.to_string())?;
+    let _ = FILTER.set(handle);
     log_panics();
     tracing::info!(pid = std::process::id(), dir = %dir.display(), "started");
     Ok(dir)
@@ -170,6 +211,27 @@ mod tests {
 
     fn budget(limit: u64, dir: &Path) -> Budget<Vec<u8>> {
         Budget { out: Vec::new(), dir: dir.to_path_buf(), limit, day: utc_day(SystemTime::now()), written: 0, full: false }
+    }
+
+    #[test]
+    fn a_level_applies_to_our_crates_and_keeps_others_quiet() {
+        use tracing::level_filters::LevelFilter;
+
+        let info = filter_for("info").unwrap();
+        assert!(info.would_enable("flexdeck_plugin", &tracing::Level::INFO));
+        assert!(!info.would_enable("flexdeck_plugin_host", &tracing::Level::DEBUG));
+        assert!(!info.would_enable("hyper", &tracing::Level::INFO));
+
+        let debug = filter_for("debug").unwrap();
+        assert!(debug.would_enable("flexdeck_plugin_host", &tracing::Level::DEBUG));
+        assert!(debug.would_enable("hyper", &tracing::Level::WARN));
+
+        let error = filter_for("error").unwrap();
+        assert!(!error.would_enable("hyper", &tracing::Level::WARN));
+        assert!(!error.would_enable("flexdeck_server", &tracing::Level::WARN));
+        assert_eq!(error.default_level(), Some(LevelFilter::ERROR));
+
+        assert!(filter_for("loud").is_err());
     }
 
     #[test]

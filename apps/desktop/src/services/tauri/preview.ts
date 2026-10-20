@@ -65,7 +65,7 @@ function entry(id: string, name: string, patch: Partial<CatalogEntry> = {}): Cat
 export function previewShell(): Shell {
   const params = new URLSearchParams(location.search);
   const scene = params.get("scene") ?? "live";
-  let windowPrefs: WindowPrefs = { startMinimized: false, closeToTray: true, minimizeToTray: false, autostart: false };
+  let windowPrefs: WindowPrefs = { startMinimized: false, closeToTray: true, minimizeToTray: false, autostart: false, logLevel: "info", logLevelOverridden: false };
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((listener) => listener());
 
@@ -174,6 +174,7 @@ export function previewShell(): Shell {
       return status();
     },
     setPortal: async () => (await wait(), status()),
+    appVersion: async () => "0.0.0",
     windowPrefs: async () => (await wait(), { ...windowPrefs }),
     setWindowPrefs: async (patch) => {
       await wait();

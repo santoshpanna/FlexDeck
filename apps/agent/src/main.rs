@@ -47,7 +47,7 @@ async fn main() -> ExitCode {
 }
 
 async fn run(args: Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    if let Err(error) = flexdeck_agent::logging::init(&args.data_dir) {
+    if let Err(error) = flexdeck_agent::logging::init(&args.data_dir, flexdeck_agent::logging::DEFAULT_LEVEL) {
         eprintln!("warning: could not open the log file: {error}");
     }
     let host = Host::assemble(Options {

@@ -1,6 +1,7 @@
 # Node / JS
 node_modules/
 dist/
+dist-ssr/
 .turbo/
 *.tsbuildinfo
 .pnpm-store/

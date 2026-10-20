@@ -767,11 +767,7 @@ impl Behavior {
     }
 
     pub fn plugin_catalogue(&self) -> serde_json::Value {
-        self.inner
-            .registry
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .catalogue_json()
+        self.registry_snapshot().catalogue_json()
     }
 
     pub fn variables_catalogue(&self) -> serde_json::Value {
@@ -798,6 +794,10 @@ impl Behavior {
 
     pub fn registry(&self) -> &Arc<Mutex<Registry>> {
         &self.inner.registry
+    }
+
+    pub fn registry_snapshot(&self) -> Registry {
+        self.inner.registry.lock().unwrap_or_else(PoisonError::into_inner).clone()
     }
 
     pub fn cancel_all(&self) {
@@ -1139,23 +1139,12 @@ impl Behavior {
         // scratch too, and a typo would otherwise look like a configuration
         // error instead of a real evaluation.
         let scratch = VariableStore::new();
-        {
-            let registry = self
-                .inner
-                .registry
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
-            registry.declare_variables(&scratch);
-        }
+        let mut registry = self.registry_snapshot();
+        registry.declare_variables(&scratch);
 
         let watched = automation.trigger.watched();
         let interested: BTreeSet<String> = watched.into_iter().collect();
         if !interested.is_empty() {
-            let mut registry = self
-                .inner
-                .registry
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
             let mut remote = RemoteExecutor::new(self.inner.executor.clone());
             let mut recorder = RecordingNotifier::new();
             let _ = {
@@ -1332,7 +1321,7 @@ impl Behavior {
                 Some((plan.widget_id.clone(), (plugin.to_string(), feed.to_string(), args.clone())))
             })
             .collect();
-        let mut registry = self.inner.registry.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut registry = self.registry_snapshot();
         let generation = registry.generation();
         let mut feeds = self.inner.feeds.lock().unwrap_or_else(PoisonError::into_inner);
         let restarted = feeds.0 != generation;
@@ -1611,10 +1600,8 @@ impl Behavior {
     /// Sample once on the current thread. Public only for tests; the engine
     /// drives it on a timer from `start_sampler`.
     pub(crate) fn sample_once(&self, interested: &BTreeSet<String>) {
-        let ids: Vec<String> = {
-            let registry = self.inner.registry.lock().unwrap_or_else(PoisonError::into_inner);
-            registry.ids().into_iter().map(str::to_string).collect()
-        };
+        let mut registry = self.registry_snapshot();
+        let ids: Vec<String> = registry.ids().into_iter().map(str::to_string).collect();
 
         let mut remote = RemoteExecutor::new(self.inner.executor.clone());
         let now_ms = self.inner.clock.now_ms();
@@ -1626,7 +1613,6 @@ impl Behavior {
         let settings = BTreeMap::new();
 
         for id in ids {
-            let mut registry = self.inner.registry.lock().unwrap_or_else(PoisonError::into_inner);
             let mut ctx = flexdeck_plugin::Ctx {
                 input: &mut remote,
                 vars: &self.inner.variables,
@@ -1687,14 +1673,12 @@ impl Behavior {
         settings: &BTreeMap<String, String>,
         inputs: &Inputs,
     ) -> Result<Run, BehaviorError> {
-        let mut registry = self
-            .inner
-            .registry
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let mut registry = self.registry_snapshot();
+        let latest = || self.registry_snapshot();
         let mut remote = RemoteExecutor::new(self.inner.executor.clone());
         let mut environment = Environment {
             registry: &mut registry,
+            latest: Some(&latest),
             vars,
             inputs,
             input: &mut remote,

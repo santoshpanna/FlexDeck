@@ -34,6 +34,7 @@ export function ShellController({ children }: ShellControllerProps) {
   const [preview, setPreview] = useState<RepoPreview | null>(null);
   const [logs, setLogs] = useState<Record<string, string[]>>({});
   const [windowPrefs, setWindowPrefs] = useState<WindowPrefs | null>(null);
+  const [version, setVersion] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -67,6 +68,7 @@ export function ShellController({ children }: ShellControllerProps) {
   // are read once rather than on every state event.
   useEffect(() => {
     shell.windowPrefs().then(setWindowPrefs, (caught) => setError(describe(caught)));
+    shell.appVersion().then(setVersion, () => setVersion(""));
   }, []);
 
   useEffect(() => {
@@ -160,6 +162,7 @@ export function ShellController({ children }: ShellControllerProps) {
     browserPairing: status?.browserPairing ?? null,
     approvals: status?.approvals ?? [],
     fingerprint: status?.fingerprint ?? "",
+    version,
     tunnel,
     windowPrefs,
     error,

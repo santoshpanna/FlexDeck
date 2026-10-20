@@ -635,6 +635,7 @@ impl Shared {
         })?;
         let line = abi::Message::request(id, method, params).to_line();
 
+        let asked = Instant::now();
         {
             let mut state = lock(&self.state);
             let Some(running) = state.running.as_mut() else {
@@ -654,8 +655,11 @@ impl Shared {
                 return Err(HostError::Exited(method.to_string()));
             }
         }
+        let sent = asked.elapsed();
+        if sent > SLOW_CALL {
+            tracing::warn!(plugin = %self.id, method, ms = sent.as_millis() as u64, "slow to send to plugin");
+        }
 
-        let asked = Instant::now();
         let answer = match receiver.recv_timeout(timeout) {
             Ok(answer) => answer,
             Err(mpsc::RecvTimeoutError::Timeout) => {
@@ -681,6 +685,8 @@ impl Shared {
         let took = asked.elapsed();
         if took > SLOW_CALL {
             tracing::warn!(plugin = %self.id, method, ms = took.as_millis() as u64, "slow plugin call");
+        } else {
+            tracing::debug!(plugin = %self.id, method, ms = took.as_millis() as u64, "plugin call");
         }
         if let Some(error) = answer.error {
             return Err(HostError::Remote {

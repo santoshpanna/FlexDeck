@@ -1,6 +1,13 @@
 import { useSyncExternalStore } from "react";
 
-import { themeStore, type ThemePreference } from "@flexdeck/tokens/theme.ts";
+import { themeStore, type ThemePreference, type ThemeStore } from "@flexdeck/tokens/theme.ts";
+
+const PRERENDER_STORE: ThemeStore = {
+  getSnapshot: () => "system",
+  subscribe: () => () => {},
+  set: () => {},
+  resolved: () => "light",
+};
 
 /**
  * The current theme choice, and a way to change it.
@@ -15,7 +22,7 @@ export function useTheme(): {
   preference: ThemePreference;
   setPreference: (preference: ThemePreference) => void;
 } {
-  const store = themeStore();
+  const store = typeof window === "undefined" ? PRERENDER_STORE : themeStore();
   const preference = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   return { preference, setPreference: store.set };
 }

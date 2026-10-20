@@ -7,6 +7,7 @@
  * it can simply ask. Only this file knows that, which is what keeps the rest of
  * the UI testable and the transport swappable.
  */
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
@@ -55,6 +56,8 @@ const tauriShell = {
 
   /** Remove every paired tablet and browser. */
   revokeAllDevices: () => invoke<void>("revoke_all_devices"),
+
+  appVersion: () => getVersion(),
 
   /** How the window starts and closes. */
   windowPrefs: () => invoke<WindowPrefs>("window_prefs"),

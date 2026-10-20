@@ -144,6 +144,7 @@ impl<'a> Scope<'a> {
 /// Everything a run can touch.
 pub struct Environment<'a> {
     pub registry: &'a mut Registry,
+    pub latest: Option<&'a dyn Fn() -> Registry>,
     pub vars: &'a VariableStore,
     /// See [`Inputs`]. `&NO_INPUTS` when there are none.
     pub inputs: &'a Inputs,
@@ -157,6 +158,7 @@ pub struct Environment<'a> {
 }
 
 struct State<'a> {
+    latest: Option<&'a dyn Fn() -> Registry>,
     vars: &'a VariableStore,
     inputs: &'a Inputs,
     /// The path to the block running now; see `Trace::Ran::path`.
@@ -193,6 +195,7 @@ pub fn run(environment: &mut Environment<'_>, automation: &Automation) -> Run {
     let started_ms = environment.clock.now_ms();
 
     let mut state = State {
+        latest: environment.latest,
         vars: environment.vars,
         inputs: environment.inputs,
         path: Vec::new(),
@@ -533,6 +536,9 @@ fn run_block(
                 args: configured_args,
             };
 
+            if let Some(latest) = state.latest {
+                *registry = latest();
+            }
             let now_ms = state.clock.now_ms();
             let performed = {
                 let mut ctx = Ctx {
@@ -929,6 +935,7 @@ mod tests {
         fn run_with(&mut self, limits: Limits, automation: &Automation) -> Run {
             let mut environment = Environment {
                 registry: &mut self.registry,
+                latest: None,
                 vars: &self.vars,
                 inputs: &NO_INPUTS,
                 input: &mut self.input,
@@ -949,6 +956,7 @@ mod tests {
         fn run_given(&mut self, inputs: &Inputs, automation: &Automation) -> Run {
             let mut environment = Environment {
                 registry: &mut self.registry,
+                latest: None,
                 vars: &self.vars,
                 inputs,
                 input: &mut self.input,
@@ -969,6 +977,31 @@ mod tests {
             action: "set_volume".to_string(),
             args: BTreeMap::from([("percent".to_string(), value)]),
         }
+    }
+
+    #[test]
+    fn each_action_runs_against_the_latest_registry() {
+        let mut world = World::new();
+        let live = std::mem::take(&mut world.registry);
+        let latest = || live.clone();
+        let inputs = Inputs::from([("value".to_string(), Value::Number(42.0))]);
+        let run = {
+            let mut environment = Environment {
+                registry: &mut world.registry,
+                latest: Some(&latest),
+                vars: &world.vars,
+                inputs: &inputs,
+                input: &mut world.input,
+                notifier: &mut world.notifier,
+                settings: &world.settings,
+                clock: world.clock.as_ref(),
+                sleeper: &mut world.sleeper,
+                cancel: &world.cancel,
+                limits: Limits::default(),
+            };
+            run(&mut environment, &automation(vec![set_volume_to(ValueRef::Input("value".into()))]))
+        };
+        assert_eq!(run.outcome, RunOutcome::Completed, "{:?}", run.trace);
     }
 
     #[test]
@@ -1529,6 +1562,7 @@ mod tests {
         let run = {
             let mut environment = Environment {
                 registry: &mut world.registry,
+                latest: None,
                 vars: &scratch,
                 inputs: &NO_INPUTS,
                 input: &mut world.input,
@@ -1651,6 +1685,7 @@ mod tests {
         let _ = run;
 
         let mut state = State {
+            latest: None,
             vars: &world.vars,
             inputs: &NO_INPUTS,
             path: Vec::new(),
@@ -1699,6 +1734,7 @@ mod tests {
         // hit the budget, further pushes are dropped and the run keeps going.
         let mut world = World::new();
         let mut state = State {
+            latest: None,
             vars: &world.vars,
             inputs: &NO_INPUTS,
             path: Vec::new(),

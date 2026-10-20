@@ -55,6 +55,7 @@ export interface ShellViewProps {
   browserPairing: BrowserPairing | null;
   approvals: ApprovalRequest[];
   fingerprint: string;
+  version: string;
   tunnel: TunnelState;
   /** How the window starts and closes; null until first read. */
   windowPrefs: WindowPrefs | null;
@@ -117,6 +118,7 @@ const DEFAULTS: ShellViewProps = {
   browserPairing: null,
   approvals: [],
   fingerprint: "",
+  version: "",
   tunnel: { enabled: false, running: false, refused: null, lastError: null, portal: null },
   windowPrefs: null,
   onSetWindowPrefs: noop,
@@ -187,9 +189,9 @@ export function ShellView(partial: Partial<ShellViewProps>) {
         <div className="flex items-center gap-2.5">
           <Mark className="h-5" />
           <span className="text-sm font-bold tracking-[0.3em]">FLEXDECK</span>
-          {p.fingerprint ? (
-            <span className="font-mono text-[10px] tracking-[0.12em] text-faint" title={p.fingerprint}>
-              {p.fingerprint.slice(0, 4).toUpperCase()}·{p.fingerprint.slice(4, 8).toUpperCase()}
+          {p.version ? (
+            <span className="font-mono text-[10px] tracking-[0.12em] text-faint">
+              {p.version === "0.0.0" ? "DEV" : `V${p.version.toUpperCase()}`}
             </span>
           ) : null}
         </div>

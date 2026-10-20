@@ -221,4 +221,8 @@ export interface WindowPrefs {
   closeToTray: boolean;
   minimizeToTray: boolean;
   autostart: boolean;
+  logLevel: LogLevel;
+  logLevelOverridden: boolean;
 }
+
+export type LogLevel = "error" | "warn" | "info" | "debug" | "trace";

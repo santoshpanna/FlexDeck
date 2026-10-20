@@ -28,6 +28,9 @@
 //! them apart, and a plugin can be added or removed while the agent runs.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant};
 
 use flexdeck_protocol::Action;
 use flexdeck_vars::{VariableSpec, VariableStore};
@@ -475,15 +478,68 @@ pub trait Plugin: Send + std::fmt::Debug {
     fn shutdown(&mut self) {}
 }
 
-#[derive(Debug)]
+const SLOW_WAIT: Duration = Duration::from_millis(200);
+const SLOW_SAMPLE: Duration = Duration::from_millis(500);
+
+#[derive(Debug, Clone)]
 struct Registered {
-    plugin: Box<dyn Plugin>,
+    plugin: Arc<Mutex<Box<dyn Plugin>>>,
     /// Captured once at registration.
-    manifest: abi::ManifestDto,
+    manifest: Arc<abi::ManifestDto>,
+    origin: Origin,
+    delivered: Arc<AtomicU64>,
+}
+
+impl Registered {
+    fn plugin(&self) -> MutexGuard<'_, Box<dyn Plugin>> {
+        let started = Instant::now();
+        let guard = self.plugin.lock().unwrap_or_else(PoisonError::into_inner);
+        let waited = started.elapsed();
+        if waited > SLOW_WAIT {
+            tracing::warn!(plugin = %self.manifest.id, ms = waited.as_millis() as u64, "waited for plugin");
+        }
+        guard
+    }
 }
 
 /// The plugins this agent has, built in or installed.
-#[derive(Debug, Default)]
+#[must_use = "the plugin is only shut down by shut_down"]
+#[derive(Debug)]
+pub struct Retired {
+    entry: Registered,
+}
+
+impl Retired {
+    pub fn shut_down(self, store: &VariableStore) {
+        let mut plugin = self.entry.plugin();
+        for spec in plugin.variables() {
+            store.undeclare(&spec.name);
+        }
+        plugin.shutdown();
+    }
+}
+
+#[must_use = "the plugin is only told by deliver"]
+#[derive(Debug)]
+pub struct SettingsUpdate {
+    entry: Option<Registered>,
+    effective: BTreeMap<String, String>,
+    generation: u64,
+}
+
+impl SettingsUpdate {
+    pub fn deliver(self) {
+        if let Some(entry) = self.entry {
+            let mut plugin = entry.plugin();
+            if entry.delivered.load(Ordering::SeqCst) < self.generation {
+                entry.delivered.store(self.generation, Ordering::SeqCst);
+                plugin.settings_changed(&self.effective);
+            }
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct Registry {
     plugins: BTreeMap<String, Registered>,
     /// What the user set, by plugin id then key. Kept even while a plugin is
@@ -507,10 +563,19 @@ impl Registry {
     pub fn register(&mut self, plugin: Box<dyn Plugin>) {
         let manifest = plugin.manifest();
         let id = manifest.id.clone();
-        if let Some(mut old) = self.plugins.remove(&id) {
-            old.plugin.shutdown();
+        let origin = plugin.origin();
+        if let Some(old) = self.plugins.remove(&id) {
+            old.plugin().shutdown();
         }
-        self.plugins.insert(id, Registered { plugin, manifest });
+        self.plugins.insert(
+            id,
+            Registered {
+                plugin: Arc::new(Mutex::new(plugin)),
+                manifest: Arc::new(manifest),
+                origin,
+                delivered: Arc::new(AtomicU64::new(0)),
+            },
+        );
         self.generation += 1;
     }
 
@@ -526,16 +591,14 @@ impl Registry {
     /// it are left alone: they fail [`Registry::check`] with `UnknownPlugin`,
     /// which the editor shows as "not installed".
     pub fn unregister(&mut self, id: &str, store: &VariableStore) -> bool {
-        let Some(mut entry) = self.plugins.remove(id) else {
-            return false;
-        };
-        for spec in entry.plugin.variables() {
-            store.undeclare(&spec.name);
-        }
+        self.retire(id, store).map(|retired| retired.shut_down(store)).is_some()
+    }
+
+    pub fn retire(&mut self, id: &str, store: &VariableStore) -> Option<Retired> {
+        let entry = self.plugins.remove(id)?;
         store.undeclare_prefix(&format!("{id}."));
-        entry.plugin.shutdown();
         self.generation += 1;
-        true
+        Some(Retired { entry })
     }
 
     pub fn generation(&self) -> u64 {
@@ -559,19 +622,19 @@ impl Registry {
     }
 
     pub fn manifest(&self, id: &str) -> Option<&abi::ManifestDto> {
-        self.plugins.get(id).map(|entry| &entry.manifest)
+        self.plugins.get(id).map(|entry| entry.manifest.as_ref())
     }
 
     pub fn manifests(&self) -> Vec<&abi::ManifestDto> {
-        self.plugins.values().map(|entry| &entry.manifest).collect()
+        self.plugins.values().map(|entry| entry.manifest.as_ref()).collect()
     }
 
     pub fn origin(&self, id: &str) -> Option<Origin> {
-        self.plugins.get(id).map(|entry| entry.plugin.origin())
+        self.plugins.get(id).map(|entry| entry.origin)
     }
 
     pub fn status(&self, id: &str) -> Option<Option<String>> {
-        self.plugins.get(id).map(|entry| entry.plugin.status())
+        self.plugins.get(id).map(|entry| entry.plugin().status())
     }
 
     /// Every variable every plugin declares, ordered by name.
@@ -579,7 +642,7 @@ impl Registry {
         let mut all: Vec<VariableSpec> = self
             .plugins
             .values()
-            .flat_map(|entry| entry.plugin.variables())
+            .flat_map(|entry| entry.plugin().variables())
             .collect();
         all.sort_by(|left, right| left.name.cmp(&right.name));
         all
@@ -641,6 +704,14 @@ impl Registry {
         plugin: &str,
         values: BTreeMap<String, String>,
     ) -> Result<(), PluginError> {
+        self.update_settings(plugin, values).map(SettingsUpdate::deliver)
+    }
+
+    pub fn update_settings(
+        &mut self,
+        plugin: &str,
+        values: BTreeMap<String, String>,
+    ) -> Result<SettingsUpdate, PluginError> {
         if let Some(entry) = self.plugins.get(plugin) {
             for key in values.keys() {
                 if !entry.manifest.settings.iter().any(|s| &s.key == key) {
@@ -652,11 +723,11 @@ impl Registry {
         }
         self.settings.insert(plugin.to_string(), values);
         self.generation += 1;
-        let effective = self.effective_settings(plugin);
-        if let Some(entry) = self.plugins.get_mut(plugin) {
-            entry.plugin.settings_changed(&effective);
-        }
-        Ok(())
+        Ok(SettingsUpdate {
+            entry: self.plugins.get(plugin).cloned(),
+            effective: self.effective_settings(plugin),
+            generation: self.generation,
+        })
     }
 
     /// Keep values a plugin stored for itself (`settings/store`) on top of what
@@ -707,17 +778,17 @@ impl Registry {
     pub fn watch_feed(&mut self, plugin: &str, instance: &str, feed: &str, args: &BTreeMap<String, String>) -> Result<(), PluginError> {
         let registered = self
             .plugins
-            .get_mut(plugin)
+            .get(plugin)
             .ok_or_else(|| PluginError::UnknownPlugin(plugin.to_string()))?;
         if !registered.manifest.feeds.iter().any(|f| f.name == feed) {
             return Err(PluginError::Failed(format!("{plugin} has no feed '{feed}'")));
         }
-        registered.plugin.watch_feed(instance, feed, args)
+        registered.plugin().watch_feed(instance, feed, args)
     }
 
     pub fn unwatch_feed(&mut self, plugin: &str, instance: &str) -> Result<(), PluginError> {
-        match self.plugins.get_mut(plugin) {
-            Some(registered) => registered.plugin.unwatch_feed(instance),
+        match self.plugins.get(plugin) {
+            Some(registered) => registered.plugin().unwatch_feed(instance),
             None => Ok(()),
         }
     }
@@ -735,7 +806,7 @@ impl Registry {
         };
         let names: Vec<&str> = spec.arguments.iter().map(|a| a.name.as_str()).collect();
         let registered = &self.plugins[action.plugin.as_str()];
-        let mut answer = registered.plugin.choices(&action.action, &action.args)?;
+        let mut answer = registered.plugin().choices(&action.action, &action.args)?;
         answer
             .arguments
             .retain(|name, _| names.contains(&name.as_str()));
@@ -790,7 +861,7 @@ impl Registry {
             .plugins
             .get(action.plugin.as_str())
             .expect("the action spec proves the plugin is registered");
-        entry.plugin.check(&action.action, &action.args)?;
+        entry.plugin().check(&action.action, &action.args)?;
 
         Ok(spec)
     }
@@ -802,7 +873,7 @@ impl Registry {
         let settings = self.effective_settings(&action.plugin);
         let entry = self
             .plugins
-            .get_mut(action.plugin.as_str())
+            .get(action.plugin.as_str())
             .expect("check() proved the plugin is registered");
 
         let mut scoped = Ctx {
@@ -813,7 +884,7 @@ impl Registry {
             now_ms: ctx.now_ms,
         };
         let outcome = entry
-            .plugin
+            .plugin()
             .invoke(&action.action, &action.args, &mut scoped)?;
 
         Ok(Performed {
@@ -888,12 +959,12 @@ impl Registry {
         ctx: &mut Ctx<'_>,
     ) -> Result<bool, PluginError> {
         let settings = self.effective_settings(id);
-        let Some(entry) = self.plugins.get_mut(id) else {
+        let Some(entry) = self.plugins.get(id) else {
             return Ok(false);
         };
+        let mut plugin = entry.plugin();
         let prefix = format!("{id}.");
-        let declared: BTreeSet<String> = entry
-            .plugin
+        let declared: BTreeSet<String> = plugin
             .variables()
             .into_iter()
             .map(|spec| spec.name)
@@ -916,7 +987,15 @@ impl Registry {
             settings: &settings,
             now_ms: ctx.now_ms,
         };
-        entry.plugin.sample(&wanted, &mut scoped)?;
+        let started = Instant::now();
+        let sampled = plugin.sample(&wanted, &mut scoped);
+        let took = started.elapsed();
+        if took > SLOW_SAMPLE {
+            tracing::warn!(plugin = %id, wanted = wanted.len(), ms = took.as_millis() as u64, "slow sample");
+        } else {
+            tracing::debug!(plugin = %id, wanted = wanted.len(), ms = took.as_millis() as u64, "sampled");
+        }
+        sampled?;
         Ok(true)
     }
 
@@ -950,8 +1029,8 @@ impl Registry {
                     })
                     .collect();
 
-                let variables: Vec<serde_json::Value> = entry
-                    .plugin
+                let plugin = entry.plugin();
+                let variables: Vec<serde_json::Value> = plugin
                     .variables()
                     .iter()
                     .map(|spec| {
@@ -972,8 +1051,8 @@ impl Registry {
                     "version": manifest.version,
                     "description": manifest.description,
                     "author": manifest.author,
-                    "origin": entry.plugin.origin().as_str(),
-                    "status": entry.plugin.status(),
+                    "origin": entry.origin.as_str(),
+                    "status": plugin.status(),
                     "actions": manifest.actions,
                     "settings": settings,
                     "events": manifest.events,
@@ -1468,5 +1547,164 @@ mod tests {
             value: serde_json::json!("yes"),
         };
         assert!(value_from_dto(&lie).is_err());
+    }
+
+    #[test]
+    fn a_busy_plugin_does_not_hold_up_a_press_on_another() {
+        use std::sync::mpsc;
+
+        #[derive(Debug)]
+        struct Gate {
+            id: &'static str,
+            entered: Option<mpsc::Sender<()>>,
+            release: Option<mpsc::Receiver<()>>,
+        }
+        impl Plugin for Gate {
+            fn manifest(&self) -> abi::ManifestDto {
+                abi::ManifestDto {
+                    abi: abi::ABI_VERSION,
+                    id: self.id.into(),
+                    name: self.id.into(),
+                    version: "1".into(),
+                    description: String::new(),
+                    author: String::new(),
+                    actions: vec![abi::ActionDto {
+                        action: "go".into(),
+                        description: String::new(),
+                        arguments: vec![],
+                        slider: None,
+                        active: None,
+                    }],
+                    settings: vec![],
+                    events: vec![],
+                    permissions: vec![],
+                    uses: Vec::new(),
+                    presets: Vec::new(),
+                    feeds: Vec::new(),
+                }
+            }
+            fn variables(&self) -> Vec<VariableSpec> {
+                Vec::new()
+            }
+            fn sample(&mut self, _: &[&str], _: &mut Ctx<'_>) -> Result<(), PluginError> {
+                Ok(())
+            }
+            fn invoke(
+                &mut self,
+                _: &str,
+                _: &HashMap<String, String>,
+                _: &mut Ctx<'_>,
+            ) -> Result<Outcome, PluginError> {
+                if let (Some(entered), Some(release)) = (&self.entered, &self.release) {
+                    entered.send(()).unwrap();
+                    release.recv().unwrap();
+                }
+                Ok(Outcome::default())
+            }
+        }
+
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let mut registry = Registry::new();
+        registry.register(Box::new(Gate { id: "slow", entered: Some(entered_tx), release: Some(release_rx) }));
+        registry.register(Box::new(Gate { id: "fast", entered: None, release: None }));
+
+        let mut stuck = registry.clone();
+        let blocked = std::thread::spawn(move || {
+            let vars = VariableStore::new();
+            let mut input = RecordingExecutor::new();
+            let mut notifier = RecordingNotifier::new();
+            let settings = BTreeMap::new();
+            let mut ctx = ctx(&mut input, &vars, &mut notifier, &settings);
+            stuck.invoke(&action("slow", "go", &[]), &mut ctx).map(|_| ())
+        });
+        entered_rx.recv().unwrap();
+
+        let vars = VariableStore::new();
+        let mut input = RecordingExecutor::new();
+        let mut notifier = RecordingNotifier::new();
+        let settings = BTreeMap::new();
+        let mut ctx = ctx(&mut input, &vars, &mut notifier, &settings);
+        registry.invoke(&action("fast", "go", &[]), &mut ctx).expect("fast runs while slow is busy");
+
+        release_tx.send(()).unwrap();
+        blocked.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn settings_and_retirement_reach_the_plugin_only_when_delivered() {
+        #[derive(Debug, Default)]
+        struct Seen {
+            settings: Mutex<Vec<String>>,
+            shutdowns: Mutex<usize>,
+        }
+        #[derive(Debug)]
+        struct Counting(Arc<Seen>);
+        impl Plugin for Counting {
+            fn manifest(&self) -> abi::ManifestDto {
+                abi::ManifestDto {
+                    abi: abi::ABI_VERSION,
+                    id: "counting".into(),
+                    name: "Counting".into(),
+                    version: "1".into(),
+                    description: String::new(),
+                    author: String::new(),
+                    actions: vec![],
+                    settings: vec![abi::SettingDto {
+                        key: "mode".into(),
+                        description: String::new(),
+                        kind: abi::kind::TEXT.into(),
+                        choices: vec![],
+                        default_value: None,
+                        secret: false,
+                    }],
+                    events: vec![],
+                    permissions: vec![],
+                    uses: Vec::new(),
+                    presets: Vec::new(),
+                    feeds: Vec::new(),
+                }
+            }
+            fn variables(&self) -> Vec<VariableSpec> {
+                Vec::new()
+            }
+            fn sample(&mut self, _: &[&str], _: &mut Ctx<'_>) -> Result<(), PluginError> {
+                Ok(())
+            }
+            fn invoke(
+                &mut self,
+                _: &str,
+                _: &HashMap<String, String>,
+                _: &mut Ctx<'_>,
+            ) -> Result<Outcome, PluginError> {
+                Ok(Outcome::default())
+            }
+            fn settings_changed(&mut self, settings: &BTreeMap<String, String>) {
+                self.0.settings.lock().unwrap().push(settings["mode"].clone());
+            }
+            fn shutdown(&mut self) {
+                *self.0.shutdowns.lock().unwrap() += 1;
+            }
+        }
+
+        let seen = Arc::new(Seen::default());
+        let vars = VariableStore::new();
+        let mut registry = Registry::new();
+        registry.register(Box::new(Counting(Arc::clone(&seen))));
+
+        let first = registry.update_settings("counting", [("mode".to_string(), "a".to_string())].into()).unwrap();
+        let second = registry.update_settings("counting", [("mode".to_string(), "b".to_string())].into()).unwrap();
+        assert!(seen.settings.lock().unwrap().is_empty(), "nothing is told before delivery");
+
+        second.deliver();
+        first.deliver();
+        assert_eq!(*seen.settings.lock().unwrap(), vec!["b".to_string()], "a stale update is dropped");
+
+        let retired = registry.retire("counting", &vars).expect("registered");
+        assert!(!registry.contains("counting"));
+        assert_eq!(*seen.shutdowns.lock().unwrap(), 0, "not shut down before shut_down");
+        retired.shut_down(&vars);
+        assert_eq!(*seen.shutdowns.lock().unwrap(), 1);
+        assert!(registry.retire("counting", &vars).is_none());
     }
 }

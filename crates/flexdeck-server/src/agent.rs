@@ -946,7 +946,7 @@ impl Agent {
         plugin: &str,
         mut values: BTreeMap<String, String>,
     ) -> Result<(), AgentError> {
-        let all = {
+        let (all, update) = {
             let mut registry = self
                 .behavior
                 .registry()
@@ -982,9 +982,10 @@ impl Agent {
                     }
                 }
             }
-            registry.set_settings(plugin, values)?;
-            registry.all_settings()
+            let update = registry.update_settings(plugin, values)?;
+            (registry.all_settings(), update)
         };
+        update.deliver();
         persist_plugin_settings(&self.store, &all)?;
         self.behavior.catalogue_changed();
         Ok(())

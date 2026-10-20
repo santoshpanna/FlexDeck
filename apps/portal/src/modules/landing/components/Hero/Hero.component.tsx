@@ -10,7 +10,7 @@ import type { LandingCallToAction } from "../../view/landing.view.tsx";
 /** The headline resolving out of noise, settling on the real words. */
 function useDecoded(text: string): string {
   const reduce = useReducedMotion();
-  const [shown, setShown] = useState(() => (reduce ? text : decode(text, 0)));
+  const [shown, setShown] = useState(() => (reduce || typeof window === "undefined" ? text : decode(text, 0)));
   useEffect(() => {
     if (reduce) {
       setShown(text);

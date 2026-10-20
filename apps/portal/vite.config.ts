@@ -1,12 +1,22 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
+function noindex(enabled: boolean): Plugin {
+  return {
+    name: "flexdeck-noindex",
+    transformIndexHtml: (html) => (enabled ? html.replace("</head>", '  <meta name="robots" content="noindex, nofollow" />\n  </head>') : html),
+  };
+}
+
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), tailwindcss(), noindex(loadEnv(mode, ".", "VITE_").VITE_EDITOR_ONLY === "true")],
   build: {
     outDir: "dist",
     emptyOutDir: true,
+  },
+  ssr: {
+    noExternal: true,
   },
   server: {
     // Bound to IPv4 loopback explicitly, NOT left to the default.
@@ -46,4 +56,4 @@ export default defineConfig({
       "/api": { target: "http://127.0.0.1:8787", ws: true },
     },
   },
-});
+}));

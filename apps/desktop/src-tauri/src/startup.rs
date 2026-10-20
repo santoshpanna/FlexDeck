@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
@@ -29,6 +29,36 @@ pub struct WindowPrefs {
 
     /// Minimizing the window hides it to the tray instead of the taskbar.
     pub minimize_to_tray: bool,
+
+    #[serde(deserialize_with = "lenient_level")]
+    pub log_level: LogLevel,
+}
+
+fn lenient_level<'de, D: Deserializer<'de>>(deserializer: D) -> Result<LogLevel, D::Error> {
+    Ok(serde_json::from_value(Value::deserialize(deserializer)?).unwrap_or_default())
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum LogLevel {
+    Error,
+    Warn,
+    #[default]
+    Info,
+    Debug,
+    Trace,
+}
+
+impl LogLevel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Error => "error",
+            Self::Warn => "warn",
+            Self::Info => "info",
+            Self::Debug => "debug",
+            Self::Trace => "trace",
+        }
+    }
 }
 
 impl Default for WindowPrefs {
@@ -37,6 +67,7 @@ impl Default for WindowPrefs {
             start_minimized: false,
             close_to_tray: true,
             minimize_to_tray: false,
+            log_level: LogLevel::Info,
         }
     }
 }
@@ -77,6 +108,8 @@ fn view(app: &AppHandle, prefs: WindowPrefs) -> Value {
         "startMinimized": prefs.start_minimized,
         "closeToTray": prefs.close_to_tray,
         "minimizeToTray": prefs.minimize_to_tray,
+        "logLevel": prefs.log_level,
+        "logLevelOverridden": flexdeck_agent::logging::overridden(),
         // Read from the OS each time, so it reflects reality, not a memory of it.
         "autostart": app.autolaunch().is_enabled().unwrap_or(false),
     })
@@ -97,6 +130,7 @@ pub async fn set_window_prefs(
     close_to_tray: Option<bool>,
     minimize_to_tray: Option<bool>,
     autostart: Option<bool>,
+    log_level: Option<LogLevel>,
 ) -> Result<Value, String> {
     if let Some(enabled) = autostart {
         let launcher = app.autolaunch();
@@ -118,8 +152,29 @@ pub async fn set_window_prefs(
     if let Some(value) = minimize_to_tray {
         next.minimize_to_tray = value;
     }
+    if let Some(value) = log_level {
+        next.log_level = value;
+    }
     save(&app, &next)?;
     *prefs.0.lock().expect("the prefs lock is not poisoned") = next;
+    if log_level.is_some() {
+        flexdeck_agent::logging::set_level(next.log_level.as_str())?;
+    }
 
     Ok(view(&app, next))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_unknown_log_level_falls_back_without_losing_the_rest() {
+        let prefs: WindowPrefs = serde_json::from_str(r#"{"closeToTray":false,"logLevel":"loud"}"#).unwrap();
+        assert!(!prefs.close_to_tray);
+        assert_eq!(prefs.log_level, LogLevel::Info);
+
+        let prefs: WindowPrefs = serde_json::from_str(r#"{"logLevel":"debug"}"#).unwrap();
+        assert_eq!(prefs.log_level, LogLevel::Debug);
+    }
 }
