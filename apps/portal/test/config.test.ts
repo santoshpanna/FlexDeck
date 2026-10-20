@@ -4,12 +4,15 @@ import { test } from "node:test";
 import { layoutPage } from "@flexdeck/grid";
 
 import {
+  changedUnderYou,
   gridSpecOf,
   labelOf,
+  newerDeckRefusal,
   pageOf,
   profileOf,
   widgetSpansOf,
 } from "../src/modules/config/lib/config.lib.ts";
+import { ApiError } from "../src/services/api/api.ts";
 
 test("an absent grid field means zero, not a default", () => {
   // This is the shape the agent actually sends for a grid with no gaps: proto3
@@ -68,4 +71,22 @@ test("an unlabelled widget falls back to its id", () => {
   // Showing nothing would be indistinguishable from a rendering failure.
   assert.equal(labelOf({ id: "mute" }), "mute");
   assert.equal(labelOf({ id: "mute", props: { label: "   " } }), "mute");
+});
+
+test("a deck from a newer FlexDeck is refused for editing; this one's own schema is not", () => {
+  assert.match(newerDeckRefusal({ schema: 7, rev: 1 }) ?? "", /newer FlexDeck/);
+  assert.equal(newerDeckRefusal({ schema: 6, rev: 1 }), null);
+  assert.equal(newerDeckRefusal({ rev: 1 }), null);
+  assert.equal(newerDeckRefusal(null), null);
+});
+
+test("a save refused because someone else changed the deck says so and nothing else does", () => {
+  assert.equal(
+    changedUnderYou(new ApiError(409, "the deck changed (now rev 7)"), "deck"),
+    "The deck changed while you were editing; your last change was not saved. Try it again.",
+  );
+  assert.match(changedUnderYou(new ApiError(409, "x"), "automations") ?? "", /^The automations changed/);
+  assert.equal(changedUnderYou(new ApiError(400, "bad"), "deck"), null);
+  assert.equal(changedUnderYou(new ApiError(403, "no"), "deck"), null);
+  assert.equal(changedUnderYou(new Error("409"), "deck"), null);
 });

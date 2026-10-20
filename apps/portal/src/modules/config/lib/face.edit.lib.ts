@@ -8,8 +8,8 @@ import { toBackground, type Fill } from "./fill.lib.ts";
 /**
  * Editing faces, looks and page backgrounds.
  *
- * Every edit here may write something only schema 4 (faces) or 5 (gesture
- * states, value rules) reads, so each one raises the document to what it holds: an agent that reads faces is then the one that
+ * Every edit here may write something only schema 4 (faces), 5 (gesture
+ * states, value rules) or 6 (conditions) reads, so each one raises the document to what it holds: an agent that reads faces is then the one that
  * gets them, and an older one refuses the deck by name rather than dropping
  * them unread.
  */
@@ -243,13 +243,15 @@ export function removeLook(config: WireConfig, widgetId: string, lookId: string)
 }
 
 /**
- * Set the looks a value picks ahead of the source: "while obs.recording is
- * true, show Recording". Blank rows are kept out; none left removes them.
+ * Set the looks a value or a condition picks ahead of the source: "while
+ * obs.recording is true, show Recording", "while obs.preview_scene !=
+ * obs.scene, show Ready". Blank rows are kept out; none left removes them.
  */
 export function setLookRules(config: WireConfig, widgetId: string, rules: readonly WireRule[]): WireConfig {
   const kept = rules
-    .filter((rule) => rule.variable?.trim() && rule.state)
+    .filter((rule) => (rule.when !== undefined ? rule.when.trim() : rule.variable?.trim()) && rule.state)
     .map((rule) => {
+      if (rule.when !== undefined) return { when: rule.when.trim(), state: rule.state! };
       const out: WireRule = { variable: rule.variable!.trim(), value: rule.value ?? "", state: rule.state! };
       if (rule.op && rule.op !== "COMPARE_OP_EQ") out.op = rule.op;
       return out;
@@ -286,6 +288,7 @@ export function setLookSource(config: WireConfig, widgetId: string, source: Look
       states.variable = {
         variable: source.variable.trim(),
         cases: source.cases.map((c) => {
+          if (c.when !== undefined) return { when: c.when.trim(), state: c.state ?? "" };
           const out: WireCase = { value: c.value ?? "", state: c.state ?? "" };
           if (c.op && c.op !== "COMPARE_OP_EQ") out.op = c.op;
           return out;

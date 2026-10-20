@@ -59,6 +59,9 @@ pub enum BehaviorError {
 
     #[error("invalid JSON: {0}")]
     Json(#[from] serde_json::Error),
+
+    #[error("the automations changed (now rev {current})")]
+    Conflict { expected: u64, current: u64 },
 }
 
 pub struct BehaviorInner {
@@ -256,6 +259,10 @@ impl Behavior {
     /// Replace the document wholesale. Stamps `rev` so the stored value can
     /// never disagree with the timeline.
     pub fn replace_document_json(&self, json: &str) -> Result<u64, BehaviorError> {
+        self.replace_document_json_if(None, json)
+    }
+
+    pub fn replace_document_json_if(&self, expect_rev: Option<u64>, json: &str) -> Result<u64, BehaviorError> {
         let limits = self.inner.limits;
         // Validate before touching the store, so a malformed document cannot
         // leave the timeline half-written — exactly the rule the config
@@ -268,6 +275,12 @@ impl Behavior {
             .store
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
+        if let Some(expected) = expect_rev {
+            let current = store.rev_document(&AUTOMATIONS)?.unwrap_or(0);
+            if expected != current {
+                return Err(BehaviorError::Conflict { expected, current });
+            }
+        }
         let next = store.next_rev_document(&AUTOMATIONS)?;
         let stamped = stamp_rev(json, next)?;
         let committed = store.commit_document(&AUTOMATIONS, &stamped)?;
@@ -285,6 +298,11 @@ impl Behavior {
         Ok(committed)
     }
 
+    pub fn automations_rev(&self) -> Result<u64, BehaviorError> {
+        let store = self.inner.store.lock().unwrap_or_else(PoisonError::into_inner);
+        Ok(store.rev_document(&AUTOMATIONS)?.unwrap_or(0))
+    }
+
     pub fn document_rev(&self) -> u64 {
         self.inner.document_rev.load(Ordering::SeqCst)
     }
@@ -300,9 +318,9 @@ impl Behavior {
 
     /// Every widget of the current configuration, read once per revision.
     ///
-    /// A stored configuration that does not read (written before schema 2,
-    /// say) has no widgets rather than failing every press: the editor is
-    /// where that is reported and fixed.
+    /// A stored configuration that does not read (written before schema 2, or
+    /// for a newer agent) keeps the widgets last read, or none, rather than
+    /// failing every press: the editor is where that is reported and fixed.
     pub fn widget_plans(&self) -> Arc<Vec<WidgetPlan>> {
         let store = self.inner.store.lock().unwrap_or_else(PoisonError::into_inner);
         let Some(head) = store.rev_document(&CONFIG).ok().flatten() else {
@@ -323,12 +341,19 @@ impl Behavior {
         let Some((rev, json)) = snapshot else {
             return Arc::new(Vec::new());
         };
-        let fresh = Arc::new(crate::widgets::parse(&json, &self.inner.limits).unwrap_or_default());
-        *self
+        let mut cached = self
             .inner
             .widgets
             .write()
-            .unwrap_or_else(PoisonError::into_inner) = (rev, Arc::clone(&fresh));
+            .unwrap_or_else(PoisonError::into_inner);
+        let fresh = match crate::widgets::parse(&json, &self.inner.limits) {
+            Ok(plans) => Arc::new(plans),
+            Err(error) => {
+                tracing::warn!("the stored deck does not read, so the keys stay as they were: {error}");
+                Arc::clone(&cached.1)
+            }
+        };
+        *cached = (rev, Arc::clone(&fresh));
         fresh
     }
 
@@ -1215,8 +1240,12 @@ impl Behavior {
 
     /// Write the kept secrets down.
     fn keep_secrets(&self) {
-        let Ok(json) = serde_json::to_string(&self.inner.sources.secrets()) else { return };
         let store = self.inner.store.lock().unwrap_or_else(PoisonError::into_inner);
+        self.keep_secrets_in(&store);
+    }
+
+    fn keep_secrets_in(&self, store: &ConfigStore) {
+        let Ok(json) = serde_json::to_string(&self.inner.sources.secrets()) else { return };
         if let Err(error) = store.set_meta(crate::sources::SECRETS_KEY, &json) {
             tracing::warn!("could not keep the sources' secrets: {error}");
         }
@@ -1237,6 +1266,11 @@ impl Behavior {
     /// one already kept. Anything that does not parse is returned as it was,
     /// for the validator to refuse.
     pub fn take_secrets(&self, json: &str) -> String {
+        let store = self.inner.store.lock().unwrap_or_else(PoisonError::into_inner);
+        self.take_secrets_holding(json, &store)
+    }
+
+    pub fn take_secrets_holding(&self, json: &str, store: &ConfigStore) -> String {
         let Ok(mut document) = serde_json::from_str::<serde_json::Value>(json) else {
             return json.to_string();
         };
@@ -1244,7 +1278,7 @@ impl Behavior {
         let mut changed = false;
         self.take_secrets_in(&mut document, &mut found, &mut changed);
         if changed {
-            self.keep_secrets();
+            self.keep_secrets_in(store);
         }
         if found {
             serde_json::to_string(&document).unwrap_or_else(|_| json.to_string())
@@ -1939,6 +1973,22 @@ mod tests {
         assert!(!waiting("press"), "the wait is not counted against the press");
         assert!(press.join().unwrap().ran);
         assert!(!waiting("key flow"));
+    }
+
+    #[test]
+    fn a_deck_for_a_newer_agent_keeps_the_keys_last_read() {
+        let behavior = behavior();
+        store_config(&behavior, &deck(serde_json::json!([{"id": "btn"}])));
+        assert_eq!(behavior.widget_plans().len(), 1);
+        let newer = serde_json::json!({
+            "schema": crate::widgets::CONFIG_SCHEMA + 1, "rev": 2,
+            "profiles": [{"id": "p", "pages": [{"id": "home", "widgets": []}]}]
+        })
+        .to_string();
+        store_config(&behavior, &newer);
+        let plans = behavior.widget_plans();
+        assert_eq!(plans.len(), 1, "not blanked");
+        assert_eq!(plans[0].widget_id, "btn");
     }
 
     #[test]

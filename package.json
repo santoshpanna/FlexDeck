@@ -34,6 +34,7 @@
     "create-plugin": "node scripts/create-plugin.mjs",
     "plugins:package": "pnpm --filter \"./plugins/*\" -r --if-present run package",
     "verify:android": "node scripts/gradle.mjs :app:assembleDebug :core:client:test :core:grid:test --no-daemon --console=plain",
+    "gen:edit": "node apps/portal/scripts/gen-edit.ts",
     "gen:face": "node packages/face/scripts/gen-expected.ts",
     "gen:presets": "node apps/portal/scripts/gen-presets.ts",
     "gen:recipe": "node apps/portal/scripts/gen-recipe.ts",

@@ -1,8 +1,9 @@
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { useApi } from "../../../../hooks/useApi/useApi.hook.ts";
 import { ApiError, type WireConfig } from "../../../../services/api/api.ts";
 import { readingOf } from "../../lib/resource.lib.ts";
+import { WriteQueue } from "../../lib/write.queue.lib.ts";
 import { useDesktopResource } from "../useDesktopResource/useDesktopResource.hook.ts";
 
 /**
@@ -59,29 +60,48 @@ export function useConfigDocument(desktopId: string | null): ConfigDocumentValue
   const { resource, reload, ensure } = useDesktopResource<WireConfig | null>(desktopId, "config", load);
   const status = readingOf(desktopId, resource, (value) => value === null);
 
+  const queue = useMemo(
+    () => (desktopId ? new WriteQueue<WireConfig>((next) => api.putConfig(desktopId, next)) : null),
+    [api, desktopId],
+  );
+  const [pending, setPending] = useState<{ queue: WriteQueue<WireConfig>; config: WireConfig } | null>(null);
+
   const put = useCallback(
     async (next: WireConfig) => {
-      if (desktopId) {
-        await api.putConfig(desktopId, next);
+      if (!queue) return;
+      setPending({ queue, config: next });
+      try {
+        await queue.push(next);
+      } catch (cause) {
+        setPending((shown) => (shown?.queue === queue ? null : shown));
+        throw cause;
       }
+      if (queue.busy) return;
+      await reload().catch(() => undefined);
+      if (queue.busy) return;
+      queue.settle();
+      setPending((shown) => (shown?.queue === queue ? null : shown));
     },
-    [api, desktopId],
+    [queue, reload],
   );
 
   const undo = useCallback(async () => {
     if (desktopId) {
+      await queue?.idle();
       await api.undo(desktopId);
     }
-  }, [api, desktopId]);
+  }, [api, desktopId, queue]);
 
   const redo = useCallback(async () => {
     if (desktopId) {
+      await queue?.idle();
       await api.redo(desktopId);
     }
-  }, [api, desktopId]);
+  }, [api, desktopId, queue]);
 
+  const loaded = status === "loaded" ? (resource.value ?? null) : null;
   return {
-    config: status === "loaded" ? (resource.value ?? null) : null,
+    config: pending?.queue === queue ? pending.config : loaded,
     status,
     reload,
     ensure,

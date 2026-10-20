@@ -132,6 +132,27 @@ function argText(block: Extract<Block, { block: "doAction" }>): string {
   return value ? `: ${value.length > 60 ? `${value.slice(0, 57)}…` : value}` : "";
 }
 
+export function widgetConcerns(widget: WireWidget, where: string = widget.props?.label || widget.id): Concern[] {
+  const concerns: Concern[] = [];
+  for (const flow of widget.flows ?? []) {
+    blocksOf(flow.blocks, (block) => {
+      const severe = SEVERE[block.plugin]?.(block.action);
+      if (severe) concerns.push({ where, what: `${severe}${argText(block)}`, severe: true });
+      else if (!BUILT_IN.has(block.plugin)) concerns.push({ where, what: `uses the ${block.plugin} plugin (${block.action})`, severe: false });
+    });
+  }
+  for (const use of widget.sources ?? []) {
+    // A key may point a source of yours (say, Home Assistant) at an address
+    // of its own: what it fetches, and any token it sends, goes there.
+    for (const value of Object.values(use.args ?? {})) {
+      if (typeof value === "string" && /^[a-z][a-z0-9+.-]*:\/\//i.test(value.trim())) {
+        concerns.push({ where, what: `points ${use.source} at ${hostOf(value)}`, severe: true });
+      }
+    }
+  }
+  return concerns;
+}
+
 /**
  * What importing `bundle` would bring, and what it would do that deserves a
  * look first. `installed` is the plugins this desktop has; `yours` its own
@@ -143,26 +164,16 @@ export function reviewBundle(bundle: Bundle, installed: readonly string[], yours
   const missing = new Set<string>();
   const have = new Set([...installed, ...BUILT_IN]);
   for (const widget of page.widgets ?? []) {
-    const where = widget.props?.label || widget.id;
     for (const flow of widget.flows ?? []) {
       blocksOf(flow.blocks, (block) => {
         if (!have.has(block.plugin)) missing.add(block.plugin);
-        const severe = SEVERE[block.plugin]?.(block.action);
-        if (severe) concerns.push({ where, what: `${severe}${argText(block)}`, severe: true });
-        else if (!BUILT_IN.has(block.plugin)) concerns.push({ where, what: `uses the ${block.plugin} plugin (${block.action})`, severe: false });
       });
     }
     for (const use of widget.sources ?? []) {
       const plugin = use.source.split("/")[0]!;
       if (use.source.includes("/") && !have.has(plugin)) missing.add(plugin);
-      // A key may point a source of yours (say, Home Assistant) at an address
-      // of its own: what it fetches, and any token it sends, goes there.
-      for (const value of Object.values(use.args ?? {})) {
-        if (typeof value === "string" && /^[a-z][a-z0-9+.-]*:\/\//i.test(value.trim())) {
-          concerns.push({ where, what: `points ${use.source} at ${hostOf(value)}`, severe: true });
-        }
-      }
     }
+    concerns.push(...widgetConcerns(widget));
   }
   const taken = new Set(yours.map((source) => source.id));
   const sources = (bundle.sources ?? []).map((source) => {

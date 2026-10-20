@@ -101,6 +101,8 @@ impl SettingSpec {
             choices: strings(self.choices),
             default_value: Some(self.default_value.to_string()),
             secret: self.secret,
+            internal: false,
+            help: None,
         }
     }
 }
@@ -123,9 +125,14 @@ impl PluginManifest {
     pub fn to_dto(&self) -> abi::ManifestDto {
         let actions: Vec<abi::ActionDto> = self.actions.iter().map(action_to_dto).collect();
         let prefix = format!("{}.", self.id);
-        let toggles = actions
-            .iter()
-            .any(|action| action.active.as_ref().is_some_and(|active| !active.is_plain(&prefix)));
+        let lights = || actions.iter().filter_map(|action| action.active.as_ref());
+        let conditions = lights().any(|active| active.when.is_some());
+        let toggles = lights().any(|active| active.when.is_none() && !active.is_plain(&prefix));
+        let uses = [(toggles, abi::capability::TOGGLES), (conditions, abi::capability::CONDITIONS)]
+            .into_iter()
+            .filter(|(used, _)| *used)
+            .map(|(_, capability)| capability.to_string())
+            .collect();
         abi::ManifestDto {
             abi: abi::ABI_VERSION,
             id: self.id.to_string(),
@@ -137,9 +144,10 @@ impl PluginManifest {
             settings: self.settings.iter().map(SettingSpec::to_dto).collect(),
             events: Vec::new(),
             permissions: Vec::new(),
-            uses: if toggles { vec![abi::capability::TOGGLES.to_string()] } else { Vec::new() },
+            uses,
             presets: Vec::new(),
             feeds: Vec::new(),
+            guide: None,
         }
     }
 }
@@ -176,6 +184,7 @@ pub fn action_to_dto(spec: &ActionSpec) -> abi::ActionDto {
             variable: active.variable.to_string(),
             equals: active.equals.map(str::to_string),
             is: active.is.map(str::to_string),
+            when: active.when.map(str::to_string),
         }),
     }
 }
@@ -1023,6 +1032,8 @@ impl Registry {
                             "choices": setting.choices,
                             "defaultValue": setting.default_value,
                             "secret": setting.secret,
+                            "internal": setting.internal,
+                            "help": setting.help,
                             "value": if setting.secret { None } else { value },
                             "isSet": value.is_some(),
                         })
@@ -1060,6 +1071,7 @@ impl Registry {
                     "variables": variables,
                     "feeds": manifest.feeds,
                     "presets": manifest.presets,
+                    "guide": manifest.guide,
                 })
             })
             .collect();
@@ -1461,12 +1473,15 @@ mod tests {
                         choices: vec![],
                         default_value: None,
                         secret: true,
+                        internal: false,
+                        help: None,
                     }],
                     events: vec![],
                     permissions: vec![],
                     uses: Vec::new(),
                     presets: Vec::new(),
                     feeds: Vec::new(),
+                    guide: None,
                 }
             }
             fn variables(&self) -> Vec<VariableSpec> {
@@ -1581,6 +1596,7 @@ mod tests {
                     uses: Vec::new(),
                     presets: Vec::new(),
                     feeds: Vec::new(),
+                    guide: None,
                 }
             }
             fn variables(&self) -> Vec<VariableSpec> {
@@ -1657,12 +1673,15 @@ mod tests {
                         choices: vec![],
                         default_value: None,
                         secret: false,
+                        internal: false,
+                        help: None,
                     }],
                     events: vec![],
                     permissions: vec![],
                     uses: Vec::new(),
                     presets: Vec::new(),
                     feeds: Vec::new(),
+                    guide: None,
                 }
             }
             fn variables(&self) -> Vec<VariableSpec> {

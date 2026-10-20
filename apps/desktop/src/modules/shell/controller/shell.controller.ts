@@ -1,10 +1,12 @@
 import { Children, cloneElement, useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 
 import { shell } from "../../../services/tauri/client.ts";
+import { splitAgents } from "../lib/agents.lib.ts";
 import { nextStep, readouts } from "../lib/home.lib.ts";
 import { pluginGroups, type PluginGroup } from "../lib/plugins.lib.ts";
 import { statusRows, type StatusRow } from "../lib/status.lib.ts";
 import type {
+  AgentToken,
   Catalog,
   CatalogEntry,
   Consent,
@@ -35,6 +37,7 @@ export function ShellController({ children }: ShellControllerProps) {
   const [logs, setLogs] = useState<Record<string, string[]>>({});
   const [windowPrefs, setWindowPrefs] = useState<WindowPrefs | null>(null);
   const [version, setVersion] = useState("");
+  const [agentToken, setAgentToken] = useState<AgentToken | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -140,13 +143,18 @@ export function ShellController({ children }: ShellControllerProps) {
     return times.length > 0 ? Math.min(...times) : null;
   }, [catalog]);
 
+  const split = useMemo(() => splitAgents(status?.devices ?? []), [status]);
+
   const props: ShellViewProps = {
     rows,
     readouts: status ? readouts(status) : [],
     next: status ? nextStep(status) : null,
     address: status ? status.host : "",
     port: status ? status.port : null,
-    devices: status?.devices ?? [],
+    devices: split.devices,
+    agentTokens: split.agents,
+    mcp: status?.mcp ?? { url: "", error: null },
+    agentToken,
     plugins,
     installed,
     consent,
@@ -175,6 +183,11 @@ export function ShellController({ children }: ShellControllerProps) {
     onAnswer: (id: number, allow: boolean) => void act(() => shell.answerApproval(id, allow)),
     onRevoke: (deviceId: string) => void act(() => shell.revokeDevice(deviceId)),
     onRevokeAll: () => void act(() => shell.revokeAllDevices()),
+    onCreateAgentToken: (name: string) =>
+      void act(async () => {
+        setAgentToken(await shell.createAgentToken(name));
+      }),
+    onDismissAgentToken: () => setAgentToken(null),
     onToggleWebAccess: (enabled: boolean) => void act(() => shell.setWebAccess(enabled)),
     onSetPortal: (url: string) => void act(() => shell.setPortal(url)),
     onSetWindowPrefs: (patch: Partial<WindowPrefs>) =>
@@ -261,6 +274,7 @@ export function ShellController({ children }: ShellControllerProps) {
     onReload: (id: string) => void act(() => shell.reloadPlugin(id)),
     onSaveSettings: (id: string, values: Record<string, string>) =>
       void act(() => shell.savePluginSettings(id, values)),
+    onSignOut: (id: string) => void act(() => shell.signOutPlugin(id)),
     onShowLog: (id: string) =>
       void shell.pluginLog(id).then(
         (lines) => setLogs((current) => ({ ...current, [id]: lines })),

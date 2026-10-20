@@ -13,6 +13,8 @@ fn world() -> HashMap<&'static str, Val> {
         ("media.art", Val::Text(format!("img:{}", "ab".repeat(32)))),
         ("obs.input.mic-aux.volume", Val::Number(80.0)),
         ("net.down", Val::Number(1_572_864.0)),
+        ("obs.input.Mic/Aux.muted", Val::Bool(true)),
+        ("my-plugin.and", Val::Text("live".into())),
     ])
 }
 
@@ -44,6 +46,20 @@ fn schema_one_templates_render_as_they_always_did() {
 fn a_name_that_is_not_an_expression_is_still_a_name() {
     assert_eq!(render_with("{{obs.input.mic-aux.volume}}"), "80");
     assert_eq!(render_with("{{ btc.price - btc.open }}"), "1250.5", "with spaces it subtracts");
+}
+
+#[test]
+fn any_name_can_be_written_in_backticks() {
+    assert_eq!(value_of("{{ `obs.input.Mic/Aux.muted` and obs.recording }}"), Val::Bool(true));
+    assert_eq!(value_of("{{ `my-plugin.and` == \"live\" }}"), Val::Bool(true));
+    assert_eq!(value_of("{{ `true` }}"), Val::Missing, "a quoted word is always a name");
+    let expression = parse_expression("`obs.input.Mic/Aux.muted` or `my-plugin.and` != 'x'").unwrap();
+    assert_eq!(
+        expression.variables().into_iter().collect::<Vec<_>>(),
+        ["my-plugin.and", "obs.input.Mic/Aux.muted"]
+    );
+    assert!(matches!(parse_expression("`obs.scene == 1"), Err(ExprError::Syntax(e)) if e.contains("backtick")));
+    assert!(parse_expression("`` == 1").is_err());
 }
 
 #[test]

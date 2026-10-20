@@ -331,6 +331,7 @@ pub fn manifest(abi: u32, id: &str, name: &str, version: &str) -> abi::ManifestD
         uses: Vec::new(),
         presets: Vec::new(),
         feeds: Vec::new(),
+        guide: None,
     }
 }
 
@@ -440,23 +441,53 @@ pub fn serve_with<S: Sidecar, R: BufRead>(sidecar: S, input: R, output: Box<dyn 
 
 /// Leave out the action lights this agent cannot read, rather than have it
 /// refuse the whole manifest over one: under ABI 4 without `toggles`, only
-/// the plain kind goes. Says it uses `toggles` when it does.
+/// the plain kind goes, and without `conditions`, no `when` light. Says it
+/// uses `toggles` and `conditions` when it does.
 pub fn fit_to_host(manifest: &mut abi::ManifestDto, abi_version: u32, offered: &[String]) {
-    let toggles = abi_version >= 4 && offered.iter().any(|used| used == abi::capability::TOGGLES);
+    let offers = |capability: &str| abi_version >= 4 && offered.iter().any(|used| used == capability);
+    let toggles = offers(abi::capability::TOGGLES);
+    let conditions = offers(abi::capability::CONDITIONS);
     let prefix = manifest.variable_prefix();
-    let mut using = false;
+    let mut using_toggles = false;
+    let mut using_conditions = false;
     for action in &mut manifest.actions {
         let Some(active) = &action.active else { continue };
-        if abi_version < 4 || (!active.is_plain(&prefix) && !toggles) {
+        if active.when.is_some() {
+            if conditions {
+                using_conditions = true;
+            } else {
+                eprintln!("plugin: this agent has no conditions, so {} is never lit", action.action);
+                action.active = None;
+            }
+        } else if abi_version < 4 || (!active.is_plain(&prefix) && !toggles) {
             action.active = None;
         } else if !active.is_plain(&prefix) {
-            using = true;
+            using_toggles = true;
         }
     }
     // An agent refuses a capability it has never heard of, even unused.
-    manifest.uses.retain(|used| used != abi::capability::TOGGLES);
-    if using {
+    manifest.uses.retain(|used| {
+        used != abi::capability::TOGGLES && used != abi::capability::SETUP && used != abi::capability::CONDITIONS
+    });
+    if using_toggles {
         manifest.uses.push(abi::capability::TOGGLES.to_string());
+    }
+    if using_conditions {
+        manifest.uses.push(abi::capability::CONDITIONS.to_string());
+    }
+
+    let setup = abi_version >= 4 && offered.iter().any(|used| used == abi::capability::SETUP);
+    if !setup {
+        manifest.guide = None;
+        for setting in &mut manifest.settings {
+            setting.internal = false;
+            setting.help = None;
+        }
+    }
+    if manifest.guide.is_some()
+        || manifest.settings.iter().any(|setting| setting.internal || setting.help.is_some())
+    {
+        manifest.uses.push(abi::capability::SETUP.to_string());
     }
 }
 
@@ -655,7 +686,12 @@ mod tests {
             description: String::new(),
             arguments: vec![],
             slider: None,
-            active: Some(abi::ActiveDto { variable: variable.into(), equals: equals.map(str::to_string), is: None }),
+            active: Some(abi::ActiveDto {
+                variable: variable.into(),
+                equals: equals.map(str::to_string),
+                is: None,
+                when: None,
+            }),
         };
         let plain = lit("counter.scene", Some("scene"));
         let toggle = lit("counter.on", None);
@@ -680,6 +716,72 @@ mod tests {
         let mut abi3 = manifest();
         fit_to_host(&mut abi3, 3, &[abi::capability::TOGGLES.into()]);
         assert!(abi3.actions.iter().all(|action| action.active.is_none()), "ABI 3 has no lights");
+    }
+
+    #[test]
+    fn a_condition_light_reaches_only_an_agent_that_offers_conditions() {
+        let studio = abi::ActiveDto {
+            variable: String::new(),
+            equals: None,
+            is: None,
+            when: Some("obs.studio_mode and obs.preview_scene != obs.scene".into()),
+        };
+        let manifest = || {
+            let mut manifest = manifest(4, "counter", "Counter", "1.0.0");
+            manifest.actions = vec![abi::ActionDto {
+                action: "transition".into(),
+                description: String::new(),
+                arguments: vec![],
+                slider: None,
+                active: Some(studio.clone()),
+            }];
+            manifest.uses.push(abi::capability::CONDITIONS.into());
+            manifest
+        };
+
+        let mut older = manifest();
+        fit_to_host(&mut older, 4, &[abi::capability::TOGGLES.into()]);
+        assert_eq!(older.actions[0].active, None);
+        assert!(older.uses.is_empty(), "neither conditions nor toggles: {:?}", older.uses);
+        older.validate().expect("loads without the light");
+
+        let mut newer = manifest();
+        fit_to_host(&mut newer, 4, &[abi::capability::CONDITIONS.into()]);
+        assert_eq!(newer.actions[0].active, Some(studio.clone()));
+        assert_eq!(newer.uses, [abi::capability::CONDITIONS]);
+        newer.validate().expect("valid with conditions");
+    }
+
+    #[test]
+    fn setup_fields_reach_only_an_agent_that_offers_setup() {
+        let manifest = || {
+            let mut manifest = manifest(4, "counter", "Counter", "1.0.0");
+            manifest.guide = Some("https://example.com/guide".into());
+            manifest.settings = vec![abi::SettingDto {
+                key: "token".into(),
+                description: String::new(),
+                kind: abi::kind::TEXT.into(),
+                choices: vec![],
+                default_value: None,
+                secret: true,
+                internal: true,
+                help: Some("Where to find it".into()),
+            }];
+            manifest
+        };
+
+        let mut older = manifest();
+        fit_to_host(&mut older, 4, &["series".into()]);
+        assert_eq!(older.guide, None);
+        assert!(!older.settings[0].internal && older.settings[0].help.is_none());
+        assert!(!older.uses(abi::capability::SETUP));
+        older.validate().expect("an older agent reads it");
+
+        let mut newer = manifest();
+        fit_to_host(&mut newer, 4, &[abi::capability::SETUP.into()]);
+        assert!(newer.settings[0].internal);
+        assert!(newer.uses(abi::capability::SETUP));
+        newer.validate().expect("valid");
     }
 
     #[test]

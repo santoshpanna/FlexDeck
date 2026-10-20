@@ -17,7 +17,7 @@ import { useKeyboardEdit } from "../hooks/useKeyboardEdit/useKeyboardEdit.hook.t
 import { usePageSelection } from "../hooks/usePageSelection/usePageSelection.hook.ts";
 import { useLiveInvalidation } from "../hooks/useLiveInvalidation/useLiveInvalidation.hook.ts";
 import { usePairing } from "../hooks/usePairing/usePairing.hook.ts";
-import { gridSpecOf, pageById, pagesOf, profileOf } from "../lib/config.lib.ts";
+import { changedUnderYou, gridSpecOf, newerDeckRefusal, pageById, pagesOf, profileOf } from "../lib/config.lib.ts";
 import { CONFIRM_WINDOW_MS, isConfirmed, type Unconfirmed, type Watched } from "../lib/resource.lib.ts";
 import type { ConfigTab } from "../lib/tabs.lib.ts";
 import type { WidgetState } from "../lib/state.lib.ts";
@@ -48,6 +48,7 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     pair,
     forgetDesktop,
     error: desktopError,
+    waitingForDesktop,
     reconnects,
   } = useDesktops();
 
@@ -217,6 +218,11 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
   /// leave the page reporting a revision the document no longer has.
   const write = useCallback(
     (next: WireConfig) => {
+      const newer = newerDeckRefusal(document.config);
+      if (newer) {
+        setError(newer);
+        return;
+      }
       void act(async () => {
         try {
           await document.put(next);
@@ -226,13 +232,18 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
           // needs (409), or a relay that could not reach it (502–504).
           const refused = cause instanceof ApiError && [400, 422, 500].includes(cause.status);
           refusedWrite.current = refused ? describeError(cause) : null;
+          const changed = changedUnderYou(cause, "deck");
+          if (changed) {
+            await refreshDeck().catch(() => undefined);
+            throw new Error(changed);
+          }
           throw cause;
         }
         refusedWrite.current = null;
         await refreshDeck();
       }, "deck");
     },
-    [act, document.put, refreshDeck],
+    [act, document.config, document.put, refreshDeck],
   );
 
   // A refused save is about the text that was refused; once the field is back
@@ -330,11 +341,18 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     await act(async () => {
       setAutomationsSaving("saving");
       try {
-        await automations.put(automationsDraft);
+        const rev = await automations.put(automationsDraft);
+        setAutomationsDraft((current) => (current ? { ...current, rev } : current));
         setAutomationsDirty(false);
         setAutomationsSaving("saved");
       } catch (cause) {
         if (!(cause instanceof ApiError && cause.isUnconfirmed)) setAutomationsSaving("error");
+        const changed = changedUnderYou(cause, "automations");
+        if (changed) {
+          setAutomationsDirty(false);
+          await automations.reload().catch(() => undefined);
+          throw new Error(changed);
+        }
         throw cause;
       }
     }, "automations");
@@ -390,7 +408,8 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     pair,
 
     desktopsError: desktopError,
-    onRetryDesktops: () => void refreshDesktops(),
+    desktopsWaiting: waitingForDesktop,
+    onRetryDesktops: () => void refreshDesktops(true),
     error,
     dismissError: () => setError(null),
     confirming: unconfirmed !== null,
@@ -482,6 +501,7 @@ export function ConfigController({ children }: ConfigControllerProps): ReactElem
     setBinding: editor.setBinding,
     editSelected: editor.editSelected,
     editPage: editor.editPage,
+    replaceDeck: write,
     duplicate: editor.duplicate,
     addAt: editor.addAt,
     moveTo: editor.moveTo,

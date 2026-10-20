@@ -259,6 +259,7 @@ impl Host {
             settings: self.settings,
             bind: self.bind,
             web_access: self.web_access,
+            loopback_error: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -328,6 +329,7 @@ pub struct HostParts {
     pub settings: Settings,
     pub bind: SocketAddr,
     pub web_access: Option<Arc<WebAccess>>,
+    pub loopback_error: Arc<std::sync::Mutex<Option<String>>>,
 }
 
 /// The router for an assembled agent, with the toggle merged in where there is one.
@@ -427,10 +429,15 @@ async fn serve_loopback(parts: &HostParts, api: axum::Router) -> Option<AbortOnD
         allowed_origins: loopback::allowed_origins(parts.settings.cloud_url.as_deref()),
         name: desktop_name(),
     };
+    let api = api.merge(flexdeck_server::mcp::router(Arc::clone(&parts.agent)));
     let app = loopback::router(Arc::clone(&parts.agent), api, config);
+    let record = |error: Option<String>| {
+        *parts.loopback_error.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = error;
+    };
 
     match tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)).await {
         Ok(listener) => {
+            record(None);
             println!("Serving this computer's browser on http://127.0.0.1:{port}");
             Some(AbortOnDrop(tokio::spawn(async move {
                 if let Err(error) = axum::serve(listener, app).await {
@@ -440,6 +447,7 @@ async fn serve_loopback(parts: &HostParts, api: axum::Router) -> Option<AbortOnD
             })))
         }
         Err(error) => {
+            record(Some(format!("could not open http://127.0.0.1:{port}: {error}")));
             tracing::warn!("could not open http://127.0.0.1:{port} for this computer's browser: {error}");
             eprintln!(
                 "warning: could not open http://127.0.0.1:{port} for this computer's browser \

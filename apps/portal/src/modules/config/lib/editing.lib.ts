@@ -13,6 +13,7 @@ import type {
   WireStates,
   WireWidget,
 } from "../../../services/api/api.ts";
+import { fillPlaceholders, isBareName } from "./condition.lib.ts";
 import { gridSpecOf, pageOf, profileOf, withSchemaFor } from "./config.lib.ts";
 
 /**
@@ -276,17 +277,43 @@ export function stateVariableOf(widget: WireWidget): string {
 }
 
 /**
+ * What a "light up while" widget is lit by: its bool variable, or the
+ * condition it was given in place of one. Richer states say nothing.
+ */
+export function litWhileOf(widget: WireWidget): string {
+  const variable = stateVariableOf(widget);
+  if (variable) return variable;
+  const states = widget.states;
+  const looks = states?.looks ?? [];
+  const cases = states?.variable?.cases ?? [];
+  const lit =
+    looks.length === 2 &&
+    looks[0]?.id === "off" &&
+    looks[1]?.id === "on" &&
+    !states?.rules?.length &&
+    cases.length === 1 &&
+    cases[0]?.state === "on" &&
+    !states?.variable?.variable;
+  return lit ? (cases[0]?.when?.trim() ?? "") : "";
+}
+
+/**
  * Bind a widget to live values, or unbind it: `stateVariable` lights it while a
- * bool is true — states "off" and "on", picked by that variable — and
- * `labelTemplate` makes its label follow values. Blank clears, and is stored
- * as absent, like every other prop.
+ * bool is true — states "off" and "on", picked by that variable — or, when it
+ * is a condition rather than one name, while that holds; `labelTemplate`
+ * makes its label follow values. Blank clears, and is stored as absent, like
+ * every other prop. `known` are the variables' names, read as names whatever
+ * they hold.
  */
 export function setWidgetBinding(
   config: WireConfig,
   widgetId: string,
   binding: { stateVariable: string; labelTemplate: string },
+  known: readonly string[] = [],
 ): WireConfig {
-  return withWidget(config, widgetId, (widget) => {
+  const when = binding.stateVariable.trim();
+  const condition = when !== "" && !isBareName(when, known);
+  const next = withWidget(config, widgetId, (widget) => {
     const props = { ...(widget.props ?? {}) };
     const state = binding.stateVariable.trim();
     const template = binding.labelTemplate.trim();
@@ -294,17 +321,19 @@ export function setWidgetBinding(
     else delete props.labelTemplate;
     // A light cleared by hand stays cleared: `lightActiveKeys` reads this.
     if (state) delete props.noAutoLight;
-    else if (stateVariableOf(widget)) props.noAutoLight = true;
+    else if (litWhileOf(widget)) props.noAutoLight = true;
     let next = withProps(widget, props);
     if (state) {
       next = {
         ...next,
         states: {
           looks: LIT_STATES,
-          variable: { variable: state, cases: [{ value: "true", state: "on" }], otherwise: "off" },
+          variable: condition
+            ? { variable: "", cases: [{ when: state, state: "on" }], otherwise: "off" }
+            : { variable: state, cases: [{ value: "true", state: "on" }], otherwise: "off" },
         },
       };
-    } else if (stateVariableOf(widget)) {
+    } else if (litWhileOf(widget)) {
       // Only the simple binding this editor made is removed; richer states
       // are left for the editor that understands them.
       next = { ...next };
@@ -312,6 +341,7 @@ export function setWidgetBinding(
     }
     return next;
   });
+  return condition ? withSchemaFor(next) : next;
 }
 
 /** Set or clear a widget's background and foreground colours. */
@@ -492,13 +522,22 @@ function isActiveStates(states: WireStates | undefined): boolean {
 }
 
 /**
- * The variable and value a key running this action is lit by, with the
- * action's arguments filled in — or null when it cannot tell: no `active`, or
- * an argument still blank or waiting on a placeholder of its own.
+ * The variable and value a key running this action is lit by, or the
+ * condition, with the action's arguments filled in — or null when it cannot
+ * tell: no `active`, or an argument still blank or waiting on a placeholder of
+ * its own.
  */
-function activeCase(definition: ActionDefinition | null, args: Record<string, string>): { variable: string; value: string } | null {
+function activeCase(
+  definition: ActionDefinition | null,
+  args: Record<string, string>,
+): { variable: string; value: string } | { when: string } | null {
   const active = definition?.active;
   if (!active) return null;
+  if (active.when !== undefined) {
+    const when = fillPlaceholders(active.when, args);
+    return when?.trim() ? { when } : null;
+  }
+  if (!active.variable) return null;
   let missing = false;
   const variable = active.variable.replace(/\{\{\s*([^{}\s]+)\s*\}\}/g, (_, name: string) => {
     const value = (args[name] ?? "").trim();
@@ -524,9 +563,9 @@ export function setActiveLight(
   definition: ActionDefinition | null,
   args: Record<string, string>,
 ): WireConfig {
-  return withWidget(config, widgetId, (widget) => {
+  const lit = activeCase(definition, args);
+  const next = withWidget(config, widgetId, (widget) => {
     const ours = !hasLooks(widget.states) || isActiveStates(widget.states);
-    const lit = activeCase(definition, args);
     if (lit) {
       if (!ours) return widget;
       const props = { ...(widget.props ?? {}) };
@@ -535,15 +574,19 @@ export function setActiveLight(
         ...withProps(widget, props),
         states: {
           looks: ACTIVE_STATES,
-          variable: { variable: lit.variable, cases: [{ value: lit.value, state: "on" }], otherwise: "off" },
+          variable:
+            "when" in lit
+              ? { variable: "", cases: [{ when: lit.when, state: "on" }], otherwise: "off" }
+              : { variable: lit.variable, cases: [{ value: lit.value, state: "on" }], otherwise: "off" },
         },
       };
     }
     if (!widget.states || !isActiveStates(widget.states)) return widget;
-    const next = { ...widget };
-    delete next.states;
-    return next;
+    const cleared = { ...widget };
+    delete cleared.states;
+    return cleared;
   });
+  return lit && "when" in lit ? withSchemaFor(next) : next;
 }
 
 /**

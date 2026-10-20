@@ -8,7 +8,7 @@ import type { LandingFeature } from "../../view/landing.view.tsx";
 
 /**
  * What it does, four ways, each with its own small live figure: a padlock
- * snapping shut on a typed PIN, faders riding, a dry run walking an automation
+ * snapping shut on a typed PIN, a fader held while its echo trails, a dry run walking an automation
  * round its loop, a plugin piece locking into place. Cards rise
  * into place as they scroll into view.
  */

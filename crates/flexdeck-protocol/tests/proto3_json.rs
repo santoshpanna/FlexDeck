@@ -89,6 +89,7 @@ fn sample_config() -> pb::Config {
                                 value: "true".to_string(),
                                 state: "muted".to_string(),
                                 op: pb::CompareOp::Eq as i32,
+                                when: String::new(),
                             }],
                             otherwise: "live".to_string(),
                         })),

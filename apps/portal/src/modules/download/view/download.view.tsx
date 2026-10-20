@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { Plate, cn, ease, keyVariants } from "@flexdeck/ui";
 
 import { SiteNav } from "../../../common/components/SiteNav/SiteNav.component.tsx";
+import { SiteFooter } from "../../../common/components/SiteFooter/SiteFooter.component.tsx";
 import { type Asset, type Platform, RELEASES_URL, REPO_URL } from "../../../common/release/release.lib.ts";
 import { useDocumentTitle } from "../../../hooks/useDocumentTitle/useDocumentTitle.hook.ts";
 
@@ -233,6 +234,7 @@ export function DownloadView(props: Partial<DownloadViewProps>) {
           </Plate>
         </Plate>
       </main>
+      <SiteFooter />
     </div>
   );
 }

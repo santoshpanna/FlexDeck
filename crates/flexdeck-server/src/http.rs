@@ -87,6 +87,7 @@ fn api_router(agent: Arc<Agent>) -> Router {
         .route("/api/plugins/reload", post(reload_plugin))
         .route("/api/plugins/link", post(link_plugin))
         .route("/api/plugins/settings", put(plugin_settings))
+        .route("/api/plugins/sign-out", post(plugin_sign_out))
         .route("/api/plugins/log", post(plugin_log))
         // What an action's arguments can be set to, asked of the plugin while
         // someone edits a button: OBS's scenes, its inputs.
@@ -216,7 +217,7 @@ fn channel_of(request: &Request) -> Channel {
 }
 
 /// Resolve the request's credential against the channel it came in on.
-fn authority_of(agent: &Agent, request: &Request) -> Result<Authority, ApiError> {
+pub(crate) fn authority_of(agent: &Agent, request: &Request) -> Result<Authority, ApiError> {
     let token = bearer_token(request).ok_or_else(|| {
         ApiError::unauthorised("an 'Authorization: Bearer <token>' header is required")
     })?;
@@ -237,9 +238,14 @@ async fn require_auth(
     next: Next,
 ) -> Result<Response, ApiError> {
     let authority = authority_of(&agent, &request)?;
+    if matches!(authority, Authority::Agent(_)) {
+        return Err(ApiError::forbidden(AGENT_ONLY_MCP));
+    }
     request.extensions_mut().insert(authority);
     Ok(next.run(request).await)
 }
+
+const AGENT_ONLY_MCP: &str = "agent tokens work only on /mcp";
 
 /// A configurator specifically — the admin token or a paired browser — for
 /// every route that mints secrets or decides what code runs on this machine.
@@ -311,6 +317,10 @@ impl ApiError {
     /// failure, which is the shape that drifts.
     pub fn message(&self) -> &str {
         &self.message
+    }
+
+    pub(crate) fn status(&self) -> StatusCode {
+        self.status
     }
 
     fn bad_request(message: impl Into<String>) -> Self {
@@ -386,7 +396,8 @@ impl From<AgentError> for ApiError {
     fn from(error: AgentError) -> Self {
         match error {
             // A deck the agent will not take is the sender's to fix, not a fault here.
-            AgentError::Widgets(_) | AgentError::Json(_) => Self::bad_request(error.to_string()),
+            AgentError::Widgets(_) | AgentError::Json(_) | AgentError::Refused(_) => Self::bad_request(error.to_string()),
+            AgentError::Conflict { .. } => Self::conflict(error.to_string()),
             _ => Self::internal(error.to_string()),
         }
     }
@@ -435,28 +446,91 @@ async fn config(State(agent): State<Arc<Agent>>) -> Result<Response, ApiError> {
 async fn replace_config(
     State(agent): State<Arc<Agent>>,
     Extension(authority): Extension<Authority>,
+    headers: HeaderMap,
     Json(document): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
     require_configurator_inline(&authority)?;
+
+    let mut expect = expected_rev(&headers, &document);
+    if authority.needs_launch_approval() {
+        let (current_rev, current) = match agent.config()? {
+            Some((rev, json)) => (rev, serde_json::from_str(&json)?),
+            None => (0, Value::Null),
+        };
+        if let Some(expected) = expect.filter(|expected| *expected != current_rev) {
+            return Ok(conflict_response(expected, current_rev));
+        }
+        crate::launches::approve(&agent, &authority, &current, &document)
+            .await
+            .map_err(ApiError::forbidden)?;
+        expect = Some(current_rev);
+    }
 
     // Re-serialising normalises whitespace and key order, which keeps stored
     // documents and their diffs stable regardless of what the client sent.
     let text = serde_json::to_string(&document)?;
-    let rev = agent.replace_config(&text)?;
-    Ok(Json(json!({ "rev": rev })))
-}
-
-async fn undo(State(agent): State<Arc<Agent>>) -> Result<Json<Value>, ApiError> {
-    match agent.undo() {
-        Ok(rev) => Ok(Json(json!({ "rev": rev }))),
-        // Nothing to undo is a conflict with the request, not a server fault.
-        Err(error) => Err(ApiError::conflict(error.to_string())),
+    match agent.replace_config_if(expect, &text) {
+        Ok(rev) => Ok(Json(json!({ "rev": rev })).into_response()),
+        Err(AgentError::Conflict { expected, current }) => Ok(conflict_response(expected, current)),
+        Err(error) => Err(error.into()),
     }
 }
 
-async fn redo(State(agent): State<Arc<Agent>>) -> Result<Json<Value>, ApiError> {
-    match agent.redo() {
+fn expected_rev(headers: &HeaderMap, document: &Value) -> Option<u64> {
+    let from_header = headers
+        .get(header::IF_MATCH)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.trim().trim_start_matches("W/").trim_matches('"'))
+        .and_then(|value| value.parse::<u64>().ok());
+    from_header.or_else(|| document.get("rev").and_then(Value::as_u64).filter(|rev| *rev > 0))
+}
+
+fn conflict_response(expected: u64, current: u64) -> Response {
+    (
+        StatusCode::CONFLICT,
+        Json(json!({
+            "error": format!("the deck changed (now rev {current})"),
+            "expected": expected,
+            "current": current,
+        })),
+    )
+        .into_response()
+}
+
+async fn undo(
+    State(agent): State<Arc<Agent>>,
+    Extension(authority): Extension<Authority>,
+) -> Result<Json<Value>, ApiError> {
+    step(&agent, &authority, false)
+}
+
+async fn redo(
+    State(agent): State<Arc<Agent>>,
+    Extension(authority): Extension<Authority>,
+) -> Result<Json<Value>, ApiError> {
+    step(&agent, &authority, true)
+}
+
+pub(crate) const STEP_RESTORES_LAUNCH: &str =
+    "this step brings back a program launch; undo or redo it at the desktop";
+
+fn step(agent: &Agent, authority: &Authority, forward: bool) -> Result<Json<Value>, ApiError> {
+    let mut expect = None;
+    if authority.needs_launch_approval() {
+        if let Some((head, current, target)) = agent.step_preview(forward)? {
+            let current: Value = serde_json::from_str(&current)?;
+            let target: Value = serde_json::from_str(&target)?;
+            let sources = agent.behavior().sources().doc();
+            if !crate::launches::new_launches(&current, &target, &sources).is_empty() {
+                return Err(ApiError::conflict(STEP_RESTORES_LAUNCH));
+            }
+            expect = Some(head);
+        }
+    }
+    let outcome = if forward { agent.redo_if(expect) } else { agent.undo_if(expect) };
+    match outcome {
         Ok(rev) => Ok(Json(json!({ "rev": rev }))),
+        // Nothing to undo is a conflict with the request, not a server fault.
         Err(error) => Err(ApiError::conflict(error.to_string())),
     }
 }
@@ -494,7 +568,7 @@ async fn devices(
     let presence = agent.presence();
     // The device making this request, so a list can say "this one".
     let caller = match &authority {
-        Authority::Browser(device) | Authority::Tablet(device) => Some(device.id.clone()),
+        Authority::Browser(device) | Authority::Tablet(device) | Authority::Agent(device) => Some(device.id.clone()),
         Authority::Admin => None,
     };
 
@@ -549,6 +623,19 @@ async fn argument_choices(
     State(agent): State<Arc<Agent>>,
     Json(query): Json<ChoicesQuery>,
 ) -> Result<Json<Value>, ApiError> {
+    match choices_for(&agent, query.plugin, query.action, query.args).await? {
+        Ok(choices) => Ok(Json(choices)),
+        Err(error) => Err(ApiError::not_found(error)),
+    }
+}
+
+pub(crate) async fn choices_for(
+    agent: &Agent,
+    plugin: String,
+    action: String,
+    args: std::collections::HashMap<String, String>,
+) -> Result<Result<Value, String>, ApiError> {
+    let query = ChoicesQuery { plugin, action, args };
     let registry = agent.behavior().registry_snapshot();
     // The plugin is a process with a deadline of seconds: not on a worker.
     let answer = tokio::task::spawn_blocking(move || {
@@ -563,13 +650,13 @@ async fn argument_choices(
     .await
     .map_err(|error| ApiError::internal(error.to_string()))?;
     match answer {
-        Ok(choices) => Ok(Json(serde_json::to_value(choices)?)),
+        Ok(choices) => Ok(Ok(serde_json::to_value(choices)?)),
         Err(
             error @ (flexdeck_plugin::PluginError::UnknownPlugin(_)
             | flexdeck_plugin::PluginError::UnknownAction { .. }),
-        ) => Err(ApiError::not_found(error.to_string())),
+        ) => Ok(Err(error.to_string())),
         // Running but unable to answer: no suggestions, and the reason.
-        Err(error) => Ok(Json(json!({ "arguments": {}, "error": error.to_string() }))),
+        Err(error) => Ok(Ok(json!({ "arguments": {}, "error": error.to_string() }))),
     }
 }
 
@@ -1025,6 +1112,26 @@ async fn plugin_settings(
     Ok(Json(json!({ "id": request.id })))
 }
 
+/// Forget what a plugin keeps for itself: its sign-in.
+async fn plugin_sign_out(
+    State(agent): State<Arc<Agent>>,
+    Json(request): Json<PluginIdRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let worker = Arc::clone(&agent);
+    let id = request.id.clone();
+    tokio::task::spawn_blocking(move || {
+        let _busy = crate::watch::busy("plugin sign out", id.clone(), crate::watch::PLUGIN_WORK);
+        worker.sign_out_plugin(&id)
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?
+    .map_err(|error| match error {
+        AgentError::Plugin(error) => ApiError::bad_request(error.to_string()),
+        other => ApiError::from(other),
+    })?;
+    Ok(Json(json!({ "id": request.id })))
+}
+
 async fn plugin_log(
     State(agent): State<Arc<Agent>>,
     Json(request): Json<PluginIdRequest>,
@@ -1183,15 +1290,27 @@ async fn put_automations(
     State(agent): State<Arc<Agent>>,
     Extension(authority): Extension<Authority>,
     Json(body): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
     require_configurator_inline(&authority)?;
+    let mut expect = body.get("rev").and_then(Value::as_u64).filter(|rev| *rev > 0);
+    if authority.needs_launch_approval() {
+        let current_rev = agent.behavior().automations_rev().map_err(|error| ApiError::internal(error.to_string()))?;
+        if let Some(expected) = expect.filter(|expected| *expected != current_rev) {
+            return Ok(conflict_response(expected, current_rev));
+        }
+        let current = agent.behavior().document_json();
+        crate::launches::approve(&agent, &authority, &current, &body)
+            .await
+            .map_err(ApiError::forbidden)?;
+        expect = Some(current_rev);
+    }
     let raw = serde_json::to_string(&body)
         .map_err(|e| ApiError::bad_request(format!("body is not valid JSON: {e}")))?;
-    let rev = agent
-        .behavior()
-        .replace_document_json(&raw)
-        .map_err(|error| ApiError::bad_request(error.to_string()))?;
-    Ok(Json(json!({ "rev": rev })))
+    match agent.behavior().replace_document_json_if(expect, &raw) {
+        Ok(rev) => Ok(Json(json!({ "rev": rev })).into_response()),
+        Err(crate::behavior::BehaviorError::Conflict { expected, current }) => Ok(conflict_response(expected, current)),
+        Err(error) => Err(ApiError::bad_request(error.to_string())),
+    }
 }
 
 /// Run an automation against a scratch store and return the recorded `Run`.
@@ -1374,15 +1493,7 @@ async fn preview_face(
     State(agent): State<Arc<Agent>>,
     Json(request): Json<FacePreviewRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    let behavior = agent.behavior();
-    let locale = behavior.locale();
-    let limits = flexdeck_automation::Limits::default();
-    let one = |widget: &Value, look: &str| -> Value {
-        match crate::widgets::preview(widget, look, behavior.variables(), &limits, &locale, |plan| behavior.unavailable_for(plan)) {
-            Ok(state) => json!({ "state": serde_json::to_value(state).unwrap_or(Value::Null) }),
-            Err(error) => json!({ "error": error }),
-        }
-    };
+    let one = |widget: &Value, look: &str| preview_one(&agent, widget, look);
     if let Some(widget) = &request.widget {
         return Ok(Json(one(widget, request.look.trim())));
     }
@@ -1398,6 +1509,16 @@ async fn preview_face(
         })
         .collect();
     Ok(Json(json!({ "previews": previews })))
+}
+
+pub(crate) fn preview_one(agent: &Agent, widget: &Value, look: &str) -> Value {
+    let behavior = agent.behavior();
+    let locale = behavior.locale();
+    let limits = flexdeck_automation::Limits::default();
+    match crate::widgets::preview(widget, look, behavior.variables(), &limits, &locale, |plan| behavior.unavailable_for(plan)) {
+        Ok(state) => json!({ "state": serde_json::to_value(state).unwrap_or(Value::Null) }),
+        Err(error) => json!({ "error": error }),
+    }
 }
 
 /// Inline configurator gate for the writes that share a path with a read any
@@ -1445,7 +1566,7 @@ async fn revoke_all_devices(
     Extension(authority): Extension<Authority>,
 ) -> Result<Json<Value>, ApiError> {
     let keep = match &authority {
-        Authority::Browser(device) | Authority::Tablet(device) => Some(device.id.as_str()),
+        Authority::Browser(device) | Authority::Tablet(device) | Authority::Agent(device) => Some(device.id.as_str()),
         Authority::Admin => None,
     };
     let revoked = agent.revoke_all_devices(keep)?;
@@ -1458,7 +1579,7 @@ async fn forget_me(
     Extension(authority): Extension<Authority>,
 ) -> Result<Json<Value>, ApiError> {
     let device = match &authority {
-        Authority::Browser(device) | Authority::Tablet(device) => device,
+        Authority::Browser(device) | Authority::Tablet(device) | Authority::Agent(device) => device,
         Authority::Admin => {
             return Err(ApiError::bad_request("the admin credential is not a device"))
         }
@@ -2296,6 +2417,168 @@ mod tests {
 
     fn browser(agent: &Agent, kind: DeviceKind) -> String {
         agent.issue_credential("Laptop", kind).expect("issues").0
+    }
+
+    fn seeded() -> Arc<Agent> {
+        let agent = agent();
+        agent.replace_config(crate::agent::DEFAULT_CONFIG).expect("seeds");
+        agent
+    }
+
+    fn deck_with_launch(rev: u64, program: &str) -> Value {
+        let mut deck: Value = serde_json::from_str(crate::agent::DEFAULT_CONFIG).unwrap();
+        deck["rev"] = json!(rev);
+        deck["profiles"][0]["pages"][0]["widgets"][0]["flows"] = json!([{
+            "trigger": {"gesture": "GESTURE_SHORT_PRESS"},
+            "blocks": [{"block": "doAction", "plugin": "launcher", "action": "run",
+                        "args": {"program": {"text": program}}}]
+        }]);
+        deck
+    }
+
+    fn put_if_match(uri: &str, rev: &str, body: Value) -> Request<Body> {
+        let mut request = put(uri, body);
+        request
+            .headers_mut()
+            .insert(header::IF_MATCH, HeaderValue::from_str(rev).unwrap());
+        request
+    }
+
+    #[tokio::test]
+    async fn a_config_write_from_a_stale_read_is_refused() {
+        let agent = seeded();
+        let mut deck: Value = serde_json::from_str(crate::agent::DEFAULT_CONFIG).unwrap();
+
+        deck["rev"] = json!(0);
+        let (status, body) = send(Arc::clone(&agent), put_if_match("/api/config", "\"5\"", deck.clone())).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{body}");
+        assert_eq!(body["current"], 1);
+
+        deck["rev"] = json!(5);
+        let (status, body) = send(Arc::clone(&agent), put("/api/config", deck.clone())).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{body}");
+        assert_eq!(agent.rev().unwrap(), Some(1));
+
+        deck["rev"] = json!(1);
+        let (status, body) = send(Arc::clone(&agent), put("/api/config", deck.clone())).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["rev"], 2);
+
+        let (status, _) = send(Arc::clone(&agent), put_if_match("/api/config", "\"2\"", deck.clone())).await;
+        assert_eq!(status, StatusCode::OK);
+
+        deck["rev"] = json!(0);
+        let (status, body) = send(Arc::clone(&agent), put("/api/config", deck)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["rev"], 4);
+    }
+
+    #[tokio::test]
+    async fn a_launch_added_from_elsewhere_needs_a_yes_at_the_desktop() {
+        let agent = seeded();
+        let remote = browser(&agent, DeviceKind::BrowserRemote);
+        let (status, body) = send_on(
+            Arc::clone(&agent),
+            put("/api/config", deck_with_launch(1, "calc")),
+            Some(&remote),
+            Channel::Relay,
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+        assert_eq!(agent.rev().unwrap(), Some(1));
+
+        agent.approvals().enable();
+        let answered = crate::access::answer_next(Arc::clone(&agent), true);
+        let (status, body) = send_on(
+            Arc::clone(&agent),
+            put("/api/config", deck_with_launch(1, "calc")),
+            Some(&remote),
+            Channel::Relay,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let asked = answered.await.unwrap();
+        assert_eq!(asked.detail, "run: calc");
+        assert_eq!(asked.requester, "Laptop");
+
+        let (status, body) = send_on(
+            Arc::clone(&agent),
+            put("/api/config", deck_with_launch(2, "calc")),
+            Some(&remote),
+            Channel::Relay,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "an unchanged launch asks nothing: {body}");
+    }
+
+    #[tokio::test]
+    async fn the_person_at_this_computer_adds_a_launch_without_a_prompt() {
+        let agent = seeded();
+        let local = browser(&agent, DeviceKind::BrowserLocal);
+        let (status, body) = send_on(
+            Arc::clone(&agent),
+            put("/api/config", deck_with_launch(1, "calc")),
+            Some(&local),
+            Channel::Loopback,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+
+    #[tokio::test]
+    async fn an_automation_launch_from_elsewhere_needs_a_yes_at_the_desktop() {
+        let agent = seeded();
+        let remote = browser(&agent, DeviceKind::BrowserRemote);
+        let document = json!({"schema": 1, "rev": 0, "automations": [{
+            "id": "a", "name": "A", "trigger": {"on": "manual"},
+            "body": [{"block": "doAction", "plugin": "launcher", "action": "run",
+                      "args": {"program": {"text": "calc"}}}]
+        }]});
+        let (status, body) = send_on(Arc::clone(&agent), put("/api/automations", document.clone()), Some(&remote), Channel::Relay).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+
+        let local = browser(&agent, DeviceKind::BrowserLocal);
+        let (status, body) = send_on(Arc::clone(&agent), put("/api/automations", document.clone()), Some(&local), Channel::Loopback).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+
+        let mut stale = document;
+        stale["rev"] = json!(9);
+        let (status, body) = send_on(Arc::clone(&agent), put("/api/automations", stale), Some(&local), Channel::Loopback).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    }
+
+    #[tokio::test]
+    async fn a_remote_undo_that_brings_back_a_launch_is_refused() {
+        let agent = seeded();
+        let local = browser(&agent, DeviceKind::BrowserLocal);
+        let remote = browser(&agent, DeviceKind::BrowserRemote);
+        let (status, _) = send_on(Arc::clone(&agent), put("/api/config", deck_with_launch(1, "calc")), Some(&local), Channel::Loopback).await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = send_on(Arc::clone(&agent), post("/api/undo", json!({})), Some(&local), Channel::Loopback).await;
+        assert_eq!(status, StatusCode::OK);
+
+        let (status, body) = send_on(Arc::clone(&agent), post("/api/redo", json!({})), Some(&remote), Channel::Relay).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{body}");
+        assert_eq!(agent.rev().unwrap(), Some(1));
+
+        let (status, _) = send_on(Arc::clone(&agent), post("/api/redo", json!({})), Some(&local), Channel::Loopback).await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, body) = send_on(Arc::clone(&agent), post("/api/undo", json!({})), Some(&remote), Channel::Relay).await;
+        assert_eq!(status, StatusCode::OK, "undoing away a launch is fine: {body}");
+    }
+
+    #[tokio::test]
+    async fn an_agent_token_opens_nothing_but_mcp() {
+        let agent = seeded();
+        let token = browser(&agent, DeviceKind::Agent);
+        for request in [get("/api/config"), get("/api/devices"), put("/api/config", json!({}))] {
+            let (status, body) = send_on(Arc::clone(&agent), request, Some(&token), Channel::Loopback).await;
+            assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+        }
+        let (status, _) = send_on(Arc::clone(&agent), post("/api/undo", json!({})), Some(&token), Channel::Loopback).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        let (status, _) = send_on(Arc::clone(&agent), get("/api/config"), Some(&token), Channel::Lan).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]

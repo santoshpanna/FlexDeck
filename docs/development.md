@@ -47,6 +47,11 @@ tests pass without it, because Node strips types natively — only `typecheck`
 needs the real `tsc`, so the failure looks like a missing gate rather than a
 missing install.
 
+A browser's first connect to the agent on this PC is approved in the desktop
+window. The headless agent (`pnpm dev:agent`) has no window, so a portal page
+cannot connect to it that way; run the desktop app, or call the API directly
+with the admin token that `--show-admin-token` prints.
+
 `verify:android` needs `ANDROID_HOME`, because the SDK is deliberately not
 committed. Fetch it once with:
 
@@ -241,6 +246,7 @@ Built and verified:
 | Plugin SDK + template (`pnpm create-plugin`) | ✅ 9 + 3 tests |
 | OBS Studio plugin (scenes, record, stream, mute, sources; live state) | ✅ 14 tests against an in-memory OBS |
 | Plugin-event and schedule triggers; buttons bound to live values | ✅ agent, portal and tablet |
+| MCP endpoint for coding agents (loopback `/mcp`, widget tools, JSON Patch, revision-checked writes) | ✅ 23 tests, editor parity fixtures |
 | CI (format, lint, tests, fixture-drift check) | ✅ |
 
 The plugin system is built — see [plugins.md](plugins.md) for using, writing and

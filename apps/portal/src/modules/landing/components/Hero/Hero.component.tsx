@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppLink } from "../../../../common/components/AppLink/AppLink.component.tsx";
+import { REPO_URL } from "../../../../common/release/release.lib.ts";
 
 import { ease } from "@flexdeck/ui";
 import { AsciiScene, decode, decodeDuration, render } from "@flexdeck/ui/ascii";
@@ -84,10 +85,12 @@ export function Hero({ headline, blurb, callToAction, facts }: { headline: strin
             {callToAction.label}
           </AppLink>
           <a
-            href="#anatomy"
+            href={REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex h-13 items-center rounded-key border border-[var(--fd-key-line)] bg-linear-to-b from-[var(--fd-key-top)] to-[var(--fd-key-bottom)] px-5 text-[15px] text-ink no-underline shadow-key transition-transform active:translate-y-0.5"
           >
-            See it come apart ↓
+            View on GitHub ↗
           </a>
         </div>
         <div className="mt-2 flex flex-wrap gap-6 font-mono text-[10px] tracking-[0.2em] text-faint uppercase">

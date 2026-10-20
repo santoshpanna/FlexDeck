@@ -268,6 +268,9 @@ message StateRule {
   CompareOp op = 2;
   string value = 3;
   string state = 4;
+  // An expression over live values: while it holds, show `state`; `variable`,
+  // `op` and `value` are ignored. Schema 6.
+  string when = 5;
 }
 
 // One look. Empty fields fall back to the widget's `props`.
@@ -285,6 +288,7 @@ message StateLook {
 message CycleSource {}
 
 message VariableSource {
+  // Blank when every case has a `when`. Schema 6.
   string variable = 1;
   repeated StateCase cases = 2;
   // The look while no case matches, or the variable has no value yet.
@@ -298,6 +302,9 @@ message StateCase {
   string value = 1;
   string state = 2;
   CompareOp op = 3;
+  // An expression over live values — `obs.preview_scene != obs.scene` — that
+  // decides this case in place of `op` and `value`. Schema 6.
+  string when = 4;
 }
 
 enum CompareOp {

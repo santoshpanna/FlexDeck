@@ -1,4 +1,4 @@
-import type { CatalogEntry, InstalledPlugin, RepoKind } from "../../../services/api/api.ts";
+import type { CatalogEntry, InstalledPlugin, RepoKind, RepositoryIconPack } from "../../../services/api/api.ts";
 
 export type Tone = "ok" | "warn" | "off";
 
@@ -59,6 +59,30 @@ export function filterCounts(entries: readonly CatalogEntry[]): Record<MarketFil
     counts[entry.repo.kind] += 1;
     if (entry.update) counts.updates += 1;
   }
+  return counts;
+}
+
+export type MarketType = "integrations" | "iconPacks";
+
+export const MARKET_TYPES: { value: MarketType; label: string }[] = [
+  { value: "integrations", label: "Integrations" },
+  { value: "iconPacks", label: "Icon packs" },
+];
+
+/** The icon packs a search and a filter chip leave; packs have no updates to filter by. */
+export function filterIconPacks(packs: readonly RepositoryIconPack[], query: string, filter: MarketFilter): RepositoryIconPack[] {
+  const words = query.trim().toLowerCase();
+  return packs.filter((pack) => {
+    if (filter === "updates" || (filter !== "all" && pack.repo.kind !== filter)) return false;
+    if (words === "") return true;
+    return [pack.id, pack.name, pack.description ?? "", pack.author].some((field) => field.toLowerCase().includes(words));
+  });
+}
+
+/** How many icon packs each chip would show. */
+export function iconPackCounts(packs: readonly RepositoryIconPack[]): Record<MarketFilter, number> {
+  const counts: Record<MarketFilter, number> = { all: packs.length, official: 0, vetted: 0, custom: 0, updates: 0 };
+  for (const pack of packs) counts[pack.repo.kind] += 1;
   return counts;
 }
 

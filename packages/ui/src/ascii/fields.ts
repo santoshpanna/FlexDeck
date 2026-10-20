@@ -46,20 +46,6 @@ export function rings(t: number, cols = 46, rows = 13): Frame {
   });
 }
 
-/** A bank of faders riding their levels. */
-export function faders(t: number, cols = 46, rows = 13): Frame {
-  return grid(cols, rows, (x, y) => {
-    const col = Math.floor(x / 6);
-    const off = x % 6;
-    if (off < 1 || off > 3 || col >= Math.floor(cols / 6)) return [" ", " "];
-    const level = Math.floor((0.5 + 0.45 * Math.sin(t * 1.6 + col * 0.8) * Math.cos(t * 0.7 + col)) * (rows - 2)) + 1;
-    const up = rows - 1 - y;
-    if (up === level) return [" ", "="];
-    if (up < level) return [off === 2 ? "|" : ":", " "];
-    return [off === 2 ? "." : " ", " "];
-  });
-}
-
 /** WHEN → IF → DO, with packets running along the wire. */
 export function flow(t: number, cols = 46, rows = 13): Frame {
   const top = 2;
@@ -900,6 +886,112 @@ export function install(t: number, cols = 58, rows = 18): Frame {
     g.put(c + 4, 1 + i, ask, s - shown < 0.25);
   });
   if (s >= LANDED && words) g.put(cols - 10, 1 + plugin.asks.length, "installed", s < LANDED + 0.8);
+  return g.frame();
+}
+
+const CHANNELS = ["mic", "music", "game"];
+
+/** A fader cap: a block with a scooped top, the way a mixer's are. */
+function fader(x: number, y: number, z: number): number {
+  const block = roundBox(x, y - 0.13, z, 0.24, 0.1, 0.13, 0.03);
+  return Math.max(block, -(len2(y - 0.5, z) - 0.3));
+}
+
+/** A bank of faders: one held and dragged while the PC's echo trails, then let go. */
+export function faders(t: number, cols = 58, rows = 18): Frame {
+  const period = 6.4;
+  const round = Math.floor(t / period);
+  const s = t - round * period;
+  const n = CHANNELS.length;
+  const wrap = (k: number) => ((k % n) + n) % n;
+  const active = wrap(round);
+  const rest = (ch: number, r: number) => 0.1 + 0.8 * hash((r - wrap(r - ch)) * 7.7 + ch * 3.1);
+
+  const GRAB = 0.6;
+  const LET = 2.8;
+  const LAG = 0.45;
+  const from = rest(active, round - 1);
+  const to = rest(active, round);
+  const drag = (at: number) => {
+    const p = clamp01((at - GRAB) / (LET - GRAB));
+    return from + (to - from) * p * p * (3 - 2 * p) + 0.035 * Math.sin(p * Math.PI * 4) * Math.sin(p * Math.PI);
+  };
+  const held = s >= GRAB && s < LET;
+  const after = s - LET;
+  const carry = after >= 0 ? Math.sign(to - from) * 0.06 * Math.exp(-after * 4) * Math.sin(after * 9) : 0;
+  const level = (ch: number) => (ch !== active ? rest(ch, round) : s < LET ? drag(s) : to + carry);
+  const echo = s < LET + LAG ? drag(s - LAG) : to;
+  const caught = after >= LAG;
+
+  const GAP = 0.86;
+  const SPAN = 2.1;
+  const xOf = (ch: number) => (ch - (n - 1) / 2) * GAP;
+  const zOf = (v: number) => -SPAN / 2 + v * SPAN;
+  const press = held ? 0.025 : 0;
+
+  const scene: Scene = (x, y, z) => {
+    let best: [number, number] = [Infinity, -1];
+    for (let ch = 0; ch < n; ch++) {
+      const dx = x - xOf(ch);
+      const slot = roundBox(dx, y + 0.03, z, 0.035, 0.015, SPAN / 2 + 0.2, 0.01);
+      if (slot < best[0]) best = [slot, 9];
+      const cap = fader(dx, y + (ch === active ? press : 0), z - zOf(level(ch)));
+      if (cap < best[0]) best = [cap, ch];
+    }
+    return best;
+  };
+
+  const g = studio(cols, rows, {
+    yaw: 0,
+    pitch: 0.66 + Math.sin(t * 0.5) * 0.06,
+    scale: 0.05,
+    target: [0, 0.1, 0.02],
+  });
+  g.shoot(scene, (m) => m === active && held, (m) => (m === 9 ? 0.55 : m === active && held ? 1.25 : 1));
+
+  for (let ch = 0; ch < n; ch++) {
+    const x = xOf(ch);
+    const v = level(ch);
+    const [tc, low] = g.project(x - 0.34, 0, zOf(0));
+    const [, high] = g.project(x - 0.34, 0, zOf(1));
+    const [mc] = g.project(x + 0.36, 0, zOf(0));
+    const span = Math.round(low) - Math.round(high);
+    const signal = v * (0.6 + 0.4 * hash(ch * 13.1 + Math.floor(t * 10)));
+    for (let k = 0; k <= span; k++) {
+      const r = Math.round(low) - k;
+      const at = k / span;
+      g.behind(tc, r, k % Math.max(1, Math.round(span / 4)) === 0 ? "=" : "-");
+      if (at <= signal) g.behind(mc, r, at > 0.78 ? "#" : ":", at > 0.78);
+    }
+    const [, mid] = g.project(x, 0.26 - (ch === active ? press : 0), zOf(v));
+    for (let c = 0; c < cols; c++) if (g.mat(c, Math.round(mid)) === ch) g.put(c, mid, "=", true);
+    const [lc] = g.project(x, 0, zOf(0));
+    const label = `${CHANNELS[ch]} ${String(Math.round(v * 100)).padStart(3)}`;
+    g.put(lc - label.length / 2, rows - 1, label, ch === active && (held || (caught && after < LAG + 1)));
+  }
+
+  const ax = xOf(active);
+  if (s >= GRAB && !caught) {
+    const corners = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => g.project(ax + sx * 0.28, 0.26, zOf(echo) + sz * 0.17)));
+    const left = Math.round(Math.min(...corners.map(([c]) => c)));
+    const right = Math.round(Math.max(...corners.map(([c]) => c)));
+    const top = Math.round(Math.min(...corners.map(([, r]) => r)));
+    const bottom = Math.round(Math.max(...corners.map(([, r]) => r)));
+    for (let c = left; c <= right; c++) {
+      for (const r of [top, bottom]) if (g.mat(c, r) !== active) g.put(c, r, (c + r) % 2 ? "." : " ");
+    }
+    for (let r = top; r <= bottom; r++) {
+      for (const c of [left, right]) if (g.mat(c, r) !== active) g.put(c, r, ":");
+    }
+    g.put(right + 2, top, "pc " + String(Math.round(echo * 100)).padStart(3));
+  }
+  if (caught && after < LAG + 0.9) {
+    const [c, r] = g.project(ax, 0.2, zOf(to));
+    const age = after - LAG;
+    g.ripple(c, r, 6 + age * 26, age < 0.3 ? "*" : ".", age < 0.55);
+  }
+  if (caught && after < LAG + 1.4) g.put(1, 0, "in sync", after < LAG + 0.8);
+  else if (held) g.put(1, 0, "held");
   return g.frame();
 }
 

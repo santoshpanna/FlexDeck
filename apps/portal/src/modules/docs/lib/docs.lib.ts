@@ -38,7 +38,7 @@ export interface NavGroup {
 }
 
 /** Reading order: the sidebar, and each page's next link. */
-export const DOC_ORDER = ["getting-started", "plugins", "architecture", "security", "development"] as const;
+export const DOC_ORDER = ["getting-started", "plugins", "mcp", "architecture", "security", "development"] as const;
 
 /** The sidebar, grouped the way `docs/README.md` groups the docs. */
 export const NAV: NavGroup[] = [
@@ -47,6 +47,7 @@ export const NAV: NavGroup[] = [
     items: [
       { label: "Getting started", to: "/docs/getting-started" },
       { label: "Plugins", to: "/docs/plugins" },
+      { label: "Coding agents (MCP)", to: "/docs/mcp" },
     ],
   },
   {

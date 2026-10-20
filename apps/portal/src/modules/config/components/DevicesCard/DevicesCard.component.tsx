@@ -15,9 +15,9 @@ export interface DevicesCardProps {
 
 const PAGE_SIZE = 8;
 
-/** Tablet or browser. Only called when the desktop says which. */
+/** Tablet, browser or AI agent. Only called when the desktop says which. */
 function kindLabel(device: Device): string {
-  return device.kind === "tablet" ? "Tablet" : "Browser";
+  return device.kind === "tablet" ? "Tablet" : device.kind === "agent" ? "AI agent" : "Browser";
 }
 
 /**
@@ -68,7 +68,7 @@ export function DevicesCard({ devices, onRevoke, onRevokeAll }: DevicesCardProps
                   className="flex items-center gap-3 rounded-[14px] border border-line bg-body px-3 py-2.5"
                 >
                   <span className="flex size-9 items-center justify-center rounded-[10px] border border-line bg-plate text-ink-2">
-                    <Glyph name={device.kind?.startsWith("browser") ? "globe" : "tablet"} size={16} />
+                    <Glyph name={device.kind === "agent" ? "sparkle" : device.kind?.startsWith("browser") ? "globe" : "tablet"} size={16} />
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-2">

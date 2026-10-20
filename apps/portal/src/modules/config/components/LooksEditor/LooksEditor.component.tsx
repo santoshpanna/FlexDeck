@@ -23,7 +23,7 @@ import { HOLD_DOWN, HOLD_UP, SLOT_GESTURES, gestureBlocks, holdsOf } from "../..
 import { ColorPicker } from "../FillPicker/ColorPicker.component.tsx";
 import { FaceEditor } from "../FaceEditor/FaceEditor.component.tsx";
 import { IconField } from "../IconPicker/IconPicker.component.tsx";
-import { DraftInput, ValueInput, VariableInput, control } from "../Flow/fields.tsx";
+import { DraftInput, ExpressionInput, ValueInput, VariableInput, control } from "../Flow/fields.tsx";
 
 type WidgetEdit = (transform: (config: WireConfig, widgetId: string) => WireConfig) => void;
 
@@ -94,7 +94,7 @@ export function LooksEditor({
         {source.kind === "cycle"
           ? "Each press shows the next state, after the press does its work. It counts presses; it does not know what the press changed."
           : source.kind === "variable"
-            ? "A live value picks the state, so the key shows what is really true — muted, live, recording."
+            ? "A live value picks the state, so the key shows what is really true — muted, live, recording. A condition can compare two values: obs.preview_scene != obs.scene."
             : source.kind === "gesture"
               ? "What you last did on the key picks the state. Only gestures the key does something for are listed."
               : "The key keeps the look set above. Pick what switches it, then add the states it switches between."}
@@ -221,7 +221,9 @@ function gesturesOf(widget: WireWidget): GestureRow[] {
 
 /** When a state shows, in words: what the person needs to read the list. */
 function shownWhen(source: LookSource, rules: readonly WireRule[], gestures: readonly GestureRow[], lookId: string, index: number): string {
-  const when = rules.filter((rule) => rule.state === lookId).map((rule) => `while ${rule.variable} ${opLabel(rule.op)} ${rule.value ?? ""}`.trim());
+  const when = rules
+    .filter((rule) => rule.state === lookId)
+    .map((rule) => (rule.when !== undefined ? `while ${rule.when}` : `while ${rule.variable} ${opLabel(rule.op)} ${rule.value ?? ""}`.trim()));
   if (source.kind === "cycle") when.push(index === 0 ? "at first" : `after ${index} ${index === 1 ? "press" : "presses"}`);
   if (source.kind === "gesture") {
     for (const pick of source.picks.filter((each) => each.state === lookId)) {
@@ -231,10 +233,12 @@ function shownWhen(source: LookSource, rules: readonly WireRule[], gestures: rea
   }
   if (source.kind === "variable") {
     const value = source.variable || "the value";
-    for (const c of source.cases.filter((each) => (each.state ?? "") === lookId)) when.push(`while ${value} ${opLabel(c.op)} ${c.value ?? ""}`.trim());
+    for (const c of source.cases.filter((each) => (each.state ?? "") === lookId)) {
+      when.push(c.when !== undefined ? `while ${c.when}` : `while ${value} ${opLabel(c.op)} ${c.value ?? ""}`.trim());
+    }
     if (source.otherwise === lookId) when.push("otherwise");
   }
-  return when.length ? `Shows ${when.join(", or ")}` : "Not shown yet — pick when above or below";
+  return when.length ? `Shows ${when.join(", or ")}` : "Not shown yet — say when, above or below";
 }
 
 function lookSelect(label: string, looks: readonly { id: string; name: string }[], value: string, onPick: (id: string) => void, empty = "the key's own") {
@@ -279,9 +283,56 @@ function GesturesEditor({
   );
 }
 
+/** A row that shows a state while a condition holds: "While obs.preview_scene != obs.scene → Ready". */
+function ConditionRow({
+  lead = "While",
+  boxed = true,
+  when,
+  state,
+  looks,
+  variables,
+  onWhen,
+  onState,
+  onRemove,
+}: {
+  lead?: string;
+  boxed?: boolean;
+  when: string;
+  state: string;
+  looks: { id: string; name: string }[];
+  variables: readonly VariableChoice[];
+  onWhen: (when: string) => void;
+  onState: (state: string) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className={cn("flex flex-col gap-1.5", boxed && "rounded-xl border border-line bg-well/40 p-2")}>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[12px] text-muted">{lead}</span>
+        <ExpressionInput
+          label={lead}
+          value={when}
+          variables={variables}
+          placeholder="obs.preview_scene != obs.scene"
+          onCommit={(next) => onWhen(next.replace(/^\{\{\s*|\s*\}\}$/g, "").trim())}
+          className="h-8 flex-1"
+        />
+      </div>
+      <div className={cn("flex items-center gap-1.5", !boxed && "pl-3")}>
+        <span className="text-[12px] text-muted">→</span>
+        {lookSelect("Shows", looks, state, onState, "pick a state")}
+        <button type="button" aria-label="Remove" onClick={onRemove} className="flex size-6 cursor-pointer items-center justify-center rounded-md text-muted hover:text-ink">
+          <Glyph name="close" size={12} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Whether two rule lists say the same, as `setLookRules` would save them. */
 function sameRules(a: readonly WireRule[], b: readonly WireRule[]): boolean {
-  const plain = (rule: WireRule) => [rule.variable?.trim() ?? "", rule.op ?? "COMPARE_OP_EQ", rule.value ?? "", rule.state ?? ""].join(" ");
+  const plain = (rule: WireRule) =>
+    rule.when !== undefined ? `when ${rule.when.trim()} ${rule.state ?? ""}` : [rule.variable?.trim() ?? "", rule.op ?? "COMPARE_OP_EQ", rule.value ?? "", rule.state ?? ""].join(" ");
   return a.length === b.length && a.every((rule, at) => plain(rule) === plain(b[at]!));
 }
 
@@ -304,7 +355,7 @@ function RulesEditor({
   const nextKey = useRef(0);
   const keyed = (rule: WireRule) => ({ key: nextKey.current++, rule });
   const [rows, setRows] = useState(() => rules.map(keyed));
-  const complete = (rule: WireRule) => Boolean(rule.variable?.trim() && rule.state);
+  const complete = (rule: WireRule) => Boolean((rule.when !== undefined ? rule.when.trim() : rule.variable?.trim()) && rule.state);
   const saved = JSON.stringify(rules);
   const seen = useRef(saved);
   useEffect(() => {
@@ -322,8 +373,20 @@ function RulesEditor({
   const remove = (index: number) => update(rows.filter((_, at) => at !== index));
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-[12px] text-muted">Also show a state while a value holds — checked first</span>
-      {rows.map(({ key, rule }, index) => (
+      <span className="text-[12px] text-muted">Also show a state while a value or condition holds — checked first</span>
+      {rows.map(({ key, rule }, index) =>
+        rule.when !== undefined ? (
+          <ConditionRow
+            key={key}
+            when={rule.when}
+            state={rule.state ?? ""}
+            looks={looks}
+            variables={variables}
+            onWhen={(when) => set(index, { when })}
+            onState={(state) => set(index, { state })}
+            onRemove={() => remove(index)}
+          />
+        ) : (
         <div key={key} className="flex flex-col gap-1.5 rounded-xl border border-line bg-well/40 p-2">
           <VariableInput label="While" value={rule.variable ?? ""} variables={variables} onCommit={(variable) => set(index, { variable })} />
           <div className="flex items-center gap-1.5">
@@ -342,10 +405,16 @@ function RulesEditor({
             </button>
           </div>
         </div>
-      ))}
-      <button type="button" onClick={() => setRows([...rows, keyed({ op: "COMPARE_OP_EQ", value: "true", state: looks[0]?.id ?? "" })])} className="self-start text-[12px] text-signal hover:underline">
-        + while a value…
-      </button>
+        ),
+      )}
+      <div className="flex gap-3">
+        <button type="button" onClick={() => setRows([...rows, keyed({ op: "COMPARE_OP_EQ", value: "true", state: looks[0]?.id ?? "" })])} className="self-start text-[12px] text-signal hover:underline">
+          + while a value…
+        </button>
+        <button type="button" onClick={() => setRows([...rows, keyed({ when: "", state: looks[0]?.id ?? "" })])} className="self-start text-[12px] text-signal hover:underline">
+          + while a condition…
+        </button>
+      </div>
     </div>
   );
 }
@@ -363,10 +432,27 @@ function CasesEditor({
 }) {
   const set = (change: Partial<typeof source>) => onChange({ ...source, ...change });
   const setCase = (index: number, change: Partial<WireCase>) => set({ cases: source.cases.map((c, at) => (at === index ? { ...c, ...change } : c)) });
+  const removeCase = (index: number) => set({ cases: source.cases.filter((_, at) => at !== index) });
+  const [draft, setDraft] = useState<{ when: string; state: string } | null>(null);
+  const follows = source.variable.trim() !== "" || source.cases.length === 0 || source.cases.some((c) => c.when === undefined);
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-line bg-well/40 p-2.5">
-      <VariableInput label="Follows" value={source.variable} variables={variables} onCommit={(variable) => set({ variable })} />
-      {source.cases.map((c, index) => (
+      {follows ? <VariableInput label="Follows" value={source.variable} variables={variables} onCommit={(variable) => set({ variable })} /> : null}
+      {source.cases.map((c, index) =>
+        c.when !== undefined ? (
+          <ConditionRow
+            key={index}
+            lead="If"
+            boxed={false}
+            when={c.when}
+            state={c.state ?? ""}
+            looks={looks}
+            variables={variables}
+            onWhen={(when) => (when ? setCase(index, { when }) : removeCase(index))}
+            onState={(state) => setCase(index, { state })}
+            onRemove={() => removeCase(index)}
+          />
+        ) : (
         <div key={index} className="flex items-center gap-1.5">
           <span className="text-[12px] text-muted">If it</span>
           <select aria-label="Compares" value={c.op ?? "COMPARE_OP_EQ"} onChange={(event) => setCase(index, { op: event.target.value as CaseOp })} className={cn(control, "h-8 w-28")}>
@@ -379,22 +465,45 @@ function CasesEditor({
           <DraftInput aria-label="Value" value={c.value ?? ""} placeholder="80" onCommit={(value) => setCase(index, { value })} className={cn(control, "h-8 w-20 font-mono")} />
           <span className="text-[12px] text-muted">→</span>
           {lookSelect("Shows", looks, c.state ?? "", (state) => setCase(index, { state }))}
-          <button type="button" aria-label="Remove case" onClick={() => set({ cases: source.cases.filter((_, at) => at !== index) })} className="flex size-6 cursor-pointer items-center justify-center rounded-md text-muted hover:text-ink">
+          <button type="button" aria-label="Remove case" onClick={() => removeCase(index)} className="flex size-6 cursor-pointer items-center justify-center rounded-md text-muted hover:text-ink">
             <Glyph name="close" size={12} />
           </button>
         </div>
-      ))}
+        ),
+      )}
+      {draft ? (
+        <ConditionRow
+          lead="If"
+          boxed={false}
+          when={draft.when}
+          state={draft.state}
+          looks={looks}
+          variables={variables}
+          onWhen={(when) => {
+            if (!when) return;
+            setDraft(null);
+            set({ cases: [...source.cases, { when, state: draft.state }] });
+          }}
+          onState={(state) => setDraft({ ...draft, state })}
+          onRemove={() => setDraft(null)}
+        />
+      ) : null}
       <div className="flex items-center gap-1.5">
         <span className="text-[12px] text-muted">Otherwise</span>
         {lookSelect("Otherwise shows", looks, source.otherwise, (otherwise) => set({ otherwise }))}
       </div>
-      <button
-        type="button"
-        onClick={() => set({ cases: [...source.cases, { op: "COMPARE_OP_EQ", value: "", state: looks[0]?.id ?? "" }] })}
-        className="self-start text-[12px] text-signal hover:underline"
-      >
-        + another case
-      </button>
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={() => set({ cases: [...source.cases, { op: "COMPARE_OP_EQ", value: "", state: looks[0]?.id ?? "" }] })}
+          className="self-start text-[12px] text-signal hover:underline"
+        >
+          + another case
+        </button>
+        <button type="button" onClick={() => setDraft({ when: "", state: looks[0]?.id ?? "" })} className="self-start text-[12px] text-signal hover:underline">
+          + if a condition…
+        </button>
+      </div>
       <p className="m-0 text-[11px] text-faint">Cases are tried in order; the first that holds shows.</p>
     </div>
   );

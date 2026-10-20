@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { Plate, Segmented, cn, ease, keyVariants } from "@flexdeck/ui";
 
 import { SiteNav } from "../../../common/components/SiteNav/SiteNav.component.tsx";
+import { SiteFooter } from "../../../common/components/SiteFooter/SiteFooter.component.tsx";
 import { REPO_URL, type Release, type ReleaseGroup } from "../../../common/release/release.lib.ts";
 import { useDocumentTitle } from "../../../hooks/useDocumentTitle/useDocumentTitle.hook.ts";
 import { AREA_FILTERS, type AreaFilter, filterGroups } from "../lib/changelog.lib.ts";
@@ -49,7 +50,7 @@ function Entry({ version, aside, children }: { version: string; aside: ReactNode
       className="flex flex-wrap gap-8 border-t border-line py-10"
     >
       <div className="flex max-w-[260px] flex-[1_1_220px] flex-col gap-2.5">
-        <span className="font-mono text-[64px] leading-[0.9] font-medium tracking-[-0.04em] text-transparent [-webkit-text-stroke:1px_var(--color-line-strong)]">{version}</span>
+        <span className="font-mono text-[36px] leading-none font-medium tracking-[-0.04em] break-all text-transparent [-webkit-text-stroke:1px_var(--color-line-strong)]">{version}</span>
         {aside}
       </div>
       <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-6">{children}</div>
@@ -143,6 +144,7 @@ export function ChangelogView(props: Partial<ChangelogViewProps>) {
           </div>
         </Plate>
       </main>
+      <SiteFooter />
     </div>
   );
 }

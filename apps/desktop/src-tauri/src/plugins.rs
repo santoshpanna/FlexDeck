@@ -268,6 +268,12 @@ pub async fn plugin_settings(
 }
 
 #[tauri::command]
+pub async fn plugin_sign_out(state: State<'_, ShellState>, id: String) -> Result<(), String> {
+    let agent = Arc::clone(&state.agent);
+    blocking(move || agent.sign_out_plugin(&id).map_err(|e| e.to_string())).await
+}
+
+#[tauri::command]
 pub async fn plugin_log(state: State<'_, ShellState>, id: String) -> Result<Vec<String>, String> {
     Ok(manager(&state)?.log(&id))
 }
@@ -310,6 +316,7 @@ pub fn rows(agent: &flexdeck_server::Agent) -> Value {
                 record["settings"] = entry["settings"].clone();
                 record["description"] = entry["description"].clone();
                 record["events"] = entry["events"].clone();
+                record["guide"] = entry["guide"].clone();
             }
             record
         })

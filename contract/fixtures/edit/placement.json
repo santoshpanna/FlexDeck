@@ -1,0 +1,181 @@
+{
+  "grid": {
+    "cols": 4,
+    "rows": 3
+  },
+  "page": [
+    {
+      "id": "a",
+      "col": 0,
+      "row": 0,
+      "w": 2,
+      "h": 1
+    },
+    {
+      "id": "b",
+      "col": 3,
+      "row": 1,
+      "w": 1,
+      "h": 2
+    }
+  ],
+  "placements": [
+    {
+      "type": null,
+      "span": {
+        "id": "n",
+        "col": 2,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      },
+      "problem": null
+    },
+    {
+      "type": null,
+      "span": {
+        "id": "n",
+        "col": 1,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      },
+      "problem": "overlap"
+    },
+    {
+      "type": null,
+      "span": {
+        "id": "a",
+        "col": 1,
+        "row": 0,
+        "w": 2,
+        "h": 1
+      },
+      "problem": null
+    },
+    {
+      "type": null,
+      "span": {
+        "id": "n",
+        "col": 3,
+        "row": 0,
+        "w": 2,
+        "h": 1
+      },
+      "problem": "out_of_bounds"
+    },
+    {
+      "type": null,
+      "span": {
+        "id": "n",
+        "col": -1,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      },
+      "problem": "out_of_bounds"
+    },
+    {
+      "type": null,
+      "span": {
+        "id": "n",
+        "col": 0,
+        "row": 2,
+        "w": 1,
+        "h": 2
+      },
+      "problem": "out_of_bounds"
+    },
+    {
+      "type": "WIDGET_TYPE_BUTTON",
+      "span": {
+        "id": "n",
+        "col": 0,
+        "row": 0,
+        "w": 5,
+        "h": 1
+      },
+      "problem": "too_large"
+    },
+    {
+      "type": "WIDGET_TYPE_SLIDER",
+      "span": {
+        "id": "n",
+        "col": 0,
+        "row": 1,
+        "w": 1,
+        "h": 0
+      },
+      "problem": "too_small"
+    },
+    {
+      "type": "WIDGET_TYPE_SLIDER",
+      "span": {
+        "id": "n",
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 9
+      },
+      "problem": "too_large"
+    },
+    {
+      "type": "WIDGET_TYPE_SOMETHING_NEW",
+      "span": {
+        "id": "n",
+        "col": 0,
+        "row": 1,
+        "w": 3,
+        "h": 2
+      },
+      "problem": null
+    }
+  ],
+  "freeCells": [
+    {
+      "w": 1,
+      "h": 1,
+      "cell": {
+        "col": 2,
+        "row": 0
+      }
+    },
+    {
+      "w": 2,
+      "h": 1,
+      "cell": {
+        "col": 2,
+        "row": 0
+      }
+    },
+    {
+      "w": 3,
+      "h": 1,
+      "cell": {
+        "col": 0,
+        "row": 1
+      }
+    },
+    {
+      "w": 1,
+      "h": 2,
+      "cell": {
+        "col": 2,
+        "row": 0
+      }
+    },
+    {
+      "w": 4,
+      "h": 1,
+      "cell": null
+    },
+    {
+      "w": 2,
+      "h": 2,
+      "cell": {
+        "col": 0,
+        "row": 1
+      }
+    }
+  ]
+}

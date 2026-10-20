@@ -1,7 +1,7 @@
 import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { useApi } from "../../hooks/useApi/useApi.hook.ts";
-import type { DesktopSummary } from "../../services/api/api.ts";
+import { ApiError, type DesktopSummary } from "../../services/api/api.ts";
 import { describeError } from "../../services/api/errors.ts";
 import {
   forget,
@@ -18,13 +18,14 @@ export interface DesktopValue {
   desktops: DesktopSummary[] | null;
   selected: DesktopSummary | null;
   select: (desktopId: string) => void;
-  refresh: () => Promise<void>;
+  refresh: (askAgain?: boolean) => Promise<void>;
   /** Pair with the desktop showing `code`. Resolves to its name; throws on refusal. */
   pair: (code: string) => Promise<string>;
   /** Stop reaching a desktop from this browser. */
   forgetDesktop: (desktopId: string) => void;
   /** Why the last look failed, already phrased for a person. */
   error: string | null;
+  waitingForDesktop: boolean;
   /**
    * Bumped each time this browser reconnects to a desktop that had refused it,
    * so whatever failed against the old token knows to read again.
@@ -86,6 +87,8 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reconnects, setReconnects] = useState(0);
+  const [waitingForDesktop, setWaitingForDesktop] = useState(false);
+  const localDeclined = useRef<string | null>(null);
   /** When each desktop last refused us, so a token that fails at once is not retried in a loop. */
   const lastRefusal = useRef(new Map<string, number>());
 
@@ -97,14 +100,20 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (askAgain = false) => {
+    if (askAgain) localDeclined.current = null;
     try {
       // The desktop app on this computer, if any — connecting on first sight.
       const hello = await api.localHello();
       setLocalHere(hello?.fingerprint ?? null);
       let current = loadConnections(storage());
       if (hello && !current.some((c) => c.fingerprint === hello.fingerprint && c.via === "local")) {
-        const issued = await api.localConnect(browserName());
+        if (localDeclined.current !== null) throw new Error(localDeclined.current);
+        setWaitingForDesktop(true);
+        const issued = await api.localConnect(browserName()).catch((cause: unknown) => {
+          if (cause instanceof ApiError && cause.status === 403) localDeclined.current = describeError(cause);
+          throw cause;
+        }).finally(() => setWaitingForDesktop(false));
         current = upsert(current, {
           fingerprint: issued.fingerprint,
           name: issued.name ?? hello.name,
@@ -175,6 +184,16 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
     api.setRoutes(routes);
   }, [api, desktops, connections, localHere]);
 
+  const selectedVia = desktops?.find((desktop) => desktop.id === selectedId)?.via;
+  useEffect(() => {
+    if (!selectedId || selectedVia !== "relay") return;
+    return api.live(selectedId, (message) => {
+      if (message.kind === "open" || message.kind === "offline") {
+        setOnline((current) => ({ ...current, [selectedId]: message.kind === "open" }));
+      }
+    });
+  }, [api, selectedId, selectedVia]);
+
   // Keep the current choice if it still exists; otherwise the first, preferring
   // this computer's own desktop.
   useEffect(() => {
@@ -238,9 +257,10 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
       pair,
       forgetDesktop,
       error,
+      waitingForDesktop,
       reconnects,
     }),
-    [desktops, selected, refresh, pair, forgetDesktop, error, reconnects],
+    [desktops, selected, refresh, pair, forgetDesktop, error, waitingForDesktop, reconnects],
   );
 
   return <DesktopContext.Provider value={value}>{children}</DesktopContext.Provider>;

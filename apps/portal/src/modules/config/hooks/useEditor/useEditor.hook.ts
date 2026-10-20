@@ -29,7 +29,7 @@ import {
   setWidgetIcon,
   setActiveLight,
   setWidgetBinding,
-  stateVariableOf,
+  litWhileOf,
   setWidgetLabel,
   type Located,
 } from "../../lib/editing.lib.ts";
@@ -69,7 +69,7 @@ export interface EditorValue {
   /** Set or clear the selected widget's icon. */
   setIcon: (icon: string | null) => void;
   /** Bind the selected widget to live values, or unbind it. */
-  setBinding: (binding: { stateVariable: string; labelTemplate: string }) => void;
+  setBinding: (binding: { stateVariable: string; labelTemplate: string; known?: readonly string[] }) => void;
   /** Apply a pure edit to the selected widget — its slider, its hold. */
   editSelected: (transform: (config: WireConfig, widgetId: string) => WireConfig) => void;
   /** Apply a pure edit to the page on screen — its background. */
@@ -262,21 +262,21 @@ export function useEditor({
     applyPageEdit(duplicatePage(config, pageId, id), "that page could not be duplicated", id);
   };
 
-  const setBinding = (binding: { stateVariable: string; labelTemplate: string }) => {
+  const setBinding = (binding: { stateVariable: string; labelTemplate: string; known?: readonly string[] }) => {
     if (!config || !selectedId || !selected) {
       return;
     }
     const props = selected.widget.props ?? {};
     // An unchanged binding must not spend a revision.
     if (
-      stateVariableOf(selected.widget) === binding.stateVariable.trim() &&
+      litWhileOf(selected.widget) === binding.stateVariable.trim() &&
       (props.labelTemplate ?? "") === binding.labelTemplate.trim()
     ) {
       onUnchanged?.();
       return;
     }
     setRefusal(null);
-    write(setWidgetBinding(config, selectedId, binding));
+    write(setWidgetBinding(config, selectedId, binding, binding.known));
   };
 
   /// Apply a pure edit to the selected widget — a slider's target, a hold's

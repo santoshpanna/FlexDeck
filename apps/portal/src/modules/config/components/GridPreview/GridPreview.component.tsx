@@ -37,6 +37,7 @@ function SliderFace({
 }) {
   const reading = sliderReading(widget.slider, live);
   const percent = `${reading.fraction * 100}%`;
+  const travel = `calc((100% - 1.1em) * ${reading.fraction})`;
   return (
     <div className="absolute inset-0 flex flex-col gap-[0.5em] p-[0.6em] text-[var(--fd-deck-ink)]" style={{ fontSize }}>
       <span className="flex items-center justify-between gap-[0.4em]">
@@ -46,20 +47,19 @@ function SliderFace({
         </span>
         <span className="font-mono text-[0.85em] text-[#ff8a5c]">{reading.text}</span>
       </span>
-      <span
-        aria-hidden="true"
-        className="relative flex-1 overflow-hidden rounded-[0.9em] border border-[var(--fd-deck-key-line)] bg-[var(--fd-deck)] shadow-[inset_0_0.2em_0.8em_rgb(0_0_0/0.85)]"
-      >
-        <span
-          className="absolute bottom-0 left-0 bg-linear-to-t from-[rgb(255_90_31/0.35)] to-[rgb(255_90_31/0.85)]"
-          style={vertical ? { height: percent, width: "100%" } : { width: percent, height: "100%" }}
-        />
+      <span aria-hidden="true" className="relative flex-1">
+        <span className="absolute inset-0 overflow-hidden rounded-[0.9em] border border-[var(--fd-deck-key-line)] bg-[var(--fd-deck)] shadow-[inset_0_0.2em_0.8em_rgb(0_0_0/0.85)]">
+          <span
+            className="absolute bottom-0 left-0 bg-linear-to-t from-[rgb(255_90_31/0.35)] to-[rgb(255_90_31/0.85)]"
+            style={vertical ? { height: percent, width: "100%" } : { width: percent, height: "100%" }}
+          />
+        </span>
         <span
           className="absolute rounded-[0.35em] bg-linear-to-b from-[#f4f3ee] to-[#b9b8b2] shadow-[0_0.15em_0.4em_rgb(0_0_0/0.6)]"
           style={
             vertical
-              ? { left: "8%", right: "8%", height: "1.1em", bottom: percent, transform: "translateY(50%)" }
-              : { top: "8%", bottom: "8%", width: "1.1em", left: percent, transform: "translateX(-50%)" }
+              ? { left: "8%", right: "8%", height: "1.1em", bottom: travel }
+              : { top: "8%", bottom: "8%", width: "1.1em", left: travel }
           }
         />
       </span>

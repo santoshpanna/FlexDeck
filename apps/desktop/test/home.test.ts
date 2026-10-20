@@ -11,6 +11,7 @@ function status(patch: Partial<Status> = {}): Status {
     port: 7878,
     warnings: [],
     server: { error: null },
+    mcp: { url: "http://127.0.0.1:7879/mcp", error: null },
     tunnel: { enabled: false, running: false, refused: null, lastError: null, portal: null },
     devices: [],
     plugins: { builtIn: [], installed: [] },

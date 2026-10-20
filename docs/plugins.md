@@ -344,13 +344,16 @@ as an update.
 From ABI 4, new features arrive as **capabilities** rather than new ABIs. The
 host lists what it offers in `initialize` (`hostCapabilities`), the plugin lists
 what it uses in its manifest (`uses`), and something only one side names is
-never used — so either side can be older. ABI 4 brings three:
+never used — so either side can be older. ABI 4 brings three, and later agents add more:
 
 | Capability | What it adds |
 | --- | --- |
 | `series` | `series/set {name, points}` — a variable's whole recent history (at most 600 points, oldest first) for a graph: a day of prices, a forecast's hours. |
 | `presets` | Manifest `presets` — ready-made keys for the editor's gallery: `{id, name, category, description, w, h, widget}`, where `widget` is a widget in the configuration's JSON (its face, flows, states). |
 | `feeds` | Manifest `feeds` and `feed/watch {instance, feed, args}` / `feed/unwatch {instance}` — values *per key*, with that key's own arguments. Publish them as `<id>.@<instance>.<field>`; the key reads them as `{{this.<field>}}`. |
+| `toggles` | An action's `active` may name a fixed value (`is`) rather than an argument, and its `variable` may hold `{{argument}}` placeholders: a toggle lit while `discord.voice.mute` is true. |
+| `setup` | A setting may be `internal` (kept by the plugin, cleared by signing out) or carry `help`, and the manifest may link a setup `guide`. |
+| `conditions` | An action's `active` may be a condition alone: `active: { when: "obs.studio_mode and obs.preview_scene != obs.scene" }`. It is an expression over any live values, at most 2000 characters. An `{{argument}}` placeholder stands for the argument's value, as part of a name or as a whole operand, never inside quotes. A name with `-`, `/` or spaces is written in backticks: `` `my-plugin.on` ``. The SDKs leave the light out, and log a line, when the agent does not offer it. |
 
 In TypeScript, `presets: [...]` and `feeds: {...}` go in `definePlugin`, and the
 context gains `ctx.series.set(name, points)` and `ctx.feed(instance).set({...})`,

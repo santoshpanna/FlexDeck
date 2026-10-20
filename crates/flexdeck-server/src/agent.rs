@@ -128,6 +128,12 @@ pub enum AgentError {
 
     #[error(transparent)]
     Behavior(#[from] crate::behavior::BehaviorError),
+
+    #[error("the deck changed (now rev {current})")]
+    Conflict { expected: u64, current: u64 },
+
+    #[error("{0}")]
+    Refused(String),
 }
 
 /// A minimal valid configuration, used the first time the agent runs.
@@ -411,39 +417,99 @@ impl Agent {
     /// worse than having no field at all — a client that read it would act on a
     /// number that stopped being true several edits ago.
     pub fn replace_config(&self, json: &str) -> Result<u64, AgentError> {
-        // Tokens and keys a key's data source needs stay on this computer; the
-        // config is what tablets read.
-        let json = &self.behavior.take_secrets(json);
+        self.replace_config_if(None, json)
+    }
+
+    pub fn replace_config_if(&self, expect_rev: Option<u64>, json: &str) -> Result<u64, AgentError> {
+        let parsed: serde_json::Value = serde_json::from_str(json)?;
+        self.edit_config(expect_rev, |document| {
+            *document = parsed;
+            Ok(())
+        })
+    }
+
+    pub fn edit_config(
+        &self,
+        expect_rev: Option<u64>,
+        edit: impl FnOnce(&mut serde_json::Value) -> Result<(), String>,
+    ) -> Result<u64, AgentError> {
+        // One guard for the whole operation: the revision checked is the one
+        // edited, and the predicted revision is the one committed.
+        let store = self.store();
+        let current = store.snapshot()?;
+        let current_rev = current.as_ref().map_or(0, |(rev, _)| *rev);
+        if let Some(expected) = expect_rev {
+            if expected != current_rev {
+                return Err(AgentError::Conflict { expected, current: current_rev });
+            }
+        }
+        let mut document = match &current {
+            Some((_, json)) => serde_json::from_str(json)?,
+            None => serde_json::Value::Null,
+        };
+        edit(&mut document).map_err(AgentError::Refused)?;
+        let json = serde_json::to_string(&document)?;
         // Refused here rather than discovered on a press: a flow that does not
         // parse, or a state pointing at a look that is not there, is a sentence
         // for the editor, not a dead button on the tablet.
-        crate::widgets::validate(json, &flexdeck_automation::Limits::default())?;
-        // One guard for the whole operation, so the predicted revision and the
-        // committed one cannot diverge.
-        let store = self.store();
+        crate::widgets::validate(&json, &flexdeck_automation::Limits::default())?;
+        // Tokens and keys a key's data source needs stay on this computer; the
+        // config is what tablets read.
+        let json = self.behavior.take_secrets_holding(&json, &store);
         let predicted = store.next_rev()?;
-        let stamped = stamp_rev(json, predicted)?;
+        let stamped = stamp_rev(&json, predicted)?;
 
         let committed = store.commit(&stamped)?;
         debug_assert_eq!(
             predicted, committed,
             "the stamped revision must be the committed one"
         );
+        drop(store);
 
         self.announce(committed);
         Ok(committed)
     }
 
     pub fn undo(&self) -> Result<u64, AgentError> {
-        let (rev, _) = self.store().undo()?;
+        self.undo_if(None)
+    }
+
+    pub fn redo(&self) -> Result<u64, AgentError> {
+        self.redo_if(None)
+    }
+
+    pub fn undo_if(&self, expect_rev: Option<u64>) -> Result<u64, AgentError> {
+        let store = self.store();
+        check_rev(&store, expect_rev)?;
+        let (rev, _) = store.undo()?;
+        drop(store);
         self.announce(rev);
         Ok(rev)
     }
 
-    pub fn redo(&self) -> Result<u64, AgentError> {
-        let (rev, _) = self.store().redo()?;
+    pub fn redo_if(&self, expect_rev: Option<u64>) -> Result<u64, AgentError> {
+        let store = self.store();
+        check_rev(&store, expect_rev)?;
+        let (rev, _) = store.redo()?;
+        drop(store);
         self.announce(rev);
         Ok(rev)
+    }
+
+    pub fn step_preview(&self, forward: bool) -> Result<Option<(u64, String, String)>, AgentError> {
+        let store = self.store();
+        let Some((head, current)) = store.snapshot()? else {
+            return Ok(None);
+        };
+        let target = if forward {
+            store.redo_target_document(&flexdeck_store::CONFIG)?
+        } else {
+            store.undo_target_document(&flexdeck_store::CONFIG)?
+        };
+        let Some(target) = target else {
+            return Ok(None);
+        };
+        Ok(store.snapshot_at(target)?.map(|json| (head, current, json)))
     }
 
     pub fn devices(&self) -> Result<Vec<Device>, AgentError> {
@@ -534,13 +600,7 @@ impl Agent {
             kind.as_str(),
             &flexdeck_pairing::generate_token()[..12]
         );
-        self.add_device_for_client(
-            &id,
-            name,
-            &flexdeck_pairing::hash_token(&token),
-            kind,
-            client,
-        )?;
+        self.add_device_for_client(&id, name, &stored_hash(&token, kind), kind, client)?;
         let device = self
             .authenticate(&token)?
             .expect("a credential just stored authenticates");
@@ -656,8 +716,13 @@ impl Agent {
     /// Only the hash is compared, so a copy of the database is not a copy of the
     /// credentials.
     pub fn authenticate(&self, token: &str) -> Result<Option<Device>, AgentError> {
-        let hash = flexdeck_pairing::hash_token(token);
-        Ok(self.store().authenticate(&hash)?)
+        let store = self.store();
+        if let Some(device) = store.authenticate(&flexdeck_pairing::hash_token(token))? {
+            return Ok((device.kind != DeviceKind::Agent).then_some(device));
+        }
+        Ok(store
+            .authenticate(&stored_hash(token, DeviceKind::Agent))?
+            .filter(|device| device.kind == DeviceKind::Agent))
     }
 
     /// The credential the portal authenticates with.
@@ -703,6 +768,7 @@ impl Agent {
             .map(|device| match device.kind {
                 DeviceKind::Tablet => Authority::Tablet(device),
                 DeviceKind::BrowserLocal | DeviceKind::BrowserRemote => Authority::Browser(device),
+                DeviceKind::Agent => Authority::Agent(device),
             }))
     }
 
@@ -937,10 +1003,42 @@ impl Agent {
             .stored_settings(plugin)
     }
 
+    /// Forget what the plugin keeps for itself (its `internal` settings, a
+    /// sign-in), tell it, and persist that.
+    pub fn sign_out_plugin(&self, plugin: &str) -> Result<(), AgentError> {
+        let (all, update) = {
+            let mut registry = self
+                .behavior
+                .registry()
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            let Some(manifest) = registry.manifest(plugin) else {
+                return Err(AgentError::Plugin(PluginError::UnknownPlugin(
+                    plugin.to_string(),
+                )));
+            };
+            let internal: Vec<String> = manifest
+                .settings
+                .iter()
+                .filter(|setting| setting.internal)
+                .map(|setting| setting.key.clone())
+                .collect();
+            let mut values = registry.stored_settings(plugin);
+            values.retain(|key, _| !internal.contains(key));
+            let update = registry.update_settings(plugin, values)?;
+            (registry.all_settings(), update)
+        };
+        update.deliver();
+        persist_plugin_settings(&self.store, &all)?;
+        self.behavior.catalogue_changed();
+        Ok(())
+    }
+
     /// Change a plugin's settings, tell the plugin, and persist them.
     ///
-    /// A secret left blank keeps its stored value, so a settings form that
-    /// never receives the password back can be saved without erasing it.
+    /// A secret or internal setting left blank keeps its stored value, so a
+    /// settings form that never receives or shows it can be saved without
+    /// erasing it.
     pub fn set_plugin_settings(
         &self,
         plugin: &str,
@@ -964,7 +1062,7 @@ impl Agent {
                     manifest
                         .settings
                         .iter()
-                        .filter(|setting| setting.secret)
+                        .filter(|setting| setting.secret || setting.internal)
                         .map(|setting| setting.key.clone())
                         .collect()
                 })
@@ -1092,6 +1190,24 @@ fn run_upgrades(store: &ConfigStore) {
     }
 }
 
+fn check_rev(store: &ConfigStore, expect_rev: Option<u64>) -> Result<(), AgentError> {
+    let Some(expected) = expect_rev else {
+        return Ok(());
+    };
+    let current = store.rev()?.unwrap_or(0);
+    if expected != current {
+        return Err(AgentError::Conflict { expected, current });
+    }
+    Ok(())
+}
+
+fn stored_hash(token: &str, kind: DeviceKind) -> String {
+    match kind {
+        DeviceKind::Agent => flexdeck_pairing::hash_token(&format!("agent:{token}")),
+        _ => flexdeck_pairing::hash_token(token),
+    }
+}
+
 fn stamp_rev(json: &str, rev: u64) -> Result<String, AgentError> {
     let mut document: serde_json::Value = serde_json::from_str(json)?;
 
@@ -1139,6 +1255,72 @@ mod tests {
         agent.store().commit(&deck.to_string()).expect("commits");
         run_upgrades(&agent.store());
         assert_eq!(agent.config().unwrap().unwrap().0, 3);
+    }
+
+    fn with_secret_source(agent: &Agent) {
+        let doc: crate::sources::SourcesDoc = serde_json::from_value(serde_json::json!({"sources": [{
+            "id": "weather", "kind": "http", "http": {"url": "https://example.com/{{args.key}}"},
+            "args": [{"name": "key", "secret": true}]
+        }]}))
+        .unwrap();
+        agent.behavior().replace_sources(doc).expect("sources");
+    }
+
+    fn deck_using_secret(key: &str) -> String {
+        serde_json::json!({"schema": 5, "rev": 0, "profiles": [{"id": "p", "pages": [{"id": "home", "widgets": [
+            {"id": "w", "type": "WIDGET_TYPE_BUTTON", "col": 0, "row": 0, "w": 1, "h": 1,
+             "sources": [{"source": "weather", "args": {"key": key}}]}
+        ]}]}]})
+        .to_string()
+    }
+
+    #[test]
+    fn a_write_from_a_stale_read_is_refused_and_keeps_nothing() {
+        let agent = agent("localhost");
+        with_secret_source(&agent);
+        agent.replace_config(DEFAULT_CONFIG).expect("seeds");
+
+        let error = agent.replace_config_if(Some(7), &deck_using_secret("s3cret")).unwrap_err();
+        assert!(matches!(error, AgentError::Conflict { expected: 7, current: 1 }), "{error}");
+        assert!(agent.behavior().sources().secrets().is_empty(), "a refused write keeps no secret");
+
+        let error = agent
+            .edit_config(Some(1), |_| Err("no".to_string()))
+            .unwrap_err();
+        assert!(matches!(error, AgentError::Refused(_)));
+        assert_eq!(agent.rev().unwrap(), Some(1));
+
+        agent.replace_config_if(Some(1), &deck_using_secret("s3cret")).expect("commits");
+        assert!(!agent.behavior().sources().secrets().is_empty());
+        assert!(!agent.config().unwrap().unwrap().1.contains("s3cret"));
+    }
+
+    #[test]
+    fn undo_and_redo_check_the_revision_they_were_asked_from() {
+        let agent = agent("localhost");
+        agent.replace_config(DEFAULT_CONFIG).expect("seeds");
+        agent.replace_config(DEFAULT_CONFIG).expect("commits");
+        assert!(matches!(agent.undo_if(Some(1)), Err(AgentError::Conflict { current: 2, .. })));
+        assert_eq!(agent.undo_if(Some(2)).unwrap(), 1);
+        assert!(matches!(agent.redo_if(Some(2)), Err(AgentError::Conflict { current: 1, .. })));
+        assert_eq!(agent.redo_if(Some(1)).unwrap(), 2);
+    }
+
+    #[test]
+    fn an_agent_token_is_kept_under_a_hash_an_older_build_never_computes() {
+        let agent = agent("localhost");
+        let (token, device) = agent.issue_credential("Claude", DeviceKind::Agent).unwrap();
+        assert_eq!(device.kind, DeviceKind::Agent);
+        let plain = flexdeck_pairing::hash_token(&token);
+        assert!(agent.store().authenticate(&plain).unwrap().is_none());
+        assert!(agent.authenticate(&token).unwrap().is_some());
+        assert!(agent.authorise(&token, Channel::Lan).unwrap().is_none());
+        assert!(matches!(agent.authorise(&token, Channel::Loopback).unwrap(), Some(Authority::Agent(_))));
+
+        let (tablet, _) = agent.issue_credential("Tab", DeviceKind::Tablet).unwrap();
+        let salted = stored_hash(&tablet, DeviceKind::Agent);
+        assert!(agent.store().authenticate(&salted).unwrap().is_none());
+        assert!(agent.authorise(&tablet, Channel::Loopback).unwrap().is_none());
     }
 
     #[test]
@@ -1239,5 +1421,84 @@ mod tests {
         // the worst possible moment to discover it.
         let parsed: Result<flexdeck_protocol::Config, _> = serde_json::from_str(DEFAULT_CONFIG);
         assert!(parsed.is_ok(), "{:?}", parsed.err());
+    }
+    #[test]
+    fn a_form_save_keeps_a_sign_in_and_signing_out_forgets_only_that() {
+        use flexdeck_plugin::abi;
+
+        #[derive(Debug)]
+        struct SignedIn;
+        impl flexdeck_plugin::Plugin for SignedIn {
+            fn manifest(&self) -> abi::ManifestDto {
+                let setting = |key: &str, secret: bool, internal: bool| abi::SettingDto {
+                    key: key.into(),
+                    description: String::new(),
+                    kind: abi::kind::TEXT.into(),
+                    choices: vec![],
+                    default_value: None,
+                    secret,
+                    internal,
+                    help: None,
+                };
+                abi::ManifestDto {
+                    abi: abi::ABI_VERSION,
+                    id: "signedin".into(),
+                    name: "Signed in".into(),
+                    version: "1".into(),
+                    description: String::new(),
+                    author: String::new(),
+                    actions: vec![],
+                    settings: vec![
+                        setting("client_id", false, false),
+                        setting("access_token", true, true),
+                        setting("expires_at", false, true),
+                    ],
+                    events: vec![],
+                    permissions: vec![],
+                    uses: vec![abi::capability::SETUP.into()],
+                    presets: Vec::new(),
+                    feeds: Vec::new(),
+                    guide: None,
+                }
+            }
+            fn variables(&self) -> Vec<flexdeck_vars::VariableSpec> {
+                Vec::new()
+            }
+            fn sample(&mut self, _: &[&str], _: &mut flexdeck_plugin::Ctx<'_>) -> Result<(), PluginError> {
+                Ok(())
+            }
+            fn invoke(
+                &mut self,
+                _: &str,
+                _: &std::collections::HashMap<String, String>,
+                _: &mut flexdeck_plugin::Ctx<'_>,
+            ) -> Result<flexdeck_plugin::Outcome, PluginError> {
+                Ok(flexdeck_plugin::Outcome::default())
+            }
+        }
+
+        let agent = agent("localhost");
+        agent.behavior.registry().lock().unwrap().register(Box::new(SignedIn));
+        let pairs = |pairs: &[(&str, &str)]| -> BTreeMap<String, String> {
+            pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        };
+        agent
+            .behavior
+            .registry()
+            .lock()
+            .unwrap()
+            .merge_settings("signedin", pairs(&[("access_token", "tok"), ("expires_at", "99")]))
+            .unwrap();
+
+        agent.set_plugin_settings("signedin", pairs(&[("client_id", "abc")])).unwrap();
+        assert_eq!(
+            agent.plugin_settings("signedin"),
+            pairs(&[("client_id", "abc"), ("access_token", "tok"), ("expires_at", "99")]),
+            "a form that does not show the sign-in keeps it"
+        );
+
+        agent.sign_out_plugin("signedin").unwrap();
+        assert_eq!(agent.plugin_settings("signedin"), pairs(&[("client_id", "abc")]));
+        assert!(agent.sign_out_plugin("nobody").is_err());
     }
 }

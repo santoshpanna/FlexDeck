@@ -90,6 +90,7 @@ enum Token {
     Number(f64),
     Text(String),
     Name(String),
+    Quoted(String),
     Punct(&'static str),
 }
 
@@ -143,6 +144,19 @@ fn lex(source: &str) -> Result<Vec<Token>, ExprError> {
                 }
             }
             tokens.push(Token::Text(text));
+        } else if c == '`' {
+            let start = i + 1;
+            let end = chars[start..]
+                .iter()
+                .position(|&ch| ch == '`')
+                .map(|at| start + at)
+                .ok_or_else(|| ExprError::Syntax("a backtick is never closed".into()))?;
+            let name: String = chars[start..end].iter().collect();
+            if name.trim().is_empty() {
+                return Err(ExprError::Syntax("a name in backticks is empty".into()));
+            }
+            tokens.push(Token::Quoted(name));
+            i = end + 1;
         } else if c.is_alphabetic() || c == '_' || c == '@' || c == '$' {
             let start = i;
             while i < chars.len()
@@ -378,6 +392,7 @@ impl Parser {
                     Ok(Expr::Var(name))
                 }
             }
+            Token::Quoted(name) => Ok(Expr::Var(name)),
             Token::Punct("(") => {
                 let inner = self.pipe()?;
                 self.expect(")")?;
@@ -393,6 +408,7 @@ fn describe(token: &Token) -> String {
         Token::Number(n) => format!("the number {n}"),
         Token::Text(text) => format!("the text \"{text}\""),
         Token::Name(name) => format!("'{name}'"),
+        Token::Quoted(name) => format!("`{name}`"),
         Token::Punct(p) => format!("'{p}'"),
     }
 }

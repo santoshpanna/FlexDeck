@@ -50,6 +50,7 @@ impl RecipePlugin {
             uses: if recipe.presets.is_empty() { Vec::new() } else { vec![abi::capability::PRESETS.to_string()] },
             presets: recipe.presets,
             feeds: Vec::new(),
+            guide: None,
         };
         manifest.validate().map_err(|error| error.to_string())?;
         sources.add_recipe(&package.id, recipe.sources);

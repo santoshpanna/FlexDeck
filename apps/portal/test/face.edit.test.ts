@@ -165,6 +165,32 @@ test("a zone's flows are its own, follow a rename and leave with it", async () =
 test("a rule still being filled in changes nothing", () => {
   const config = addLook(deck({ id: "w" }), "w", { id: "a" });
   assert.equal(setLookRules(config, "w", [{ variable: "", value: "true", state: "a" }]), config);
+  assert.equal(setLookRules(config, "w", [{ when: "  ", state: "a" }]), config);
+});
+
+test("a condition sits beside value rows in rules and cases, and only it raises the deck to 6", () => {
+  let config = addLook(addLook(deck({ id: "w" }), "w", { id: "a" }), "w", { id: "b" });
+  config = setLookSource(config, "w", {
+    kind: "variable",
+    variable: "obs.scene",
+    cases: [{ op: "COMPARE_OP_EQ", value: "Live", state: "a" }],
+    otherwise: "",
+  });
+  assert.equal(config.schema, 4, "value cases alone need no newer agent than faces do");
+
+  config = setLookRules(config, "w", [
+    { when: " obs.preview_scene != obs.scene ", state: "b", variable: "ignored" },
+    { variable: "obs.recording", value: "true", state: "a" },
+  ]);
+  assert.deepEqual(widgetOf(config).states?.rules, [
+    { when: "obs.preview_scene != obs.scene", state: "b" },
+    { variable: "obs.recording", value: "true", state: "a" },
+  ]);
+  assert.equal(config.schema, 6);
+
+  config = setLookSource(config, "w", { kind: "variable", variable: "", cases: [{ when: "obs.scene == \"Live\"", state: "a" }], otherwise: "b" });
+  assert.deepEqual(widgetOf(config).states?.variable, { variable: "", cases: [{ when: "obs.scene == \"Live\"", state: "a" }], otherwise: "b" });
+  assert.deepEqual(lookSourceOf(widgetOf(config)), { kind: "variable", variable: "", cases: [{ when: "obs.scene == \"Live\"", state: "a" }], otherwise: "b" });
 });
 
 test("picking what switches a key with no states leaves it with none", () => {

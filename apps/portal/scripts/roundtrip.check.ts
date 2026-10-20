@@ -22,7 +22,7 @@
 //
 // Exits non-zero if anything does not hold.
 
-import { Api } from "../src/services/api/api.ts";
+import { Api, ApiError } from "../src/services/api/api.ts";
 import { addWidget, findWidget, moveWidget } from "../src/modules/config/lib/editing.lib.ts";
 
 const [url, code] = process.argv.slice(2);
@@ -84,8 +84,14 @@ const again = await api.config(desktopId);
 check("redo brought it back", findWidget(again, added?.id ?? "") !== null);
 check("redo went forward again", redo.rev === put.rev);
 
+const stale = await api.putConfig(desktopId, before).then(
+  () => null,
+  (cause: unknown) => cause,
+);
+check("a save made from an old read is refused", stale instanceof ApiError && stale.status === 409);
+
 // Leave the agent as we found it.
-await api.putConfig(desktopId, before);
+await api.putConfig(desktopId, { ...before, rev: redo.rev });
 
 if (failures.length > 0) {
   console.error(`\n${failures.length} check(s) failed`);

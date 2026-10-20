@@ -1,6 +1,6 @@
 import type { GridSpec, WidgetSpan } from "@flexdeck/grid";
 
-import { FACES_SCHEMA, GESTURE_STATES_SCHEMA, type WireConfig, type WirePage, type WireProfile, type WireWidget } from "../../../services/api/api.ts";
+import { ApiError, CONDITION_STATES_SCHEMA, CONFIG_SCHEMA, FACES_SCHEMA, GESTURE_STATES_SCHEMA, type WireConfig, type WirePage, type WireProfile, type WireWidget } from "../../../services/api/api.ts";
 
 /**
  * Configuration as it arrives, turned into what the grid algorithm needs.
@@ -97,14 +97,32 @@ export function pageNameOf(page: WirePage): string {
   return name ? name : page.id;
 }
 
+/** Why this editor must not change the deck, when it was made by a newer FlexDeck: what it would rewrite, it does not know. */
+export function newerDeckRefusal(config: WireConfig | null): string | null {
+  return (config?.schema ?? 0) > CONFIG_SCHEMA ? "This deck was made with a newer FlexDeck; reload the editor to change it." : null;
+}
+
+export function changedUnderYou(cause: unknown, what: "deck" | "automations"): string | null {
+  if (!(cause instanceof ApiError) || cause.status !== 409) return null;
+  return `The ${what} changed while you were editing; your last change was not saved. Try it again.`;
+}
+
 /**
  * The deck raised to the schema what it holds needs: faces need 4, a key's
- * states picked by gestures or by value rules, or a hidden dot, need 5. Never lowered, so an
+ * states picked by gestures or by value rules, or a hidden dot, need 5;
+ * a case or rule with a `when` condition needs 6. Never lowered, so an
  * agent too old for something in it refuses the deck by name rather than
  * dropping it unread.
  */
 export function withSchemaFor(config: WireConfig): WireConfig {
   const widgets = (config.profiles ?? []).flatMap((profile) => (profile.pages ?? []).flatMap((page) => page.widgets ?? []));
-  const needed = widgets.some((widget) => widget.states?.gesture || widget.states?.rules?.length || widget.props?.hideDot || widget.props?.noAutoLight) ? GESTURE_STATES_SCHEMA : FACES_SCHEMA;
+  const conditions = widgets.some(
+    (widget) => widget.states?.rules?.some((rule) => rule.when?.trim()) || widget.states?.variable?.cases?.some((item) => item.when?.trim()),
+  );
+  const needed = conditions
+    ? CONDITION_STATES_SCHEMA
+    : widgets.some((widget) => widget.states?.gesture || widget.states?.rules?.length || widget.props?.hideDot || widget.props?.noAutoLight)
+      ? GESTURE_STATES_SCHEMA
+      : FACES_SCHEMA;
   return (config.schema ?? 0) >= needed ? config : { ...config, schema: needed };
 }

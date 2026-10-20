@@ -183,11 +183,32 @@ test("being let in starts the waits over and tells listeners the socket is open"
     await wait(2000);
     adapter.latest.open();
     adapter.latest.frame({ welcome: { rev: "3", config: {} } });
-    assert.deepEqual(heard, [{ kind: "open" }, { kind: "revision", rev: 3 }]);
+    assert.deepEqual(heard, [{ kind: "offline" }, { kind: "offline" }, { kind: "open" }, { kind: "revision", rev: 3 }]);
 
     adapter.latest.drop();
     await wait(1000);
     assert.equal(adapter.sockets.length, 4);
+    live.close();
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("a desktop that drops off and comes back is told as offline, then open again", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const { adapter, heard, live } = feed();
+    adapter.latest.open();
+    adapter.latest.frame({ welcome: { rev: "3", config: {} } });
+    adapter.latest.frame({ error: { code: "offline", message: "the desktop disconnected" } });
+    adapter.latest.drop();
+    await wait(1000);
+    adapter.latest.open();
+    adapter.latest.frame({ welcome: { rev: "4", config: {} } });
+    assert.deepEqual(
+      heard.map((message) => message.kind),
+      ["open", "revision", "offline", "open", "revision"],
+    );
     live.close();
   } finally {
     mock.timers.reset();

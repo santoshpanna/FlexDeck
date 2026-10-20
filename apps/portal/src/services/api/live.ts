@@ -10,6 +10,8 @@ import type { SourceStatus, WidgetPreview } from "./api.ts";
 export type LiveMessage =
   /** The socket is (re)open: anything read before it may be stale. */
   | { kind: "open" }
+  /** The cloud cannot reach the desktop right now; the socket keeps trying. */
+  | { kind: "offline" }
   /** The configuration is at `rev` now. */
   | { kind: "revision"; rev: number }
   /** A key's look, now. */
@@ -180,6 +182,9 @@ export class LiveFeed {
         this.#refused = true;
         this.#socket?.close();
         this.#onRefused();
+      } else if (message.code === "offline") {
+        this.#welcomed = false;
+        this.#tell({ kind: "offline" });
       }
       return;
     }

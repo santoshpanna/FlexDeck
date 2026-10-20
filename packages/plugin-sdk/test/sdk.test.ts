@@ -158,12 +158,82 @@ test("a toggle's light reaches only an agent that offers toggles", async () => {
   assert.ok(!older.manifest.uses?.includes("toggles"));
 });
 
+test("a sign-in, help and a guide reach only an agent that offers setup", async () => {
+  const signing = definePlugin({
+    id: "signing",
+    name: "Signing",
+    version: "1.0.0",
+    guide: "https://example.com/signing#setup",
+    settings: {
+      client_id: { kind: "text", description: "Client ID", help: "From the developer portal" },
+      token: { kind: "text", secret: true, internal: true },
+    },
+    actions: {},
+  });
+  const offered = signing.manifest(4);
+  assert.equal(offered.guide, "https://example.com/signing#setup");
+  assert.deepEqual(
+    offered.settings.map(({ internal, help }) => ({ internal, help })),
+    [
+      { internal: undefined, help: "From the developer portal" },
+      { internal: true, help: undefined },
+    ],
+  );
+  assert.ok(offered.uses?.includes("setup"));
+
+  const older = (await signing.handle("initialize", { abi: 4, hostCapabilities: ["series", "presets", "feeds", "toggles"] })) as {
+    manifest: ReturnType<typeof signing.manifest>;
+  };
+  assert.equal(older.manifest.guide, undefined);
+  assert.ok(older.manifest.settings.every((setting) => !("internal" in setting) && !("help" in setting)));
+  assert.ok(!older.manifest.uses?.includes("setup"));
+
+  assert.throws(
+    () => definePlugin({ id: "bad", name: "Bad", version: "1", guide: "javascript:alert(1)", actions: {} }),
+    /not an http\(s\) address/,
+  );
+});
+
 test("a toggle's light must name the action's own arguments", () => {
   const define = (active: { variable: string; is?: string }) =>
     definePlugin({ id: "bad", name: "Bad", version: "1", actions: { t: { description: "", arguments: { a: { kind: "text", example: "" } }, active, run: () => {} } } });
   assert.throws(() => define({ variable: "bad.{{b}}.on" }), /'b' is not one of its arguments/);
   assert.throws(() => define({ variable: "other.on" }), /must start with 'bad.'/);
   define({ variable: "bad.{{a}}.on", is: "yes" });
+});
+
+test("a condition light reaches only an agent that offers conditions", async () => {
+  const studio = definePlugin({
+    id: "studio",
+    name: "Studio",
+    version: "1",
+    actions: {
+      transition: { description: "", active: { when: "obs.studio_mode and obs.preview_scene != obs.scene" }, run: () => {} },
+    },
+  });
+  const newer = studio.manifest(4);
+  assert.deepEqual(newer.actions[0]!.active, { when: "obs.studio_mode and obs.preview_scene != obs.scene" });
+  assert.ok(newer.uses?.includes("conditions"));
+  assert.ok(!newer.uses?.includes("toggles"));
+
+  const older = (await studio.handle("initialize", { abi: 4, hostCapabilities: ["series", "toggles"] })) as {
+    manifest: ReturnType<typeof studio.manifest>;
+  };
+  assert.equal(older.manifest.actions[0]!.active, undefined);
+  assert.ok(!older.manifest.uses?.includes("conditions"));
+});
+
+test("a condition light names the action's own arguments, outside quotes", () => {
+  const define = (active: { when: string }) =>
+    definePlugin({ id: "bad", name: "Bad", version: "1", actions: { t: { description: "", arguments: { a: { kind: "text", example: "" } }, active, run: () => {} } } });
+  define({ when: "`obs.input.{{a}}.muted` or obs.scene == {{a}}" });
+  assert.throws(() => define({ when: "obs.scene == {{b}}" }), /'b' is not one of its arguments/);
+  assert.throws(() => define({ when: 'obs.scene == "{{a}}"' }), /inside quotes/);
+  assert.throws(() => define({ when: " " }), /when must be/);
+  assert.throws(
+    () => define({ when: "obs.on", variable: "bad.on" } as unknown as { when: string }),
+    /takes when alone/,
+  );
 });
 
 test("a feed publishes per key, and forgets a key that goes", async () => {

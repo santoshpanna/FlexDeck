@@ -66,6 +66,11 @@ pub async fn status(state: State<'_, ShellState>) -> Result<Value, String> {
         .lock()
         .expect("the server lock is not poisoned")
         .clone();
+    let loopback_error = state
+        .loopback_error
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
 
     Ok(json!({
         "fingerprint": agent.identity().fingerprint(),
@@ -77,6 +82,7 @@ pub async fn status(state: State<'_, ShellState>) -> Result<Value, String> {
         // Whether anything outside this machine can reach it, and why not if
         // not. The window is the only place this can be seen.
         "server": { "error": server_error },
+        "mcp": { "url": mcp_url(settings), "error": loopback_error },
         "plugins": crate::plugins::rows(agent),
         "pairing": pairing,
         // The code for connecting a browser on another device, while one is open.
@@ -208,7 +214,8 @@ pub async fn revoke_device(state: State<'_, ShellState>, device_id: String) -> R
 }
 
 /// Revoke every paired tablet and browser. The window is not a device itself,
-/// so nothing is kept back.
+/// so nothing is kept back. Coding-agent tokens have their own list in Setup
+/// and are revoked there.
 #[tauri::command]
 pub async fn revoke_all_devices(state: State<'_, ShellState>) -> Result<(), String> {
     state
@@ -216,6 +223,29 @@ pub async fn revoke_all_devices(state: State<'_, ShellState>) -> Result<(), Stri
         .revoke_all_devices(None)
         .map_err(|error| error.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn create_agent_token(state: State<'_, ShellState>, name: String) -> Result<Value, String> {
+    if let Some(error) = state.loopback_error.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone() {
+        return Err(format!("Coding agents connect through this computer's own address, which is not open: {error}"));
+    }
+    let name: String = name.trim().chars().take(64).collect();
+    let name = if name.is_empty() { "Coding agent" } else { name.as_str() };
+    let (token, device) = state
+        .agent
+        .issue_credential(name, flexdeck_store::DeviceKind::Agent)
+        .map_err(|error| error.to_string())?;
+    Ok(json!({
+        "token": token,
+        "deviceId": device.id,
+        "name": device.name,
+        "url": mcp_url(&state.settings),
+    }))
+}
+
+fn mcp_url(settings: &flexdeck_server::Settings) -> String {
+    format!("http://127.0.0.1:{}/mcp", flexdeck_agent::loopback_port(settings))
 }
 
 /// Open a web page in the computer's own browser.

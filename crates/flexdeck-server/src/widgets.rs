@@ -42,10 +42,11 @@ use flexdeck_vars::{Value, VariableStore};
 use crate::faces::{plan_faces, FacePlan, VarLookup};
 
 /// The configuration schema this agent writes, and the newest it reads.
-pub const CONFIG_SCHEMA: u32 = 5;
+pub const CONFIG_SCHEMA: u32 = 6;
 
-/// The oldest schema this agent still reads. Schemas 3, 4 and 5 only *added*
-/// (sliders, holds and value flows; faces; gesture states and value rules),
+/// The oldest schema this agent still reads. Schemas 3, 4, 5 and 6 only *added*
+/// (sliders, holds and value flows; faces; gesture states and value rules;
+/// conditions that pick a state),
 /// so an older deck means the same.
 pub const OLDEST_CONFIG_SCHEMA: u32 = 2;
 
@@ -118,13 +119,18 @@ pub struct Rule {
     pub case: Case,
 }
 
-/// "When the value is `op` `value`, show `state`."
+/// "When the value is `op` `value`, show `state`" — or, with `when`, while
+/// that expression holds.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Case {
     pub op: CompareOp,
     pub value: String,
     pub state: String,
+    pub when: Option<flexdeck_expr::Expression>,
 }
+
+/// The most conditions one key's states may hold, cases and rules together.
+pub const MAX_STATE_CONDITIONS: usize = 16;
 
 /// What a slider widget needs: its range, and the variable it follows.
 #[derive(Debug, Clone, PartialEq)]
@@ -249,10 +255,23 @@ impl WidgetPlan {
             .as_deref()
             .map(template_variables)
             .unwrap_or_default();
-        if let Some(StateSource::Variable { variable, .. }) = &self.source {
-            names.insert(variable.clone());
+        if let Some(StateSource::Variable { variable, cases, .. }) = &self.source {
+            if !variable.is_empty() {
+                names.insert(variable.clone());
+            }
+            for when in cases.iter().filter_map(|case| case.when.as_ref()) {
+                names.extend(when.variables());
+            }
         }
-        names.extend(self.rules.iter().map(|rule| rule.variable.clone()));
+        for rule in &self.rules {
+            match &rule.case.when {
+                Some(when) => names.extend(when.variables()),
+                None if !rule.variable.is_empty() => {
+                    names.insert(rule.variable.clone());
+                }
+                None => {}
+            }
+        }
         if let Some(template) = &self.icon_template {
             names.extend(template_variables(template));
         }
@@ -347,10 +366,40 @@ impl WidgetPlan {
     /// `cycled` is how many times a cycling widget has advanced; `provided` is
     /// the look its providing action last reported.
     pub fn state_id(&self, vars: &VariableStore, cycled: usize, provided: Option<&str>) -> String {
-        let ruled = self.rules.iter().find(|rule| {
-            vars.get(&rule.variable)
-                .is_some_and(|value| matches_case(&value, rule.case.op, &rule.case.value))
-        });
+        self.state_id_in(vars, cycled, provided, &Locale::default())
+    }
+
+    /// Whether `case` holds now: its condition, or `variable`'s value.
+    fn case_holds(
+        &self,
+        case: &Case,
+        variable: &str,
+        vars: &VariableStore,
+        lookup: &ScopedLookup,
+        locale: &Locale,
+    ) -> bool {
+        match &case.when {
+            Some(when) => when.eval(lookup, locale).truthy(),
+            None => vars
+                .get(variable)
+                .is_some_and(|value| matches_case(&value, case.op, &case.value)),
+        }
+    }
+
+    /// [`Self::state_id`], reading conditions the `locale`'s way.
+    pub fn state_id_in(
+        &self,
+        vars: &VariableStore,
+        cycled: usize,
+        provided: Option<&str>,
+        locale: &Locale,
+    ) -> String {
+        let this = self.this_base();
+        let lookup = ScopedLookup { vars: VarLookup(vars), this: this.as_deref() };
+        let ruled = self
+            .rules
+            .iter()
+            .find(|rule| self.case_holds(&rule.case, &rule.variable, vars, &lookup, locale));
         if let Some(rule) = ruled {
             return rule.case.state.clone();
         }
@@ -365,18 +414,11 @@ impl WidgetPlan {
                 variable,
                 cases,
                 otherwise,
-            }) => {
-                let value = vars.get(variable);
-                cases
-                    .iter()
-                    .find(|case| {
-                        value
-                            .as_ref()
-                            .is_some_and(|value| matches_case(value, case.op, &case.value))
-                    })
-                    .map(|case| case.state.clone())
-                    .unwrap_or_else(|| otherwise.clone())
-            }
+            }) => cases
+                .iter()
+                .find(|case| self.case_holds(case, variable, vars, &lookup, locale))
+                .map(|case| case.state.clone())
+                .unwrap_or_else(|| otherwise.clone()),
             // A look the action no longer reports, or none yet: the widget's
             // own props, rather than a stale or invented state.
             Some(StateSource::Provider { .. } | StateSource::Gesture(_)) => provided
@@ -399,7 +441,7 @@ impl WidgetPlan {
         provided: Option<&str>,
         locale: &Locale,
     ) -> StateEvent {
-        let state_id = self.state_id(vars, cycled, provided);
+        let state_id = self.state_id_in(vars, cycled, provided, locale);
         let this = self.this_base();
         let lookup = ScopedLookup { vars: VarLookup(vars), this: this.as_deref() };
         let face = self
@@ -443,6 +485,16 @@ impl WidgetPlan {
                 .unwrap_or_default(),
         }
     }
+}
+
+/// A case's or rule's `when`: none when blank.
+fn condition(source: &str) -> Result<Option<flexdeck_expr::Expression>, String> {
+    if source.trim().is_empty() {
+        return Ok(None);
+    }
+    flexdeck_expr::parse_expression(source)
+        .map(Some)
+        .map_err(|error| error.to_string())
 }
 
 /// Text matches exactly, numbers by value, bools as `true`/`false`. An
@@ -733,7 +785,9 @@ fn plan(widget: &Widget, limits: &Limits) -> Result<WidgetPlan, String> {
                 Some(widget_states::Source::Cycle(_)) => Some(StateSource::Cycle),
                 Some(widget_states::Source::Variable(variable)) => {
                     let name = variable.variable.trim();
-                    if name.is_empty() {
+                    let only_conditions = !variable.cases.is_empty()
+                        && variable.cases.iter().all(|case| !case.when.trim().is_empty());
+                    if name.is_empty() && !only_conditions {
                         return Err("its state follows a variable, but not which one".into());
                     }
                     for case in &variable.cases {
@@ -755,12 +809,18 @@ fn plan(widget: &Widget, limits: &Limits) -> Result<WidgetPlan, String> {
                         cases: variable
                             .cases
                             .iter()
-                            .map(|case| Case {
-                                op: CompareOp::try_from(case.op).unwrap_or(CompareOp::Eq),
-                                value: case.value.clone(),
-                                state: case.state.trim().to_string(),
+                            .enumerate()
+                            .map(|(index, case)| {
+                                Ok(Case {
+                                    op: CompareOp::try_from(case.op).unwrap_or(CompareOp::Eq),
+                                    value: case.value.clone(),
+                                    state: case.state.trim().to_string(),
+                                    when: condition(&case.when).map_err(|error| {
+                                        format!("its case {}'s condition: {error}", index + 1)
+                                    })?,
+                                })
                             })
-                            .collect(),
+                            .collect::<Result<_, String>>()?,
                         otherwise: otherwise.to_string(),
                     })
                 }
@@ -798,10 +858,22 @@ fn plan(widget: &Widget, limits: &Limits) -> Result<WidgetPlan, String> {
             if !states.rules.is_empty() && looks.is_empty() {
                 return Err("it says when its states show, but has no states".into());
             }
+            let conditions = states.rules.len()
+                + match &states.source {
+                    Some(widget_states::Source::Variable(variable)) => variable.cases.len(),
+                    _ => 0,
+                };
+            if conditions > MAX_STATE_CONDITIONS {
+                return Err(format!(
+                    "its states have more than {MAX_STATE_CONDITIONS} cases and rules"
+                ));
+            }
             let mut rules = Vec::with_capacity(states.rules.len());
-            for rule in &states.rules {
+            for (index, rule) in states.rules.iter().enumerate() {
+                let when = condition(&rule.when)
+                    .map_err(|error| format!("its rule {}'s condition: {error}", index + 1))?;
                 let variable = rule.variable.trim();
-                if variable.is_empty() {
+                if variable.is_empty() && when.is_none() {
                     return Err("a state follows a value, but not which one".into());
                 }
                 if !has(rule.state.trim()) {
@@ -813,6 +885,7 @@ fn plan(widget: &Widget, limits: &Limits) -> Result<WidgetPlan, String> {
                         op: CompareOp::try_from(rule.op).unwrap_or(CompareOp::Eq),
                         value: rule.value.clone(),
                         state: rule.state.trim().to_string(),
+                        when,
                     },
                 });
             }
@@ -1036,13 +1109,13 @@ mod tests {
         assert_eq!(plan.state(&vars, 0, None).icon, address, "not '–', not changed");
     }
     #[test]
-    fn schemas_two_to_five_all_read() {
-        for schema in 2..=5 {
+    fn schemas_two_to_six_all_read() {
+        for schema in 2..=6 {
             let deck = json!({"schema": schema, "profiles": []}).to_string();
             validate(&deck, &Limits::default()).unwrap_or_else(|error| panic!("schema {schema}: {error}"));
         }
-        let six = json!({"schema": 6, "profiles": []}).to_string();
-        let error = validate(&six, &Limits::default()).unwrap_err();
+        let seven = json!({"schema": 7, "profiles": []}).to_string();
+        let error = validate(&seven, &Limits::default()).unwrap_err();
         assert!(error.to_string().contains("newer agent"), "{error}");
     }
 
@@ -1202,6 +1275,97 @@ mod tests {
         }}))
         .unwrap();
         assert!(sourceless.is_live(), "rules alone still need live state");
+    }
+
+    fn studio_vars() -> VariableStore {
+        let vars = vars();
+        vars.declare(VariableSpec::new("obs.preview_scene", Kind::Text, ""));
+        vars.declare(VariableSpec::new("obs.studio_mode", Kind::Bool, ""));
+        vars.declare(VariableSpec::new("obs.input.Mic/Aux.muted", Kind::Bool, ""));
+        vars
+    }
+
+    #[test]
+    fn a_condition_case_compares_two_values_and_needs_no_variable() {
+        let plan = one(json!({"id": "transition", "states": {
+            "looks": [{"id": "off"}, {"id": "on", "bgColor": "#b91c1c"}],
+            "variable": {"variable": "",
+                         "cases": [{"when": "obs.studio_mode and obs.preview_scene != obs.scene", "state": "on"}],
+                         "otherwise": "off"}
+        }}))
+        .unwrap();
+        let vars = studio_vars();
+        assert_eq!(plan.state_id(&vars, 0, None), "off", "nothing known: a comparison with nothing is false");
+        vars.refresh("obs.studio_mode", Value::Bool(true)).unwrap();
+        vars.refresh("obs.scene", Value::Text("Live".into())).unwrap();
+        assert_eq!(plan.state_id(&vars, 0, None), "off", "preview unknown");
+        vars.refresh("obs.preview_scene", Value::Text("Ending".into())).unwrap();
+        assert_eq!(plan.state_id(&vars, 0, None), "on");
+        vars.refresh("obs.preview_scene", Value::Text("Live".into())).unwrap();
+        assert_eq!(plan.state_id(&vars, 0, None), "off");
+        assert!(plan.reads("obs.preview_scene") && plan.reads("obs.scene") && plan.reads("obs.studio_mode"));
+        assert!(!plan.reads(""), "no blank name is watched");
+
+        let negated = one(json!({"id": "w", "states": {
+            "looks": [{"id": "off"}, {"id": "on"}],
+            "variable": {"cases": [{"when": "not (obs.preview_scene == obs.scene)", "state": "on"}], "otherwise": "off"}
+        }}))
+        .unwrap();
+        assert_eq!(negated.state_id(&studio_vars(), 0, None), "on", "not of a false comparison holds while unknown");
+    }
+
+    #[test]
+    fn condition_and_value_cases_sit_side_by_side() {
+        let plan = one(json!({"id": "scene", "states": {
+            "looks": [{"id": "off"}, {"id": "live"}, {"id": "preview"}, {"id": "muted"}],
+            "variable": {"variable": "obs.scene",
+                         "cases": [{"value": "Ending", "state": "live"},
+                                   {"when": "obs.preview_scene == \"Ending\"", "state": "preview"}],
+                         "otherwise": "off"},
+            "rules": [{"when": "`obs.input.Mic/Aux.muted`", "state": "muted"}]
+        }}))
+        .unwrap();
+        let vars = studio_vars();
+        vars.refresh("obs.preview_scene", Value::Text("Ending".into())).unwrap();
+        assert_eq!(plan.state_id(&vars, 0, None), "preview");
+        vars.refresh("obs.scene", Value::Text("Ending".into())).unwrap();
+        assert_eq!(plan.state_id(&vars, 0, None), "live", "the first case that holds wins");
+        vars.refresh("obs.input.Mic/Aux.muted", Value::Bool(true)).unwrap();
+        assert_eq!(plan.state_id(&vars, 0, None), "muted", "a condition rule is checked first");
+        assert!(plan.reads("obs.input.Mic/Aux.muted"));
+
+        let text = one(json!({"id": "n", "states": {
+            "looks": [{"id": "off"}, {"id": "on"}],
+            "variable": {"variable": "obs.scene", "cases": [{"value": "007", "state": "on"}], "otherwise": "off"}
+        }}))
+        .unwrap();
+        let vars = studio_vars();
+        vars.refresh("obs.scene", Value::Text("7".into())).unwrap();
+        assert_eq!(text.state_id(&vars, 0, None), "off", "a value case still matches text exactly");
+    }
+
+    #[test]
+    fn a_bad_condition_is_refused_by_where_it_is() {
+        let error = one(json!({"id": "w", "states": {
+            "looks": [{"id": "on"}],
+            "variable": {"cases": [{"when": "obs.scene ==", "state": "on"}]}
+        }}))
+        .unwrap_err();
+        assert!(error.to_string().contains("case 1's condition"), "{error}");
+        let error = one(json!({"id": "w", "states": {
+            "looks": [{"id": "on"}],
+            "rules": [{"variable": "obs.scene", "value": "a", "state": "on"}, {"when": "(", "state": "on"}]
+        }}))
+        .unwrap_err();
+        assert!(error.to_string().contains("rule 2's condition"), "{error}");
+        assert!(one(json!({"id": "w", "states": {
+            "looks": [{"id": "on"}],
+            "variable": {"cases": [{"when": "obs.recording", "state": "on"}, {"value": "x", "state": "on"}]}
+        }}))
+        .is_err(), "a value case still needs the variable");
+        let many: Vec<_> = (0..=MAX_STATE_CONDITIONS).map(|_| json!({"when": "obs.recording", "state": "on"})).collect();
+        let error = one(json!({"id": "w", "states": {"looks": [{"id": "on"}], "rules": many}})).unwrap_err();
+        assert!(error.to_string().contains("more than"), "{error}");
     }
 
     #[test]

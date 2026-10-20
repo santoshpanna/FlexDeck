@@ -14,7 +14,7 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { connect } from "node:net";
-import { delimiter, join } from "node:path";
+import { basename, delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** The repository root, derived from this file's location. */
@@ -75,8 +75,8 @@ export function run(command: string, args: string[], options: RunOptions = {}): 
  * nothing to escape, and it works on Windows where `pnpm` is a `.cmd` shim that
  * Node refuses to execute directly.
  *
- * Run directly instead (`node scripts/startup/web.ts`), there is no such pointer
- * and a shell is the only way to reach the shim. The command is pre-joined into
+ * Run directly instead (`node scripts/startup/web.ts`), or through `npm run …`
+ * (whose pointer names npm, not pnpm), a shell is the only way to reach the shim. The command is pre-joined into
  * a single string for that case: handing an args array to `shell: true` makes
  * Node concatenate the arguments without escaping them, which it now deprecates
  * for exactly that reason.
@@ -91,7 +91,7 @@ export function pnpmCommand(args: string[]): {
   shell: boolean;
 } {
   const pnpm = process.env.npm_execpath;
-  if (pnpm) {
+  if (pnpm && basename(pnpm).toLowerCase().includes("pnpm")) {
     return { command: process.execPath, args: [pnpm, ...args], shell: false };
   }
 

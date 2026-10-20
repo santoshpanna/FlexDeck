@@ -8,6 +8,7 @@
 //! {{ (btc.price - btc.open) / btc.open * 100 | round(2) | sign }}%
 //! {{ weather.code | map(0: "sun", 1: "cloud", _: "fog") }}
 //! {{ if(obs.recording, "REC", "idle") }}
+//! {{ `obs.input.Mic/Aux.muted` }}         any name, in backticks
 //! ```
 //!
 //! # One language, three users

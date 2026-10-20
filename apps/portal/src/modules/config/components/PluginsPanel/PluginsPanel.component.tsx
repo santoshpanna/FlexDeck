@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState, type DragEvent, type ReactElement } from "react";
 
-import { Glyph, HoldToConfirm, Key, Led, Notice, Sheet, Switch, cn, item, list, spring } from "@flexdeck/ui";
+import { Glyph, HoldToConfirm, InfoTip, Key, Led, Notice, Segmented, Sheet, Switch, cn, item, keyVariants, list, spring } from "@flexdeck/ui";
 
 import { Card } from "../../../../common/components/Card/Card.component.tsx";
 import { useApi } from "../../../../hooks/useApi/useApi.hook.ts";
@@ -12,17 +12,22 @@ import type {
   PluginListing,
   PluginSetting,
   RepoPreview,
+  RepositoryIconPack,
 } from "../../../../services/api/api.ts";
 import {
+  MARKET_TYPES,
   checkPackageFile,
   entryAction,
   filterCatalog,
   filterCounts,
+  filterIconPacks,
+  iconPackCounts,
   kindLabel,
   permissionLabel,
   pluginState,
   relativeDate,
   type MarketFilter,
+  type MarketType,
 } from "../../lib/plugins.lib.ts";
 import { control } from "../Flow/fields.tsx";
 
@@ -105,6 +110,8 @@ export function PluginsPanel({ desktopId, onChanged }: PluginsPanelProps): React
   const [installed, setInstalled] = useState<InstalledPlugin[]>([]);
   const [catalogue, setCatalogue] = useState<PluginListing[]>([]);
   const [market, setMarket] = useState<Catalog | null>(null);
+  const [packs, setPacks] = useState<RepositoryIconPack[]>([]);
+  const [type, setType] = useState<MarketType>("integrations");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<MarketFilter>("all");
   const [open, setOpen] = useState<string | null>(null);
@@ -126,7 +133,12 @@ export function PluginsPanel({ desktopId, onChanged }: PluginsPanelProps): React
   }, [api, desktopId]);
 
   const loadMarket = useCallback(async () => {
-    setMarket(await api.catalog(desktopId));
+    const [catalog, iconPacks] = await Promise.all([
+      api.catalog(desktopId),
+      api.repositoryIconPacks(desktopId).catch(() => ({ packs: [] as RepositoryIconPack[] })),
+    ]);
+    setMarket(catalog);
+    setPacks(iconPacks.packs ?? []);
   }, [api, desktopId]);
 
   useEffect(() => {
@@ -231,8 +243,9 @@ export function PluginsPanel({ desktopId, onChanged }: PluginsPanelProps): React
 
   const builtIn = catalogue.filter((plugin) => plugin.origin === "builtIn");
   const entries = market?.plugins ?? [];
-  const counts = filterCounts(entries);
+  const counts = type === "iconPacks" ? iconPackCounts(packs) : filterCounts(entries);
   const shown = filterCatalog(entries, query, filter);
+  const shownPacks = filterIconPacks(packs, query, filter);
   const repositories = market?.repositories ?? [];
   const times = repositories.flatMap((repo) => (repo.fetchedAt ? [repo.fetchedAt] : []));
   const read = relativeDate(times.length > 0 ? Math.min(...times) : null);
@@ -270,11 +283,13 @@ export function PluginsPanel({ desktopId, onChanged }: PluginsPanelProps): React
                   key={plugin.id}
                   plugin={plugin}
                   settings={catalogue.find((entry) => entry.id === plugin.id)?.settings ?? []}
+                  guide={catalogue.find((entry) => entry.id === plugin.id)?.guide ?? null}
                   busy={busy}
                   onEnable={(enabled) => void act(() => api.enablePlugin(desktopId, plugin.id, enabled))}
                   onReload={() => void act(() => api.reloadPlugin(desktopId, plugin.id))}
                   onRemove={() => void act(() => api.uninstallPlugin(desktopId, plugin.id))}
                   onSave={(values) => void act(() => api.savePluginSettings(desktopId, plugin.id, values))}
+                  onSignOut={() => void act(() => api.signOutPlugin(desktopId, plugin.id))}
                   onLog={() => api.pluginLog(desktopId, plugin.id).then((answer) => answer.lines)}
                 />
               ))}
@@ -426,13 +441,27 @@ export function PluginsPanel({ desktopId, onChanged }: PluginsPanelProps): React
           </button>
         }
       >
+        <Segmented
+          label="Type"
+          size="sm"
+          value={type}
+          onChange={(next) => {
+            setType(next);
+            setFilter("all");
+          }}
+          options={MARKET_TYPES.map((option) => ({
+            value: option.value,
+            label: `${option.label} · ${option.value === "iconPacks" ? packs.length : entries.length}`,
+          }))}
+          className="self-start"
+        />
         <div className="relative">
           <Glyph name="search" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-faint" />
           <input
             type="search"
             value={query}
-            aria-label="Search plugins"
-            placeholder="Search OBS, lights, Spotify…"
+            aria-label={type === "iconPacks" ? "Search icon packs" : "Search plugins"}
+            placeholder={type === "iconPacks" ? "Search icon packs…" : "Search OBS, lights, Spotify…"}
             onChange={(event) => setQuery(event.currentTarget.value)}
             className={cn(control, "h-10 pl-9 text-sm")}
           />
@@ -457,6 +486,40 @@ export function PluginsPanel({ desktopId, onChanged }: PluginsPanelProps): React
         </div>
         {market === null ? (
           <p className="m-0 text-sm text-muted">The desktop is reading its repositories…</p>
+        ) : type === "iconPacks" ? (
+          shownPacks.length === 0 ? (
+            <p className="m-0 text-sm text-muted">{packs.length === 0 ? "No icon packs listed yet." : "Nothing matches."}</p>
+          ) : (
+            <motion.ul variants={list} initial="initial" animate="animate" className="m-0 grid list-none gap-2.5 p-0 lg:grid-cols-2">
+              {shownPacks.map((pack) => (
+                <motion.li key={`${pack.repo.url} ${pack.id}`} variants={item} className="flex flex-col gap-2.5 overflow-hidden rounded-[16px] border border-line bg-body p-3">
+                  <div className="flex items-center gap-3">
+                    <PluginIcon entry={{ name: pack.name, iconData: null }} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{pack.name}</span>
+                      <span className="block truncate font-mono text-[10px] text-muted">
+                        {pack.version} · {pack.count === 1 ? "1 icon" : `${pack.count} icons`}
+                      </span>
+                    </span>
+                    <Key
+                      size="sm"
+                      tone={pack.installed ? "default" : "signal"}
+                      disabled={busy || pack.installed}
+                      onClick={() => void act(() => api.installRepositoryIconPack(desktopId, pack.repo.url, pack.id))}
+                    >
+                      {pack.installed ? "Installed" : "Install"}
+                    </Key>
+                  </div>
+                  {pack.description ? <p className="m-0 line-clamp-2 text-[13px] leading-relaxed text-ink-2">{pack.description}</p> : null}
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="rounded-md border border-line px-1.5 py-0.5 font-mono text-[9px] tracking-[0.12em] text-muted uppercase" title={pack.repo.name}>
+                      {pack.repo.kind === "official" ? "Official" : pack.repo.kind === "vetted" ? pack.repo.name : `Custom · ${pack.repo.name}`}
+                    </span>
+                  </div>
+                </motion.li>
+              ))}
+            </motion.ul>
+          )
         ) : shown.length === 0 ? (
           <p className="m-0 text-sm text-muted">{entries.length === 0 ? "No plugins listed yet." : "Nothing matches."}</p>
         ) : (
@@ -610,20 +673,24 @@ function PluginIcon({ entry, large = false }: { entry: Pick<CatalogEntry, "name"
 function InstalledRow({
   plugin,
   settings,
+  guide,
   busy,
   onEnable,
   onReload,
   onRemove,
   onSave,
+  onSignOut,
   onLog,
 }: {
   plugin: InstalledPlugin;
   settings: PluginSetting[];
+  guide: string | null;
   busy: boolean;
   onEnable: (enabled: boolean) => void;
   onReload: () => void;
   onRemove: () => void;
   onSave: (values: Record<string, string>) => void;
+  onSignOut: () => void;
   onLog: () => Promise<string[]>;
 }): ReactElement {
   const [open, setOpen] = useState<"settings" | "log" | null>(null);
@@ -658,6 +725,11 @@ function InstalledRow({
                     <Glyph name="sliders" size={13} /> Settings
                   </Key>
                 ) : null}
+                {guide ? (
+                  <a href={guide} target="_blank" rel="noreferrer noopener" className={cn(keyVariants({ size: "sm" }), "no-underline")}>
+                    <Glyph name="book" size={13} /> Setup guide
+                  </a>
+                ) : null}
                 <Key
                   size="sm"
                   lit={open === "log"}
@@ -686,6 +758,7 @@ function InstalledRow({
                     onSave(values);
                     setOpen(null);
                   }}
+                  onSignOut={onSignOut}
                 />
               ) : null}
               {open === "log" ? (
@@ -701,8 +774,24 @@ function InstalledRow({
   );
 }
 
-/** A form built from what the plugin declared. A secret is never shown again. */
-function SettingsForm({ settings, busy, onSave }: { settings: PluginSetting[]; busy: boolean; onSave: (values: Record<string, string>) => void }): ReactElement {
+/**
+ * A form built from what the plugin declared. A secret is never shown again.
+ * What the plugin keeps for itself (a sign-in) is not a field: the desktop
+ * keeps it across saves, and signing out clears it.
+ */
+function SettingsForm({
+  settings: all,
+  busy,
+  onSave,
+  onSignOut,
+}: {
+  settings: PluginSetting[];
+  busy: boolean;
+  onSave: (values: Record<string, string>) => void;
+  onSignOut: () => void;
+}): ReactElement {
+  const settings = all.filter((setting) => !setting.internal);
+  const signedIn = all.some((setting) => setting.internal && setting.isSet);
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(settings.map((setting) => [setting.key, setting.secret ? "" : (setting.value ?? "")])),
   );
@@ -716,7 +805,10 @@ function SettingsForm({ settings, busy, onSave }: { settings: PluginSetting[]; b
     >
       {settings.map((setting) => (
         <label key={setting.key} className="flex flex-col gap-1.5">
-          <span className="text-[12px] text-muted">{setting.description || setting.key}</span>
+          <span className="inline-flex items-center gap-1 text-[12px] text-muted">
+            {setting.description || setting.key}
+            {setting.help ? <InfoTip label={`About ${setting.description || setting.key}`}>{setting.help}</InfoTip> : null}
+          </span>
           {setting.kind === "choice" ? (
             <select className={control} value={values[setting.key]} onChange={(event) => setValues({ ...values, [setting.key]: event.currentTarget.value })}>
               <option value="">Default ({setting.defaultValue ?? "none"})</option>
@@ -736,9 +828,19 @@ function SettingsForm({ settings, busy, onSave }: { settings: PluginSetting[]; b
           )}
         </label>
       ))}
-      <Key tone="signal" size="sm" type="submit" disabled={busy} className="self-start">
-        Save settings
-      </Key>
+      {signedIn ? (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-well px-3 py-2">
+          <span className="text-[13px] text-ink-2">Signed in</span>
+          <Key size="sm" type="button" disabled={busy} onClick={onSignOut}>
+            Sign out
+          </Key>
+        </div>
+      ) : null}
+      {settings.length > 0 ? (
+        <Key tone="signal" size="sm" type="submit" disabled={busy} className="self-start">
+          Save settings
+        </Key>
+      ) : null}
     </form>
   );
 }

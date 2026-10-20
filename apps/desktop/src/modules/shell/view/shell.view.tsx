@@ -13,12 +13,14 @@ import type { Readout, NextStep } from "../lib/home.lib.ts";
 import type { PluginGroup } from "../lib/plugins.lib.ts";
 import type { StatusRow } from "../lib/status.lib.ts";
 import type {
+  AgentToken,
   ApprovalRequest,
   BrowserPairing,
   CatalogEntry,
   Consent,
   DeviceRow,
   InstalledPlugin,
+  McpState,
   PairingPin,
   RepoPreview,
   Repository,
@@ -42,6 +44,9 @@ export interface ShellViewProps {
   /** The port that goes with it. */
   port: number | null;
   devices: DeviceRow[];
+  agentTokens: DeviceRow[];
+  mcp: McpState;
+  agentToken: AgentToken | null;
   plugins: PluginGroup[];
   installed: InstalledPlugin[];
   consent: Consent | null;
@@ -72,6 +77,8 @@ export interface ShellViewProps {
   onRevoke: (deviceId: string) => void;
   /** Remove every paired tablet and browser. */
   onRevokeAll: () => void;
+  onCreateAgentToken: (name: string) => void;
+  onDismissAgentToken: () => void;
   onToggleWebAccess: (enabled: boolean) => void;
   onSetPortal: (url: string) => void;
   /** Open a web page in this computer's browser. */
@@ -91,6 +98,7 @@ export interface ShellViewProps {
   onEnable: (id: string, enabled: boolean) => void;
   onReload: (id: string) => void;
   onSaveSettings: (id: string, values: Record<string, string>) => void;
+  onSignOut: (id: string) => void;
   onShowLog: (id: string) => void;
 }
 
@@ -105,6 +113,9 @@ const DEFAULTS: ShellViewProps = {
   address: "",
   port: null,
   devices: [],
+  agentTokens: [],
+  mcp: { url: "", error: null },
+  agentToken: null,
   plugins: [],
   installed: [],
   consent: null,
@@ -133,6 +144,8 @@ const DEFAULTS: ShellViewProps = {
   onAnswer: noop,
   onRevoke: noop,
   onRevokeAll: noop,
+  onCreateAgentToken: noop,
+  onDismissAgentToken: noop,
   onToggleWebAccess: noop,
   onSetPortal: noop,
   onOpenLink: noop,
@@ -151,6 +164,7 @@ const DEFAULTS: ShellViewProps = {
   onEnable: noop,
   onReload: noop,
   onSaveSettings: noop,
+  onSignOut: noop,
   onShowLog: noop,
 };
 

@@ -53,8 +53,30 @@ PERMISSIONS = ("network", "notifications", "processes", "filesystem")
 MAX_SERIES_POINTS = 600
 MAX_IMAGE_BYTES = 256 * 1024
 IMAGE_MIMES = ("image/png", "image/jpeg", "image/webp")
-CAPABILITIES = ("series", "presets", "feeds", "toggles")
+CAPABILITIES = ("series", "presets", "feeds", "toggles", "setup", "conditions")
+MAX_CONDITION_LEN = 2000
 _PLACEHOLDER = re.compile(r"\{\{\s*([^{}\s]+)\s*\}\}")
+
+
+def _placeholder_in_quotes(when: str) -> bool:
+    quote = None
+    i = 0
+    while i < len(when):
+        c = when[i]
+        if quote == "`":
+            if c == "`":
+                quote = None
+        elif quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = None
+            elif c == "{" and when[i + 1 : i + 2] == "{":
+                return True
+        elif c in "\"'`":
+            quote = c
+        i += 1
+    return False
 
 Value = Union[str, float, int, bool]
 
@@ -113,13 +135,23 @@ class _Action:
     check: Optional[Callable[[Dict[str, str], "Context"], Optional[str]]] = None
     active: Optional[Dict[str, str]] = None
 
-    def active_dto(self, offered: Iterable[str]) -> Optional[Dict[str, str]]:
-        """The light as the host reads it: the plain kind (``equals``, no
-        placeholders) for any host, the rest only for one offering ``toggles``."""
+    def needs(self) -> Optional[str]:
+        """The capability a host must offer to read this light, if any."""
         if self.active is None:
             return None
+        if "when" in self.active:
+            return "conditions"
         plain = "equals" in self.active and not _PLACEHOLDER.search(self.active["variable"])
-        return dict(self.active) if plain or "toggles" in offered else None
+        return None if plain else "toggles"
+
+    def active_dto(self, offered: Iterable[str]) -> Optional[Dict[str, str]]:
+        """The light as the host reads it: the plain kind (``equals``, no
+        placeholders) for any host, the rest only for one offering ``toggles``,
+        and a ``when`` only for one offering ``conditions``."""
+        if self.active is None:
+            return None
+        needs = self.needs()
+        return dict(self.active) if needs is None or needs in offered else None
 
 
 @dataclass
@@ -272,8 +304,10 @@ class Plugin:
         description: str = "",
         author: str = "",
         permissions: Iterable[str] = (),
+        guide: Optional[str] = None,
     ) -> None:
         _require(is_valid_id(id), f"'{id}' is not a usable id (lowercase letters, digits, - and _)")
+        _require(guide is None or re.match(r"^https?://", guide) is not None, f"guide '{guide}' is not an http(s) address")
         _require(re.match(r"^\d[0-9A-Za-z.+-]*$", version) and ".." not in version, f"'{version}' is not a version")
         for permission in permissions:
             _require(permission in PERMISSIONS, f"'{permission}' is not a permission: {', '.join(PERMISSIONS)}")
@@ -283,6 +317,7 @@ class Plugin:
         self.description = description
         self.author = author
         self.permissions = list(permissions)
+        self.guide = guide
         self._actions: Dict[str, _Action] = {}
         self._settings_spec: Dict[str, Dict[str, Any]] = {}
         self._events: Dict[str, Dict[str, Any]] = {}
@@ -313,10 +348,12 @@ class Plugin:
         _require(kind in KINDS, f"variable '{name}': '{kind}' is not a kind: {', '.join(KINDS)}")
         self._declared[name] = {"kind": kind, "description": description, "unit": unit, "choices": list(choices), "readOnly": read_only}
 
-    def setting(self, key: str, kind: str = "text", description: str = "", *, default: Optional[str] = None, choices: Iterable[str] = (), secret: bool = False) -> None:
-        """Configuration filled in once. A ``secret`` is never shown again."""
+    def setting(self, key: str, kind: str = "text", description: str = "", *, default: Optional[str] = None, choices: Iterable[str] = (), secret: bool = False, internal: bool = False, help: Optional[str] = None) -> None:
+        """Configuration filled in once. A ``secret`` is never shown again; an
+        ``internal`` one is kept by the plugin (a sign-in), hidden from the form
+        and cleared by signing out; ``help`` is shown behind an info button."""
         _require(kind in KINDS, f"setting '{key}': '{kind}' is not a kind")
-        self._settings_spec[key] = {"kind": kind, "description": description, "default": default, "choices": list(choices), "secret": secret}
+        self._settings_spec[key] = {"kind": kind, "description": description, "default": default, "choices": list(choices), "secret": secret, "internal": internal, "help": help}
 
     def event(self, name: str, description: str = "", fields: Iterable[str] = ()) -> None:
         """Something that happens, which an automation can be started by."""
@@ -330,13 +367,23 @@ class Plugin:
         while that is true, ``{"variable": "x.mode", "is": "ptt"}`` while it holds
         that value, ``{"variable": "x.scene", "equals": "scene"}`` while it holds
         the ``scene`` argument's value. The variable may hold ``{{argument}}``
-        placeholders."""
+        placeholders. ``{"when": "obs.studio_mode and obs.preview_scene !=
+        obs.scene"}`` while that condition holds; its placeholders may be part
+        of a name or a whole value, never inside quotes."""
         arguments = dict(arguments or {})
         for arg_name, argument in arguments.items():
             _require(argument.kind in KINDS, f"{name}.{arg_name}: '{argument.kind}' is not a kind")
             if argument.kind == "choice":
                 _require(argument.example in argument.choices, f"{name}.{arg_name}: the example must be one of its choices")
-        if active is not None:
+        if active is not None and "when" in active:
+            active = dict(active)
+            when = active["when"]
+            _require(set(active) == {"when"}, f"{name}.active: takes when alone")
+            _require(isinstance(when, str) and when.strip() != "" and len(when) <= MAX_CONDITION_LEN, f"{name}.active: when must be 1 to {MAX_CONDITION_LEN} characters")
+            _require(not _placeholder_in_quotes(when), f"{name}.active: a placeholder inside quotes in when; put it outside, as a whole value")
+            for named in _PLACEHOLDER.findall(when):
+                _require(named in arguments, f"{name}.active: '{named}' is not one of its arguments")
+        elif active is not None:
             active = dict(active)
             variable = active.get("variable", "")
             _require(set(active) <= {"variable", "equals", "is"}, f"{name}.active: takes variable, equals and is")
@@ -394,6 +441,8 @@ class Plugin:
             light = a.active_dto(offered)
             if light is not None:
                 dto["active"] = light
+            elif a.active is not None:
+                print(f"plugin: this agent has no {a.needs()}, so {n} is never lit", file=sys.stderr)
             actions.append(dto)
         manifest: Dict[str, Any] = {
             "abi": ABI_VERSION,
@@ -425,8 +474,19 @@ class Plugin:
                 }
                 for n, f in self._feeds.items()
             ]
-        if "toggles" in offered and any(a.active is not None and a.active_dto(()) is None for a in self._actions.values()):
-            uses.append("toggles")
+        for capability in ("toggles", "conditions"):
+            if capability in offered and any(a.needs() == capability for a in self._actions.values()):
+                uses.append(capability)
+        if "setup" in offered:
+            for dto, spec in zip(manifest["settings"], self._settings_spec.values()):
+                if spec["internal"]:
+                    dto["internal"] = True
+                if spec["help"]:
+                    dto["help"] = spec["help"]
+            if self.guide:
+                manifest["guide"] = self.guide
+            if self.guide or any("internal" in dto or "help" in dto for dto in manifest["settings"]):
+                uses.append("setup")
         manifest["uses"] = uses
         return manifest
 

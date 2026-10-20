@@ -9,7 +9,7 @@
     "build": "vite build",
     "tauri": "tauri",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test test/status.test.ts test/plugins.test.ts test/countdown.test.ts test/home.test.ts"
+    "test": "node --test test/status.test.ts test/plugins.test.ts test/countdown.test.ts test/home.test.ts test/agents.test.ts"
   },
   "dependencies": {
     "@flexdeck/tokens": "workspace:*",

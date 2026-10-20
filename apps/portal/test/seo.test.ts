@@ -10,6 +10,7 @@ import {
   headTags,
   pageTitle,
   publicPages,
+  llmsTxt,
   robots,
   sitemap,
   summarize,
@@ -76,4 +77,15 @@ test("canonical URLs, sitemap and robots point at the public origin", () => {
       [2, "https://example.com/docs/plugins"],
     ],
   );
+});
+
+test("llms.txt names the site, summarizes it and links every public page", () => {
+  const pages = publicPages(docs);
+  const text = llmsTxt("https://example.com", pages);
+  assert.ok(text.startsWith("# flexdeck\n\n> "));
+  assert.match(text, /## Docs\n\n- \[[^\]]+\]\(https:\/\/example.com\/docs\//);
+  assert.match(text, /- \[Download\]\(https:\/\/example.com\/download\): /);
+  assert.match(text, /## Optional\n\n- \[Changelog\]\(https:\/\/example.com\/changelog\): /);
+  for (const page of pages.filter((page) => page.path !== "/")) assert.ok(text.includes(`(${canonicalUrl("https://example.com", page.path)})`), page.path);
+  assert.ok(!text.includes(" · flexdeck"));
 });

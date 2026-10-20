@@ -15,6 +15,7 @@ export { Switch } from "./components/Switch/Switch.component.tsx";
 export { Sheet } from "./components/Sheet/Sheet.component.tsx";
 export { Popover } from "./components/Popover/Popover.component.tsx";
 export type { PopoverProps } from "./components/Popover/Popover.component.tsx";
+export { InfoTip } from "./components/InfoTip/InfoTip.component.tsx";
 export { AngleDial, ColorArea, HueStrip } from "./components/ColorArea/ColorArea.component.tsx";
 export type { DragChange } from "./components/ColorArea/ColorArea.component.tsx";
 export { HoldToConfirm } from "./components/HoldToConfirm/HoldToConfirm.component.tsx";

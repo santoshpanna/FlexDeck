@@ -723,13 +723,19 @@ mod tests {
         // answers 415 and the write would look like a contract bug.
         let agent = agent();
         let token = remote_browser(&agent);
+        let unread = DEFAULT_CONFIG.replacen("\"rev\": 1", "\"rev\": 0", 1);
         let response = forward_with(
             &agent,
-            request(1, "PUT", "/api/config", DEFAULT_CONFIG, &token),
+            request(1, "PUT", "/api/config", &unread, &token),
         )
         .await;
 
         assert_eq!(response.status, 200, "body was: {}", response.body);
+        assert_eq!(agent.rev().expect("rev"), Some(1));
+
+        let stale = DEFAULT_CONFIG.replacen("\"rev\": 1", "\"rev\": 7", 1);
+        let response = forward_with(&agent, request(2, "PUT", "/api/config", &stale, &token)).await;
+        assert_eq!(response.status, 409, "body was: {}", response.body);
         assert_eq!(agent.rev().expect("rev"), Some(1));
     }
 

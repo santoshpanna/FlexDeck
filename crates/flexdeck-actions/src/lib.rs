@@ -153,17 +153,24 @@ pub struct ActiveSpec {
     pub equals: Option<&'static str>,
     /// Lit while the variable holds this value; `"true"` when neither is set.
     pub is: Option<&'static str>,
+    /// Lit while this expression holds, in place of the others.
+    pub when: Option<&'static str>,
 }
 
 impl ActiveSpec {
     /// Lit while a true/false `variable` is true.
     pub const fn while_true(variable: &'static str) -> Self {
-        Self { variable, equals: None, is: None }
+        Self { variable, equals: None, is: None, when: None }
     }
 
     /// Lit while `variable` holds what the `argument` was set to.
     pub const fn equals(variable: &'static str, argument: &'static str) -> Self {
-        Self { variable, equals: Some(argument), is: None }
+        Self { variable, equals: Some(argument), is: None, when: None }
+    }
+
+    /// Lit while the expression `when` holds.
+    pub const fn when(when: &'static str) -> Self {
+        Self { variable: "", equals: None, is: None, when: Some(when) }
     }
 }
 

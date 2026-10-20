@@ -25,6 +25,10 @@ export const Capability = {
   feeds: "feeds",
   /** `active` with a fixed value (`is`) or `{{argument}}` placeholders in its variable. */
   toggles: "toggles",
+  /** A setting's `internal` and `help`, and the manifest's `guide`. */
+  setup: "setup",
+  /** `active` as a `when` expression over any live values. */
+  conditions: "conditions",
 } as const;
 export type Capability = (typeof Capability)[keyof typeof Capability];
 
@@ -57,13 +61,18 @@ export interface ActionDto {
 /**
  * ABI 4: when a key running an action shows as active — while `variable`
  * holds the `equals` argument's value or, with the `toggles` capability, the
- * value `is` (`"true"` when neither is given).
+ * value `is` (`"true"` when neither is given). With the `conditions`
+ * capability, while the expression `when` holds, and `variable` is left out.
  */
 export interface ActiveDto {
-  variable: string;
+  variable?: string;
   equals?: string;
   is?: string;
+  when?: string;
 }
+
+/** The longest `when` an agent reads. */
+export const MAX_CONDITION_LEN = 2000;
 
 /** ABI 3: which argument a slider writes, its range, and the variable it follows. */
 export interface SliderDto {
@@ -83,6 +92,10 @@ export interface SettingDto {
   choices: string[];
   defaultValue: string | null;
   secret: boolean;
+  /** ABI 4, `setup`: kept by the plugin, not shown in the form, cleared by signing out. */
+  internal?: boolean;
+  /** ABI 4, `setup`: more than the description says, shown on request. */
+  help?: string;
 }
 
 export interface VariableDto {
@@ -117,6 +130,8 @@ export interface ManifestDto {
   presets?: PresetDto[];
   /** ABI 4: values per key. */
   feeds?: FeedDto[];
+  /** ABI 4, `setup`: an http(s) page explaining how to set it up. */
+  guide?: string;
 }
 
 /** ABI 4: a ready-made key; `widget` is a widget in the configuration's JSON, without id or place. */

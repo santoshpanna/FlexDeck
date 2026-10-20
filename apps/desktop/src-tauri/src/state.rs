@@ -28,6 +28,8 @@ pub struct ShellState {
     /// out loud, so it is.
     pub server_error: Arc<Mutex<Option<String>>>,
 
+    pub loopback_error: Arc<Mutex<Option<String>>>,
+
     /// Asks the listener to try its port again now rather than on its timer.
     ///
     /// Pulled when the window comes forward: someone has most likely just closed
@@ -46,6 +48,7 @@ impl ShellState {
             agent: parts.agent,
             settings: parts.settings,
             bind: parts.bind,
+            loopback_error: parts.loopback_error,
             web_access,
             server_error,
             retry,

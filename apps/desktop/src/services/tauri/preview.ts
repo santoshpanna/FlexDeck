@@ -10,6 +10,7 @@
  * that is away; `?approval` queues a request from a remote browser.
  */
 import type {
+  AgentToken,
   CatalogEntry,
   DeviceRow,
   InstallOutcome,
@@ -106,6 +107,7 @@ export function previewShell(): Shell {
     port: 23539,
     warnings: [],
     server: { error: null },
+    mcp: { url: "http://127.0.0.1:23540/mcp", error: null },
     tunnel: { enabled: webOn, running: webOn, refused: null, lastError: null, portal: "wss://deck.example.net/tunnel" },
     devices,
     plugins: {
@@ -184,8 +186,16 @@ export function previewShell(): Shell {
     openLink: async (url) => void window.open(url, "_blank", "noopener"),
     revokeAllDevices: async () => {
       await wait();
-      devices = [];
+      devices = devices.filter((device) => device.kind === "agent");
       emit();
+    },
+    createAgentToken: async (name): Promise<AgentToken> => {
+      await wait();
+      const deviceId = `a${Date.now()}`;
+      const label = name.trim() || "Coding agent";
+      devices = [...devices, { id: deviceId, name: label, created_at: now(), online: false, kind: "agent" }];
+      emit();
+      return { token: `preview-${deviceId}`, deviceId, name: label, url: "http://127.0.0.1:23540/mcp" };
     },
     revokeDevice: async (deviceId) => {
       await wait();
@@ -226,6 +236,7 @@ export function previewShell(): Shell {
     reloadPlugin: async () => wait(),
     linkPlugin: async () => wait(),
     savePluginSettings: async () => wait(),
+    signOutPlugin: async () => wait(),
     pluginLog: async (id) => (await wait(), [`[${id}] started`, `[${id}] connected`, `[${id}] ready`]),
     onState: async (handler) => {
       listeners.add(handler);

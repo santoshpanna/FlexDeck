@@ -9,11 +9,13 @@ import {
   entryAction,
   filterCatalog,
   filterCounts,
+  filterIconPacks,
+  iconPackCounts,
   permissionLabel,
   pluginState,
   relativeDate,
 } from "../src/modules/config/lib/plugins.lib.ts";
-import type { CatalogEntry, InstalledPlugin } from "../src/services/api/api.ts";
+import type { CatalogEntry, InstalledPlugin, RepoKind, RepositoryIconPack } from "../src/services/api/api.ts";
 
 function installed(overrides: Partial<InstalledPlugin> = {}): InstalledPlugin {
   return {
@@ -62,6 +64,25 @@ test("the marketplace filters by search and by repository kind", () => {
   assert.deepEqual(filterCatalog(all, "", "official").map((e) => e.id), ["obs"]);
   assert.deepEqual(filterCatalog(all, "", "updates").map((e) => e.id), ["mine"]);
   assert.equal(filterCounts(all).custom, 1);
+});
+
+test("icon packs filter by search and repository kind, and never show under updates", () => {
+  const pack = (id: string, kind: RepoKind, description?: string): RepositoryIconPack => ({
+    id,
+    name: id,
+    version: "1.0.0",
+    description,
+    author: "flexdeck",
+    count: 3,
+    installed: false,
+    repo: { url: kind, name: kind, kind },
+  });
+  const all = [pack("essentials", "official", "Everyday glyphs"), pack("neon", "custom")];
+  assert.deepEqual(filterIconPacks(all, "glyphs", "all").map((p) => p.id), ["essentials"]);
+  assert.deepEqual(filterIconPacks(all, "", "custom").map((p) => p.id), ["neon"]);
+  assert.deepEqual(filterIconPacks(all, "", "updates"), []);
+  const counts = iconPackCounts(all);
+  assert.deepEqual([counts.all, counts.official, counts.custom, counts.updates], [2, 1, 1, 0]);
 });
 
 test("a dropped file is checked before it is read or sent", () => {

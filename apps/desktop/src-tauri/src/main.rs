@@ -81,6 +81,7 @@ fn main() {
             commands::set_portal,
             commands::revoke_device,
             commands::revoke_all_devices,
+            commands::create_agent_token,
             commands::open_link,
             startup::window_prefs,
             startup::set_window_prefs,
@@ -98,6 +99,7 @@ fn main() {
             plugins::plugin_reload,
             plugins::plugin_link,
             plugins::plugin_settings,
+            plugins::plugin_sign_out,
             plugins::plugin_log,
         ])
         .setup(move |app| {

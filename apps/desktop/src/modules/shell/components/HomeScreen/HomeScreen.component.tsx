@@ -12,6 +12,7 @@ const KIND: Record<DeviceKind, string> = {
   tablet: "Tablet",
   "browser-local": "Browser",
   "browser-remote": "Browser",
+  agent: "AI agent",
 };
 
 /**
@@ -100,8 +101,8 @@ export function HomeScreen({ p, go }: { p: ShellViewProps; go: (tab: Tab) => voi
                   className="flex items-center gap-3 rounded-xl border border-line bg-plate px-3 py-2.5"
                 >
                   <Led
-                    state={device.kind === "tablet" ? (device.online ? "ok" : "off") : "off"}
-                    label={device.kind === "tablet" ? (device.online ? "Connected" : "Not connected") : undefined}
+                    state={device.online ? "ok" : "off"}
+                    label={device.online ? "Connected" : "Not connected"}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-2">

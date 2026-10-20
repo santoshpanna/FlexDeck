@@ -28,7 +28,7 @@ export interface AutomationsValue {
   ensure: () => Promise<void>;
   /// Replace the entire document. The agent stamps its own `rev`; the client
   /// never writes the document's revision number itself.
-  put: (next: AutomationDocument) => Promise<void>;
+  put: (next: AutomationDocument) => Promise<number>;
   /// Dry-run one automation. The trace comes back as the same wire shape the
   /// editor renders, so no translation is needed in the UI.
   dryRun: (automationId: string) => Promise<Run>;
@@ -77,12 +77,13 @@ export function useAutomations(desktopId: string | null): AutomationsValue {
       const shown = store.snapshot<AutomationDocument | null>(id);
       if (shown.busy) {
         await store.reload(id, load).catch(() => undefined);
-        return;
+        return answer.rev;
       }
-      if (shown.value === undefined || shown.error !== null) return;
+      if (shown.value === undefined || shown.error !== null) return answer.rev;
       store.update<AutomationDocument | null>(id, (previous) =>
         previous ? { ...previous, rev: answer.rev } : { ...EMPTY, rev: answer.rev },
       );
+      return answer.rev;
     },
     [api, store, desktopId, load],
   );

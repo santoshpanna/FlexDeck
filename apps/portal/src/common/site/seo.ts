@@ -24,6 +24,7 @@ const DOC_DESCRIPTIONS: Record<string, string> = {
     "Set up flexdeck in about five minutes: install the Windows app, pair your Android tablet with a six-digit code, and put your first actions on keys.",
   plugins:
     "How flexdeck plugins add actions, live variables and events. Install OBS Studio, Spotify, Discord and more from reviewed repositories, or write your own.",
+  mcp: "Let Claude Code, Cursor or VS Code edit your flexdeck keys, pages and automations over MCP, with a revocable token that only works on this computer.",
   architecture:
     "How flexdeck works: the Windows desktop agent, the Android client, the web editor, and the contract that connects them over your local network.",
   security:
@@ -166,4 +167,21 @@ export function sitemap(origin: string, paths: readonly string[], lastModified?:
 
 export function robots(origin: string): string {
   return `User-agent: *\nAllow: /\nDisallow: /config\nDisallow: /api\n\nSitemap: ${origin}/sitemap.xml\n`;
+}
+
+export function llmsTxt(origin: string, pages: readonly PageMeta[]): string {
+  const home = pages.find((page) => page.path === "/");
+  const link = (page: PageMeta) => `- [${page.title.split(" · ")[0]}](${canonicalUrl(origin, page.path)}): ${page.description}`;
+  const section = (heading: string, list: readonly PageMeta[]) => (list.length ? [`## ${heading}`, "", ...list.map(link), ""] : []);
+  const docs = pages.filter((page) => page.path.startsWith("/docs/"));
+  const optional = pages.filter((page) => page.path === "/changelog");
+  const rest = pages.filter((page) => page !== home && !docs.includes(page) && !optional.includes(page));
+  return [
+    `# ${SITE_NAME}`,
+    "",
+    ...(home ? [`> ${home.description}`, ""] : []),
+    ...section("Docs", docs),
+    ...section("Pages", rest),
+    ...section("Optional", optional),
+  ].join("\n");
 }

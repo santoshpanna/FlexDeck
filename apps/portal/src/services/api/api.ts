@@ -38,7 +38,7 @@ export interface Device {
   name: string;
   created_at: number;
   /** Absent from desktops older than the type column. */
-  kind?: "tablet" | "browser-local" | "browser-remote";
+  kind?: "tablet" | "browser-local" | "browser-remote" | "agent";
   /** This browser's own entry. Absent from older desktops. */
   current?: boolean;
 }
@@ -72,14 +72,17 @@ export interface WireAction {
   args?: Record<string, string>;
 }
 
-/** The configuration schema this portal writes. 3 adds sliders and holds; 4 faces; 5 gesture states and value rules. */
-export const CONFIG_SCHEMA = 5;
+/** The configuration schema this portal writes. 3 adds sliders and holds; 4 faces; 5 gesture states and value rules; 6 conditions. */
+export const CONFIG_SCHEMA = 6;
 
 /** The schema faces need; a deck is raised only as far as what it holds needs. */
 export const FACES_SCHEMA = 4;
 
 /** The schema gesture states, value rules and a hidden dot need. */
 export const GESTURE_STATES_SCHEMA = 5;
+
+/** The schema a case or rule with a `when` condition needs. */
+export const CONDITION_STATES_SCHEMA = 6;
 
 /** How a person touched a widget. Each has at most one flow on a widget. */
 export type Gesture =
@@ -150,6 +153,8 @@ export interface WireCase {
   value?: string;
   state?: string;
   op?: CaseOp;
+  /** An expression over live values that decides the case in place of `op` and `value`. Schema 6. */
+  when?: string;
 }
 
 /** A widget's looks, and the one rule that picks which shows. */
@@ -174,6 +179,8 @@ export interface WireRule {
   op?: CaseOp;
   value?: string;
   state?: string;
+  /** An expression over live values; `variable`, `op` and `value` are then ignored. Schema 6. */
+  when?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -336,10 +343,11 @@ export interface RepositoryIconPack {
   id: string;
   name: string;
   version: string;
+  description?: string;
   author: string;
   count: number;
   installed: boolean;
-  repo: { url: string; name: string; kind: string };
+  repo: { url: string; name: string; kind: RepoKind };
 }
 
 /** Read a file the person chose as base64, for an upload. */
@@ -509,7 +517,7 @@ export interface ActionDefinition {
    * the value `is` (`"true"` when neither is set). `variable` may hold
    * `{{argument}}` placeholders.
    */
-  active?: { variable: string; equals?: string; is?: string };
+  active?: { variable?: string; equals?: string; is?: string; when?: string };
 }
 
 /**
@@ -558,6 +566,8 @@ export interface PluginListing {
     arguments?: { name: string; description?: string; example?: string }[];
     fields?: { name: string; kind: string; description?: string }[];
   }[];
+  /** Where its setup is explained. */
+  guide?: string | null;
 }
 
 /** A live value a plugin owns, for binding a widget or a trigger to it. */
@@ -593,6 +603,9 @@ export interface PluginSetting {
   choices: string[];
   defaultValue: string | null;
   secret: boolean;
+  /** Kept by the plugin (a sign-in): not in the form, cleared by signing out. */
+  internal?: boolean;
+  help?: string | null;
   value: string | null;
   isSet: boolean;
 }
@@ -758,6 +771,7 @@ export class ApiError extends Error {
 
 const CLOUD_TIMEOUT = 10_000;
 const RELAY_TIMEOUT = 35_000;
+const LOCAL_CONNECT_TIMEOUT = 30_000;
 const WRITE_TIMEOUT = 125_000;
 const DESKTOP_SLOW = "the desktop took too long to answer; it may still finish";
 const LOCAL_GONE = "the desktop app on this computer is not running";
@@ -938,6 +952,7 @@ export class Api {
   /** Ask the desktop app on this computer to let this page in. */
   async localConnect(name: string): Promise<PairResult> {
     const result = await this.#agent.post<string>("/api/local/connect", {
+      timeout: LOCAL_CONNECT_TIMEOUT,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name, clientId: browserId() }),
     });
@@ -1238,6 +1253,11 @@ export class Api {
     return this.relay(desktopId, "PUT", "/api/plugins/settings", { id, values });
   }
 
+  /** Forget what the plugin keeps for itself: its sign-in. */
+  signOutPlugin(desktopId: string, id: string): Promise<unknown> {
+    return this.relay(desktopId, "POST", "/api/plugins/sign-out", { id });
+  }
+
   pluginLog(desktopId: string, id: string): Promise<{ lines: string[] }> {
     return this.relay(desktopId, "POST", "/api/plugins/log", { id });
   }
@@ -1377,7 +1397,8 @@ export class Api {
   }
 
   /// Replace the whole configuration. The agent records a revision, which is
-  /// what makes undo work without the portal keeping a stack of its own.
+  /// what makes undo work without the portal keeping a stack of its own. The
+  /// body's `rev` is the revision it was read at: a 409 means it has moved on.
   putConfig(desktopId: string, config: WireConfig): Promise<{ rev: number }> {
     return this.relay(desktopId, "PUT", "/api/config", config);
   }
@@ -1420,9 +1441,9 @@ export class Api {
   }
 
   /**
-   * Replace the automations document. The agent stamps its own `rev` rather
-   * than trusting the client's, so the body's `rev` is informational only —
-   * the response carries the server's number back.
+   * Replace the automations document. The body's `rev` is the revision it
+   * was read at; the agent refuses with a 409 if the document has moved on
+   * since, and otherwise stamps and returns its own next number.
    */
   putAutomations(
     desktopId: string,

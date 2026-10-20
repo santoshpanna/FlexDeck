@@ -86,6 +86,10 @@ pub enum DeviceKind {
     /// A browser elsewhere, paired with a code and reaching in through the cloud.
     #[serde(rename = "browser-remote")]
     BrowserRemote,
+    /// A coding agent on this computer, reaching the MCP endpoint through the
+    /// loopback listener.
+    #[serde(rename = "agent")]
+    Agent,
 }
 
 impl DeviceKind {
@@ -94,6 +98,7 @@ impl DeviceKind {
             Self::Tablet => "tablet",
             Self::BrowserLocal => "browser-local",
             Self::BrowserRemote => "browser-remote",
+            Self::Agent => "agent",
         }
     }
 
@@ -102,6 +107,7 @@ impl DeviceKind {
         match text {
             "browser-local" => Self::BrowserLocal,
             "browser-remote" => Self::BrowserRemote,
+            "agent" => Self::Agent,
             _ => Self::Tablet,
         }
     }
@@ -316,10 +322,9 @@ impl ConfigStore {
     /// undone revision is still reachable by [`Self::redo_document`].
     pub fn undo_document(&self, doc: &Document) -> StoreResult<(u64, String)> {
         let head = self.head_rev_for(doc)?.ok_or(StoreError::NoConfiguration)?;
-        let previous = head - 1;
-        if previous < 1 {
-            return Err(StoreError::NothingToUndo);
-        }
+        let previous = self
+            .neighbour_rev_for(doc, head, Step::Back)?
+            .ok_or(StoreError::NothingToUndo)?;
         let json = self
             .snapshot_at_document(doc, previous as u64)?
             .ok_or(StoreError::NothingToUndo)?;
@@ -330,7 +335,9 @@ impl ConfigStore {
     /// Step `doc`'s head pointer forward one revision, if a redo history exists.
     pub fn redo_document(&self, doc: &Document) -> StoreResult<(u64, String)> {
         let head = self.head_rev_for(doc)?.ok_or(StoreError::NoConfiguration)?;
-        let next = head + 1;
+        let Some(next) = self.neighbour_rev_for(doc, head, Step::Forward)? else {
+            return Err(StoreError::NothingToRedo);
+        };
         let Some(json) = self.snapshot_at_document(doc, next as u64)? else {
             return Err(StoreError::NothingToRedo);
         };
@@ -339,14 +346,31 @@ impl ConfigStore {
     }
 
     pub fn can_undo_document(&self, doc: &Document) -> StoreResult<bool> {
-        Ok(matches!(self.head_rev_for(doc)?, Some(rev) if rev > 1))
+        let Some(head) = self.head_rev_for(doc)? else {
+            return Ok(false);
+        };
+        Ok(self.neighbour_rev_for(doc, head, Step::Back)?.is_some())
     }
 
     pub fn can_redo_document(&self, doc: &Document) -> StoreResult<bool> {
         let Some(head) = self.head_rev_for(doc)? else {
             return Ok(false);
         };
-        Ok(self.snapshot_at_document(doc, (head + 1) as u64)?.is_some())
+        Ok(self.neighbour_rev_for(doc, head, Step::Forward)?.is_some())
+    }
+
+    pub fn undo_target_document(&self, doc: &Document) -> StoreResult<Option<u64>> {
+        let Some(head) = self.head_rev_for(doc)? else {
+            return Ok(None);
+        };
+        Ok(self.neighbour_rev_for(doc, head, Step::Back)?.map(|rev| rev as u64))
+    }
+
+    pub fn redo_target_document(&self, doc: &Document) -> StoreResult<Option<u64>> {
+        let Some(head) = self.head_rev_for(doc)? else {
+            return Ok(None);
+        };
+        Ok(self.neighbour_rev_for(doc, head, Step::Forward)?.map(|rev| rev as u64))
     }
 
     /// An RFC 6902 JSON-Patch that turns `from` into `to` for `doc`.
@@ -556,8 +580,8 @@ impl ConfigStore {
     /// locked out by its own request). Returns how many were revoked.
     pub fn revoke_all_devices(&self, keep: Option<&str>) -> StoreResult<usize> {
         let changed = self.conn.execute(
-            "UPDATE device SET revoked = 1 WHERE revoked = 0 AND id IS NOT ?1",
-            params![keep],
+            "UPDATE device SET revoked = 1 WHERE revoked = 0 AND id IS NOT ?1 AND kind IS NOT ?2",
+            params![keep, DeviceKind::Agent.as_str()],
         )?;
         Ok(changed)
     }
@@ -598,6 +622,17 @@ impl ConfigStore {
         Ok(highest)
     }
 
+    fn neighbour_rev_for(&self, doc: &Document, head: i64, step: Step) -> StoreResult<Option<i64>> {
+        let sql = match step {
+            Step::Back => "SELECT MAX(rev) FROM revision WHERE name = ?1 AND rev < ?2",
+            Step::Forward => "SELECT MIN(rev) FROM revision WHERE name = ?1 AND rev > ?2",
+        };
+        let rev = self
+            .conn
+            .query_row(sql, params![doc.name, head], |row| row.get::<_, Option<i64>>(0))?;
+        Ok(rev)
+    }
+
     fn set_head_for(&self, doc: &Document, rev: i64) -> StoreResult<()> {
         self.conn.execute(
             "INSERT INTO meta (key, value) VALUES (?1, ?2)
@@ -606,6 +641,12 @@ impl ConfigStore {
         )?;
         Ok(())
     }
+}
+
+#[derive(Clone, Copy)]
+enum Step {
+    Back,
+    Forward,
 }
 
 fn now_secs() -> i64 {
@@ -754,6 +795,34 @@ mod tests {
         assert_eq!(store.seed_if_empty("{\"seed\":true}").unwrap(), Some(1));
         assert_eq!(store.seed_if_empty("{\"seed\":false}").unwrap(), None);
         assert_eq!(store.snapshot().unwrap().unwrap().1, "{\"seed\":true}");
+    }
+
+    #[test]
+    fn undo_and_redo_step_over_the_numbers_an_abandoned_branch_used() {
+        let store = store();
+        store.commit("{\"step\":1}").unwrap();
+        store.commit("{\"step\":2}").unwrap();
+        store.commit("{\"step\":3}").unwrap();
+        store.undo().unwrap();
+        assert_eq!(store.commit("{\"step\":4}").unwrap(), 4);
+
+        assert!(store.can_undo().unwrap());
+        assert_eq!(store.undo_target_document(&CONFIG).unwrap(), Some(2));
+        assert_eq!(store.undo().unwrap(), (2, "{\"step\":2}".to_string()));
+        assert_eq!(store.undo().unwrap(), (1, "{\"step\":1}".to_string()));
+        assert!(!store.can_undo().unwrap());
+        assert_eq!(store.redo().unwrap(), (2, "{\"step\":2}".to_string()));
+        assert!(store.can_redo().unwrap());
+        assert_eq!(store.redo_target_document(&CONFIG).unwrap(), Some(4));
+        assert_eq!(store.redo().unwrap(), (4, "{\"step\":4}".to_string()));
+        assert!(!store.can_redo().unwrap());
+    }
+
+    #[test]
+    fn an_agent_row_reads_back_as_an_agent() {
+        let store = store();
+        store.add_device_of_kind("a1", "Claude", "h", DeviceKind::Agent).unwrap();
+        assert_eq!(store.authenticate("h").unwrap().unwrap().kind, DeviceKind::Agent);
     }
 
     #[test]
@@ -989,6 +1058,16 @@ mod tests {
         assert_eq!(listed, ["b"]);
         assert_eq!(store.revoke_all_devices(None).unwrap(), 1);
         assert!(store.devices().unwrap().is_empty());
+    }
+
+    #[test]
+    fn revoking_every_device_spares_coding_agents() {
+        let store = ConfigStore::open_in_memory().unwrap();
+        store.add_device_of_kind("t", "Tablet", "hash-t", DeviceKind::Tablet).unwrap();
+        store.add_device_of_kind("c", "Claude", "hash-c", DeviceKind::Agent).unwrap();
+        assert_eq!(store.revoke_all_devices(None).unwrap(), 1);
+        let listed: Vec<_> = store.devices().unwrap().into_iter().map(|d| d.id).collect();
+        assert_eq!(listed, ["c"]);
     }
 
     #[test]

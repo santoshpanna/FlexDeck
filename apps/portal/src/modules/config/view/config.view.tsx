@@ -8,6 +8,7 @@ import { HoldToConfirm, Key, Label, Led, Mark, Notice, NoticeSlot, Plate, ease, 
 import { AsciiScene, render, rings, scan } from "@flexdeck/ui/ascii";
 
 import { Tabs } from "../../../common/components/Tabs/Tabs.component.tsx";
+import { SiteFooter } from "../../../common/components/SiteFooter/SiteFooter.component.tsx";
 import { ThemeToggle } from "../../../common/components/ThemeToggle/ThemeToggle.component.tsx";
 import type {
   ActionDefinition,
@@ -37,7 +38,7 @@ import { SourcesPanel } from "../components/SourcesPanel/SourcesPanel.component.
 import { LocaleCard } from "../components/LocaleCard/LocaleCard.component.tsx";
 import { setPageBackground, setScreenCare } from "../lib/face.edit.lib.ts";
 import { ScreenCareCard } from "../components/ScreenCareCard/ScreenCareCard.component.tsx";
-import { ShareCard } from "../components/ShareCard/ShareCard.component.tsx";
+import { DeckFileCard } from "../components/DeckFileCard/DeckFileCard.component.tsx";
 import { GridSizePanel } from "../components/GridSizePanel/GridSizePanel.component.tsx";
 import { PageDots } from "../components/PageDots/PageDots.component.tsx";
 import { PageKeys, PageRail } from "../components/PageRail/PageRail.component.tsx";
@@ -74,6 +75,7 @@ export interface ConfigViewProps {
 
   // Failure, at the two levels that can fail independently.
   desktopsError: string | null;
+  desktopsWaiting: boolean;
   onRetryDesktops: () => void;
   error: string | null;
   dismissError: () => void;
@@ -138,10 +140,11 @@ export interface ConfigViewProps {
   setPreviewState: (state: WidgetState) => void;
   setIcon: (icon: string | null) => void;
   /** Bind the selected widget to live values. */
-  setBinding: (binding: { stateVariable: string; labelTemplate: string }) => void;
+  setBinding: (binding: { stateVariable: string; labelTemplate: string; known?: readonly string[] }) => void;
   /** Apply a pure edit to the selected widget (its flows, its slider, its hold). */
   editSelected: (transform: (config: WireConfig, widgetId: string) => WireConfig) => void;
   editPage: (transform: (config: WireConfig, pageId: string) => WireConfig) => void;
+  replaceDeck: (next: WireConfig) => void;
   /** Every live value a plugin owns, for binding widgets. */
   variables: VariableChoice[];
   duplicate: () => void;
@@ -217,6 +220,7 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
     selectDesktop = NEVER,
     pair = unsupportedPair,
     desktopsError = null,
+    desktopsWaiting = false,
     onRetryDesktops = NEVER,
     error = null,
     dismissError = NEVER,
@@ -263,6 +267,7 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
     setBinding = NEVER,
     editSelected = NEVER,
     editPage = NEVER,
+    replaceDeck = NEVER,
     variables = [],
     duplicate = NEVER,
     addAt = NEVER,
@@ -320,7 +325,7 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
   const rev = config?.rev ?? status?.rev ?? null;
 
   return (
-    <div className="min-h-screen bg-body bg-dots text-ink">
+    <div className="flex min-h-screen flex-col bg-body bg-dots text-ink">
       <header className="sticky top-0 z-30 border-b border-line/80 bg-body/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1680px] flex-wrap items-center gap-x-5 gap-y-3 px-5 py-3">
           <AppLink to={SITE_HREF} className="flex items-center gap-2.5 text-[15px] font-bold tracking-[0.3em] text-ink no-underline">
@@ -343,7 +348,7 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-[1680px] flex-col gap-4 px-5 py-6">
+      <main className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-4 px-5 py-6">
         <NoticeSlot>
           {desktopsError ? (
             <Notice key="desktops">
@@ -353,6 +358,7 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
               </button>
             </Notice>
           ) : null}
+          {desktopsWaiting ? <Notice key="waiting">Allow this browser in the FlexDeck window on this computer.</Notice> : null}
           {error ? <Notice key="error" onDismiss={dismissError}>{error}</Notice> : null}
           {confirming && !error ? (
             <Notice key="confirming">The desktop is still finishing that. Waiting for it to confirm…</Notice>
@@ -462,7 +468,6 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
                             </section>
                             <PageBackgroundEditor page={page} variables={variables} onChange={(background) => editPage((c, id) => setPageBackground(c, id, background))} />
                             <ScreenCareCard care={profile?.screen} onChange={(care) => editPage((c, id) => setScreenCare(c, id, care))} />
-                            <ShareCard page={page} onEdit={editPage} />
                             <section className="flex flex-col gap-3">
                               <div className="flex items-center justify-between">
                                 <Label>{portrait ? "Portrait grid" : "Landscape grid"}</Label>
@@ -561,6 +566,7 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
               {tab === "system" ? (
                 <div className="flex flex-col gap-6">
                   <LocaleCard desktopId={desktop.id} />
+                  <DeckFileCard config={config} profileId={profile?.id ?? null} catalogue={catalogue} onReplace={replaceDeck} />
                   <RawConfigCard config={config} />
                 </div>
               ) : null}
@@ -610,6 +616,7 @@ export function ConfigView(props: Partial<ConfigViewProps>) {
           />
         )}
       </main>
+      <SiteFooter />
     </div>
   );
 }

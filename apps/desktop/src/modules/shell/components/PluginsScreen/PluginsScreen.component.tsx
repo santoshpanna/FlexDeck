@@ -5,6 +5,7 @@ import {
   Field,
   Glyph,
   HoldToConfirm,
+  InfoTip,
   Input,
   Key,
   Label,
@@ -183,6 +184,11 @@ function InstalledRow({ plugin, p }: { plugin: InstalledPlugin; p: ShellViewProp
                       <Glyph name="sliders" size={14} /> Settings
                     </Key>
                   ) : null}
+                  {plugin.guide ? (
+                    <Key size="sm" onClick={() => p.onOpenLink(plugin.guide!)}>
+                      <Glyph name="book" size={14} /> Setup guide
+                    </Key>
+                  ) : null}
                   <Key
                     size="sm"
                     lit={open === "log"}
@@ -231,6 +237,7 @@ function InstalledRow({ plugin, p }: { plugin: InstalledPlugin; p: ShellViewProp
                             p.onSaveSettings(plugin.id, values);
                             setOpen(null);
                           }}
+                          onSignOut={() => p.onSignOut(plugin.id)}
                         />
                       ) : (
                         <pre className="m-0 max-h-48 overflow-auto rounded-lg border border-line bg-well p-2.5 font-mono text-[11px] leading-relaxed text-ink-2 shadow-well">
@@ -252,17 +259,22 @@ function InstalledRow({ plugin, p }: { plugin: InstalledPlugin; p: ShellViewProp
 /**
  * A form generated from what the plugin declared. A secret is never shown —
  * the agent does not send it back — so its box starts empty and saying nothing
- * keeps the stored one.
+ * keeps the stored one. What the plugin keeps for itself (a sign-in) is not a
+ * field at all: the agent keeps it across saves, and signing out clears it.
  */
 function SettingsForm({
-  settings,
+  settings: all,
   busy,
   onSave,
+  onSignOut,
 }: {
   settings: PluginSetting[];
   busy: boolean;
   onSave: (values: Record<string, string>) => void;
+  onSignOut: () => void;
 }) {
+  const settings = all.filter((setting) => !setting.internal);
+  const signedIn = all.some((setting) => setting.internal && setting.isSet);
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(settings.map((setting) => [setting.key, setting.secret ? "" : (setting.value ?? "")])),
   );
@@ -280,7 +292,20 @@ function SettingsForm({
       {settings.map((setting) => {
         const id = `setting-${setting.key}`;
         return (
-          <Field key={setting.key} label={setting.description || setting.key} htmlFor={id}>
+          <Field
+            key={setting.key}
+            label={
+              setting.help ? (
+                <span className="inline-flex items-center gap-1">
+                  {setting.description || setting.key}
+                  <InfoTip label={`About ${setting.description || setting.key}`}>{setting.help}</InfoTip>
+                </span>
+              ) : (
+                setting.description || setting.key
+              )
+            }
+            htmlFor={id}
+          >
             {setting.kind === "choice" ? (
               <Select
                 id={id}
@@ -316,9 +341,19 @@ function SettingsForm({
           </Field>
         );
       })}
-      <Key tone="signal" size="md" type="submit" disabled={busy}>
-        Save settings
-      </Key>
+      {signedIn ? (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-well px-3 py-2">
+          <span className="text-[13px] text-ink-2">Signed in</span>
+          <Key size="sm" type="button" disabled={busy} onClick={onSignOut}>
+            Sign out
+          </Key>
+        </div>
+      ) : null}
+      {settings.length > 0 ? (
+        <Key tone="signal" size="md" type="submit" disabled={busy}>
+          Save settings
+        </Key>
+      ) : null}
     </form>
   );
 }

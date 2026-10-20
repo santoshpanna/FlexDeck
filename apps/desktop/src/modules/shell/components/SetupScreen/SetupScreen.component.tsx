@@ -1,10 +1,11 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { ThemePreference } from "@flexdeck/tokens/theme.ts";
 import { Field, HoldToConfirm, Input, Key, Label, Led, Notice, Plate, Readout, Segmented, Switch, cn, item, list, spring } from "@flexdeck/ui";
 
 import { useTheme } from "../../hooks/useTheme.hook.ts";
+import { agentSnippets } from "../../lib/agents.lib.ts";
 import { kindLabel, relativeDate } from "../../lib/plugins.lib.ts";
 import { webAccessSummary } from "../../lib/status.lib.ts";
 import type { LogLevel, WindowPrefs } from "../../lib/types.ts";
@@ -19,6 +20,9 @@ export function SetupScreen({ p }: { p: ShellViewProps }) {
       </Section>
       <Section title={`Repositories · ${p.repositories.length}`}>
         <Repositories p={p} />
+      </Section>
+      <Section title="Coding agents">
+        <CodingAgents p={p} />
       </Section>
       <Section title="Startup">
         <Startup p={p} />
@@ -250,6 +254,116 @@ function Repositories({ p }: { p: ShellViewProps }) {
   );
 }
 
+function CodingAgents({ p }: { p: ShellViewProps }) {
+  const [name, setName] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  const create = () => {
+    p.onCreateAgentToken(name);
+    setName("");
+  };
+  const copy = (id: string, text: string) => {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(id);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(null), 1600);
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <p className="m-0 text-[12px] leading-relaxed text-muted">
+        Let an AI coding agent on this computer edit your deck over MCP. Tokens work only from this PC, and a program launch it adds asks you first.
+      </p>
+      {p.mcp.error ? <Notice tone="warn">{p.mcp.error}</Notice> : null}
+
+      <AnimatePresence mode="wait" initial={false}>
+        {p.agentToken ? (
+          <motion.div key="token" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={spring.panel}>
+            <Plate depth="raised" className="flex flex-col gap-2.5">
+              <div className="text-sm font-medium">{p.agentToken.name}</div>
+              <Plate depth="well" pad="sm" className="font-mono text-[11px] break-all text-ink-2">
+                {p.agentToken.token}
+              </Plate>
+              <p className="m-0 text-[12px] text-muted">Shown once. Don't commit it. Copy the setup for your tool:</p>
+              <div className="flex flex-wrap gap-2">
+                {agentSnippets(p.agentToken).map((snippet) => (
+                  <Key key={snippet.id} size="md" onClick={() => copy(snippet.id, snippet.text)}>
+                    {copied === snippet.id ? "Copied" : snippet.label}
+                  </Key>
+                ))}
+                <Key size="md" onClick={p.onDismissAgentToken}>
+                  Done
+                </Key>
+              </div>
+            </Plate>
+          </motion.div>
+        ) : (
+          <motion.form
+            key="create"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onSubmit={(event) => {
+              event.preventDefault();
+              create();
+            }}
+          >
+            <Field label="Token name" htmlFor="agent-name">
+              <div className="flex gap-2">
+                <Input
+                  id="agent-name"
+                  value={name}
+                  placeholder="Coding agent"
+                  spellCheck={false}
+                  autoComplete="off"
+                  disabled={p.busy || p.mcp.error !== null}
+                  onChange={(event) => setName(event.target.value)}
+                />
+                <Key size="md" type="submit" disabled={p.busy || p.mcp.error !== null}>
+                  Create token
+                </Key>
+              </div>
+            </Field>
+          </motion.form>
+        )}
+      </AnimatePresence>
+
+      {p.agentTokens.length > 0 ? (
+        <ul className="flex flex-col gap-2">
+          <AnimatePresence initial={false}>
+            {p.agentTokens.map((token) => (
+              <motion.li
+                key={token.id}
+                layout
+                variants={item}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="flex items-center gap-3 rounded-[14px] border border-line bg-plate p-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm">{token.name}</div>
+                  <Readout className="text-[10px] tracking-[0.06em] normal-case">created {relativeDate(token.created_at)}</Readout>
+                </div>
+                <HoldToConfirm size="sm" tone="danger" disabled={p.busy} onConfirm={() => p.onRevoke(token.id)}>
+                  Revoke
+                </HoldToConfirm>
+              </motion.li>
+            ))}
+          </AnimatePresence>
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 const STARTUP: readonly { key: Exclude<keyof WindowPrefs, "logLevel" | "logLevelOverridden">; title: string; detail: string }[] = [
   { key: "autostart", title: "Start with this computer", detail: "Open when you sign in, so decks can connect without you opening it." },
   { key: "startMinimized", title: "Start minimized", detail: "Open to the tray instead of showing this window." },
@@ -296,8 +410,8 @@ function Appearance() {
 }
 
 const LOG_LEVELS: readonly { value: LogLevel; label: string }[] = [
-  { value: "error", label: "Errors" },
-  { value: "warn", label: "Warnings" },
+  { value: "error", label: "Error" },
+  { value: "warn", label: "Warn" },
   { value: "info", label: "Info" },
   { value: "debug", label: "Debug" },
   { value: "trace", label: "Trace" },
@@ -311,6 +425,7 @@ function LogDetail({ p }: { p: ShellViewProps }) {
         value={p.windowPrefs?.logLevel ?? "info"}
         onChange={(logLevel) => p.onSetWindowPrefs({ logLevel })}
         options={LOG_LEVELS}
+        size="sm"
         className="self-start"
       />
       <p className="m-0 text-[12px] leading-relaxed text-muted">

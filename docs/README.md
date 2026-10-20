@@ -16,6 +16,7 @@
 | --- | --- |
 | **[Getting started](getting-started.md)** | Install, pair a tablet, build your first deck, troubleshoot |
 | **[Plugins](plugins.md)** | The marketplace, repositories, live values, automations, recipes |
+| **[Coding agents (MCP)](mcp.md)** | Let Claude Code, Cursor or VS Code edit your deck |
 
 ## Building on flexdeck
 

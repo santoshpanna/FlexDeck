@@ -121,6 +121,8 @@ fn manifest(asked: u32) -> abi::ManifestDto {
                 choices: vec![],
                 default_value: Some("Hello".into()),
                 secret: false,
+                internal: false,
+                help: None,
             },
             abi::SettingDto {
                 key: "token".into(),
@@ -129,6 +131,8 @@ fn manifest(asked: u32) -> abi::ManifestDto {
                 choices: vec![],
                 default_value: None,
                 secret: true,
+                internal: false,
+                help: None,
             },
         ],
         events: vec![abi::EventDto {
@@ -140,6 +144,7 @@ fn manifest(asked: u32) -> abi::ManifestDto {
         uses: Vec::new(),
         presets: Vec::new(),
         feeds: Vec::new(),
+        guide: None,
     }
 }
 

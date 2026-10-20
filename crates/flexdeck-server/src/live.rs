@@ -20,6 +20,7 @@
 //!
 //! Both are built from one [`Feed`], so the two cannot drift apart.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -35,6 +36,7 @@ use tokio::sync::broadcast::{self, error::RecvError};
 use crate::access::{Authority, Channel};
 use crate::agent::Agent;
 use crate::behavior::ViewerGuard;
+use crate::presence::PresenceGuard;
 
 /// How long one `watch` keeps the tunnel's live frames flowing. The cloud
 /// renews well inside it ([`RENEW_EVERY`] there), so a missed renewal or two
@@ -58,6 +60,7 @@ const MAX_CLIENT_MESSAGE_BYTES: usize = 16 * 1024;
 #[derive(Default)]
 pub struct RemoteWatch {
     lease: Arc<Mutex<Option<(Instant, ViewerGuard)>>>,
+    browsers: Arc<Mutex<HashMap<String, (Instant, PresenceGuard)>>>,
 }
 
 impl std::fmt::Debug for RemoteWatch {
@@ -86,6 +89,30 @@ impl RemoteWatch {
             handle.spawn(async move {
                 tokio::time::sleep(lease).await;
                 Self::expire(&held);
+            });
+        }
+    }
+
+    /// Count `device_id` as connected for one lease, extended by each renewal.
+    pub fn renew_browser(&self, agent: &Agent, device_id: &str) {
+        self.renew_browser_for(agent, device_id, LEASE);
+    }
+
+    fn renew_browser_for(&self, agent: &Agent, device_id: &str, lease: Duration) {
+        {
+            let mut browsers = self.browsers.lock().unwrap_or_else(PoisonError::into_inner);
+            let guard = match browsers.remove(device_id) {
+                Some((_, guard)) => guard,
+                None => agent.presence().connect(device_id),
+            };
+            browsers.insert(device_id.to_string(), (Instant::now() + lease, guard));
+        }
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            let browsers = Arc::clone(&self.browsers);
+            handle.spawn(async move {
+                tokio::time::sleep(lease).await;
+                let now = Instant::now();
+                browsers.lock().unwrap_or_else(PoisonError::into_inner).retain(|_, (until, _)| now < *until);
             });
         }
     }
@@ -263,6 +290,9 @@ pub async fn watch(
         return Err(crate::http::ApiError::forbidden("only a configurator watches the deck"));
     }
     agent.remote_watch().renew(&agent);
+    if let Authority::Browser(device) = &authority {
+        agent.remote_watch().renew_browser(&agent, &device.id);
+    }
     // The revision first, as on this computer, so the browser's first frame
     // always says where things stand — even on a deck with no live keys.
     let mut feed = Feed::new(&agent, true);
@@ -324,9 +354,14 @@ async fn connection(agent: Arc<Agent>, channel: Channel, mut socket: WebSocket) 
         Ok(Err(reason)) => return refuse(&mut socket, "bad_hello", &reason).await,
         Err(_) => return refuse(&mut socket, "bad_hello", "no hello arrived in time").await,
     };
-    if let Err(reason) = admit(&agent, &token, channel) {
-        return refuse(&mut socket, "unauthorised", &reason).await;
-    }
+    let authority = match admit(&agent, &token, channel) {
+        Ok(authority) => authority,
+        Err(reason) => return refuse(&mut socket, "unauthorised", &reason).await,
+    };
+    let _presence = match &authority {
+        Authority::Browser(device) => Some(agent.presence().connect(&device.id)),
+        _ => None,
+    };
 
     // Sources run while someone is looking, a browser as much as a tablet.
     let _viewer = agent.behavior().viewer();
@@ -482,6 +517,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_browser_is_online_while_its_socket_is_open() {
+        let agent = agent();
+        let (token, device) = agent.issue_credential("Laptop", DeviceKind::BrowserLocal).expect("issued");
+        assert!(!agent.presence().is_online(&device.id));
+        let mut socket = open(&serve(&agent, Some(Channel::Loopback)).await, &token).await;
+        next(&mut socket).await;
+        assert!(agent.presence().is_online(&device.id));
+
+        let mut changes = agent.presence().changed();
+        socket.close(None).await.expect("closes");
+        tokio::time::timeout(Duration::from_secs(5), changes.recv()).await.expect("goes offline in time").expect("announced");
+        assert!(!agent.presence().is_online(&device.id));
+    }
+
+    #[tokio::test]
     async fn a_configuration_change_and_a_new_device_are_announced() {
         let agent = agent();
         let (token, _) = agent.issue_credential("Laptop", DeviceKind::BrowserLocal).expect("issued");
@@ -552,6 +602,21 @@ mod tests {
         let status = response.status();
         let bytes = axum::body::to_bytes(response.into_body(), 1 << 20).await.expect("a body");
         (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    }
+
+    #[tokio::test]
+    async fn a_browser_watching_through_the_cloud_is_online_until_its_lease_runs_out() {
+        let agent = agent();
+        let (token, device) = agent.issue_credential("Phone", DeviceKind::BrowserRemote).expect("issued");
+        let (status, body) = watch_as(&agent, &token).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert!(agent.presence().is_online(&device.id));
+
+        let watch = RemoteWatch::default();
+        watch.renew_browser_for(&agent, "other", Duration::from_millis(50));
+        assert!(agent.presence().is_online("other"));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(!agent.presence().is_online("other"), "offline once nobody renews");
     }
 
     #[tokio::test]

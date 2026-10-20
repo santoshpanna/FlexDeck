@@ -76,7 +76,41 @@ pub mod capability {
     /// argument, and its variable may hold `{{argument}}` placeholders: a
     /// toggle lit while `discord.voice.mute` is true.
     pub const TOGGLES: &str = "toggles";
-    pub const ALL: &[&str] = &[SERIES, PRESETS, FEEDS, TOGGLES];
+    /// A setting may be `internal` (kept by the plugin, cleared by signing
+    /// out) or carry `help`, and the manifest may link a setup `guide`.
+    pub const SETUP: &str = "setup";
+    /// An action's `active` may be a `when` expression over any live values —
+    /// `obs.studio_mode and obs.preview_scene != obs.scene`. An
+    /// `{{argument}}` placeholder stands for the argument's value, as part of
+    /// a name or as a whole operand, never inside quotes.
+    pub const CONDITIONS: &str = "conditions";
+    pub const ALL: &[&str] = &[SERIES, PRESETS, FEEDS, TOGGLES, SETUP, CONDITIONS];
+}
+
+/// The longest `when` an action's `active` may hold, as the agent's
+/// expressions allow.
+pub const MAX_CONDITION_LEN: usize = 2000;
+
+/// Whether `when` has a `{{` inside quoted text, where a placeholder would
+/// not stand for a value.
+fn placeholder_in_quotes(when: &str) -> bool {
+    let mut quote = None;
+    let mut chars = when.chars().peekable();
+    while let Some(c) = chars.next() {
+        match quote {
+            Some('`') if c == '`' => quote = None,
+            Some('`') => {}
+            Some(_) if c == '\\' => {
+                chars.next();
+            }
+            Some(open) if c == open => quote = None,
+            Some(_) if c == '{' && chars.peek() == Some(&'{') => return true,
+            Some(_) => {}
+            None if matches!(c, '"' | '\'' | '`') => quote = Some(c),
+            None => {}
+        }
+    }
+    false
 }
 
 /// The most points a `series/set` may carry.
@@ -336,12 +370,18 @@ pub struct ActionDto {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ActiveDto {
     /// May hold `{{argument}}` placeholders under [`capability::TOGGLES`].
+    /// Empty with `when`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub variable: String,
     /// One of the action's own arguments.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub equals: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is: Option<String>,
+    /// Under [`capability::CONDITIONS`]: lit while this expression holds, in
+    /// place of `variable`, `equals` and `is`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when: Option<String>,
 }
 
 impl ActiveDto {
@@ -350,7 +390,8 @@ impl ActiveDto {
     /// [`capability::TOGGLES`], under which a light may also watch another
     /// plugin's variable — a light only reads.
     pub fn is_plain(&self, prefix: &str) -> bool {
-        self.equals.is_some()
+        self.when.is_none()
+            && self.equals.is_some()
             && self.is.is_none()
             && !self.variable.contains("{{")
             && self.variable.starts_with(prefix)
@@ -358,7 +399,9 @@ impl ActiveDto {
 
     /// The names inside the variable's `{{…}}` placeholders.
     pub fn placeholders(&self) -> Vec<&str> {
-        self.variable
+        self.when
+            .as_deref()
+            .unwrap_or(&self.variable)
             .split("{{")
             .skip(1)
             .filter_map(|rest| rest.split_once("}}").map(|(name, _)| name.trim()))
@@ -426,6 +469,13 @@ pub struct SettingDto {
     /// over the API.
     #[serde(default)]
     pub secret: bool,
+    /// Kept by the plugin itself (a sign-in), never shown in the form, and
+    /// cleared by signing out. ABI 4, `setup`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub internal: bool,
+    /// More than the description says, shown on request. ABI 4, `setup`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub help: Option<String>,
 }
 
 /// A live value the plugin owns.
@@ -488,6 +538,9 @@ pub struct ManifestDto {
     /// Values per key. ABI 4, `feeds`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub feeds: Vec<FeedDto>,
+    /// An `http(s)` page explaining how to set it up. ABI 4, `setup`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guide: Option<String>,
 }
 
 impl ManifestDto {
@@ -519,6 +572,16 @@ impl ManifestDto {
             if let Some(active) = &action.active {
                 if self.abi < 4 {
                     return Err(AbiError::Invalid(format!("{}.active needs plugin ABI 4", action.action)));
+                }
+                if let Some(when) = &active.when {
+                    self.validate_condition(action, active, when)?;
+                    continue;
+                }
+                if active.variable.trim().is_empty() {
+                    return Err(AbiError::Invalid(format!(
+                        "{}.active needs a variable or a `when`",
+                        action.action
+                    )));
                 }
                 let toggles = self.uses(capability::TOGGLES);
                 if !active.is_plain(&self.variable_prefix()) && !toggles && active.variable.starts_with(&self.variable_prefix()) {
@@ -569,6 +632,18 @@ impl ManifestDto {
         if !self.feeds.is_empty() && !self.uses(capability::FEEDS) {
             return Err(AbiError::Invalid("feeds need `uses: [\"feeds\"]`".into()));
         }
+        let setup = self.guide.is_some()
+            || self.settings.iter().any(|setting| setting.internal || setting.help.is_some());
+        if setup && !self.uses(capability::SETUP) {
+            return Err(AbiError::Invalid(
+                "guide and a setting's internal or help need `uses: [\"setup\"]`".into(),
+            ));
+        }
+        if let Some(guide) = &self.guide {
+            if !(guide.starts_with("https://") || guide.starts_with("http://")) {
+                return Err(AbiError::Invalid(format!("guide '{guide}' is not an http(s) address")));
+            }
+        }
         let mut presets = std::collections::BTreeSet::new();
         for preset in &self.presets {
             if !presets.insert(preset.id.as_str()) {
@@ -596,6 +671,35 @@ impl ManifestDto {
     /// The namespace every variable this plugin owns must live under.
     pub fn variable_prefix(&self) -> String {
         format!("{}.", self.id)
+    }
+
+    fn validate_condition(&self, action: &ActionDto, active: &ActiveDto, when: &str) -> Result<(), AbiError> {
+        let refuse = |why: &str| Err(AbiError::Invalid(format!("{}.active {why}", action.action)));
+        if !self.uses(capability::CONDITIONS) {
+            return refuse("with `when` needs `uses: [\"conditions\"]`");
+        }
+        if active.equals.is_some() || active.is.is_some() || !active.variable.is_empty() {
+            return refuse("takes `when` alone, without `variable`, `equals` or `is`");
+        }
+        if when.trim().is_empty() {
+            return refuse("has an empty `when`");
+        }
+        if when.len() > MAX_CONDITION_LEN {
+            return refuse(&format!("`when` is longer than {MAX_CONDITION_LEN} characters"));
+        }
+        if placeholder_in_quotes(when) {
+            return refuse("`when` has a placeholder inside quotes; put it outside, as a whole value");
+        }
+        for argument in active.placeholders() {
+            if !action.arguments.iter().any(|a| a.name == argument) {
+                return Err(AbiError::Unknown {
+                    what: "active argument",
+                    value: argument.to_string(),
+                    expected: &["one of the action's own arguments"],
+                });
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1222,6 +1326,8 @@ mod tests {
                 choices: vec![],
                 default_value: Some("4455".into()),
                 secret: false,
+                internal: false,
+                help: None,
             }],
             events: vec![EventDto {
                 name: "scene_changed".into(),
@@ -1232,6 +1338,7 @@ mod tests {
             uses: Vec::new(),
             presets: Vec::new(),
             feeds: Vec::new(),
+            guide: None,
         }
     }
 
@@ -1248,6 +1355,25 @@ mod tests {
         let text = serde_json::to_string(&sample_manifest()).expect("serialise");
         assert!(text.contains("\"defaultValue\""), "{text}");
         assert!(!text.contains("default_value"), "{text}");
+    }
+
+    #[test]
+    fn setup_fields_need_the_setup_capability_and_stay_off_the_wire_unset() {
+        let text = serde_json::to_string(&sample_manifest()).expect("serialise");
+        assert!(!text.contains("internal") && !text.contains("help") && !text.contains("guide"), "{text}");
+
+        let mut manifest = sample_manifest();
+        manifest.settings[0].internal = true;
+        assert!(manifest.validate().is_err(), "internal without setup");
+        manifest.uses.push(capability::SETUP.into());
+        manifest.validate().expect("internal with setup");
+
+        manifest.settings[0].help = Some("The port in obs-websocket's settings".into());
+        manifest.guide = Some("https://example.com/obs#setup".into());
+        manifest.validate().expect("help and guide with setup");
+
+        manifest.guide = Some("javascript:alert(1)".into());
+        assert!(manifest.validate().is_err(), "a guide is a web page");
     }
 
     #[test]
@@ -1304,7 +1430,51 @@ mod tests {
             variable: variable.into(),
             equals: equals.map(str::to_string),
             is: is.map(str::to_string),
+            when: None,
         }
+    }
+
+    fn condition(when: &str) -> ActiveDto {
+        ActiveDto { variable: String::new(), equals: None, is: None, when: Some(when.into()) }
+    }
+
+    #[test]
+    fn a_condition_active_needs_the_conditions_capability() {
+        let studio = condition("obs.studio_mode and obs.preview_scene != obs.scene");
+        assert!(active_manifest(studio.clone(), &[]).validate().is_err());
+        assert!(active_manifest(studio.clone(), &[capability::TOGGLES]).validate().is_err());
+        active_manifest(studio.clone(), &[capability::CONDITIONS]).validate().expect("with conditions");
+        let text = serde_json::to_string(&studio).expect("serialise");
+        assert_eq!(text, r#"{"when":"obs.studio_mode and obs.preview_scene != obs.scene"}"#);
+        let back: ActiveDto = serde_json::from_str(&text).expect("read back");
+        assert_eq!(back, studio);
+        assert!(!studio.is_plain("obs."));
+    }
+
+    #[test]
+    fn a_condition_active_is_refused_when_it_is_not_alone_or_misplaces_a_placeholder() {
+        let uses = &[capability::CONDITIONS];
+        active_manifest(condition("`obs.input.{{input}}.muted` or obs.scene == {{input}}"), uses)
+            .validate()
+            .expect("in a name and as a whole value");
+        let mut mixed = condition("obs.recording");
+        mixed.variable = "obs.recording".into();
+        assert!(active_manifest(mixed, uses).validate().is_err());
+        let mut with_is = condition("obs.recording");
+        with_is.is = Some("true".into());
+        assert!(active_manifest(with_is, uses).validate().is_err());
+        assert!(active_manifest(condition("obs.scene == \"{{input}}\""), uses).validate().is_err());
+        assert!(active_manifest(condition("obs.scene == 'a\\'{{input}}'"), uses).validate().is_err());
+        assert!(matches!(
+            active_manifest(condition("obs.scene == {{device}}"), uses).validate(),
+            Err(AbiError::Unknown { .. })
+        ));
+        assert!(active_manifest(condition(" "), uses).validate().is_err());
+        assert!(active_manifest(condition(&"a".repeat(MAX_CONDITION_LEN + 1)), uses).validate().is_err());
+        assert!(
+            active_manifest(active("", None, None), &[capability::TOGGLES]).validate().is_err(),
+            "a light without `when` still needs a variable"
+        );
     }
 
     #[test]

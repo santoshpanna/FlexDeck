@@ -16,7 +16,8 @@ import { suggestedActions } from "../../lib/presets.lib.ts";
 import { LooksEditor } from "../LooksEditor/LooksEditor.component.tsx";
 import { ZonesEditor } from "../ZonesEditor/ZonesEditor.component.tsx";
 import type { LoadChoices } from "../../hooks/useArgumentChoices/useArgumentChoices.hook.ts";
-import { relightActive, setHideDot, setWidgetColors, stateVariableOf } from "../../lib/editing.lib.ts";
+import { litWhileOf, relightActive, setHideDot, setWidgetColors } from "../../lib/editing.lib.ts";
+import { isBareName } from "../../lib/condition.lib.ts";
 import { INK_SWATCHES, faceColors } from "../../lib/face.lib.ts";
 import { ColorPicker } from "../FillPicker/ColorPicker.component.tsx";
 import { FillPicker } from "../FillPicker/FillPicker.component.tsx";
@@ -34,7 +35,7 @@ import {
   sliderTargets,
 } from "../../lib/slider.lib.ts";
 import { WIDGET_STATES, type WidgetState } from "../../lib/state.lib.ts";
-import { control, TemplatePreview, ValueInput, VariableInput } from "../Flow/fields.tsx";
+import { control, ExpressionInput, TemplatePreview, ValueInput, VariableInput } from "../Flow/fields.tsx";
 import { FlowLane } from "../Flow/FlowLane.component.tsx";
 import { FlowProvider } from "../Flow/FlowProvider.component.tsx";
 import { summarize, useFlow } from "../Flow/flow.context.ts";
@@ -51,7 +52,7 @@ export interface WidgetInspectorProps {
   onLabelChange: (value: string) => void;
   onCommitLabel: () => void;
   onIcon: (icon: string | null) => void;
-  onBinding: (binding: { stateVariable: string; labelTemplate: string }) => void;
+  onBinding: (binding: { stateVariable: string; labelTemplate: string; known?: readonly string[] }) => void;
   onEdit: WidgetEdit;
   previewState: WidgetState;
   onPreviewState: (state: WidgetState) => void;
@@ -156,7 +157,7 @@ function Header({
   slider,
 }: WidgetInspectorProps & { slider: boolean }) {
   const counts = slotCounts(widget);
-  const lit = Object.values(counts).some((count) => count > 0) || stateVariableOf(widget) !== "";
+  const lit = Object.values(counts).some((count) => count > 0) || litWhileOf(widget) !== "";
   return (
     <div className="flex flex-col gap-4 p-5">
       <div className="flex items-start justify-between">
@@ -410,7 +411,8 @@ const KEY_FILL_MODES = ["default", "solid", "gradient", "image", "transparent"] 
 
 /** One label, one icon, two colours: the key as most people want it. */
 function SimpleLooks({ widget, variables, onBinding, onEdit, onIcon, previewState }: WidgetInspectorProps) {
-  const bound = stateVariableOf(widget);
+  const bound = litWhileOf(widget);
+  const known = variables.map((variable) => variable.name);
   const lights = (widget.states?.looks ?? []).some((look) => look.id === "on");
   const template = widget.props?.labelTemplate ?? "";
   const iconTemplate = widget.props?.iconTemplate ?? "";
@@ -431,17 +433,19 @@ function SimpleLooks({ widget, variables, onBinding, onEdit, onIcon, previewStat
           <LookCard title="Off" active={!bound || previewState !== "on"} label={widget.props?.label} icon={widget.props?.icon} style={keyStyle(widget, false)} />
           <LookCard title="On" lit dot={!widget.props?.hideDot} active={Boolean(bound) && previewState === "on"} label={widget.props?.label} icon={widget.props?.icon} style={keyStyle(widget, true)} />
         </div>
-        <VariableInput
+        <ExpressionInput
           label="Light up while"
           value={bound}
-          kinds={["bool"]}
           variables={variables}
-          onCommit={(stateVariable) => onBinding({ stateVariable, labelTemplate: template })}
+          placeholder="obs.recording"
+          onCommit={(next) => onBinding({ stateVariable: next.replace(/^\{\{\s*|\s*\}\}$/g, "").trim(), labelTemplate: template, known })}
         />
         <p className="m-0 text-[11px] text-faint">
-          {bound
-            ? `Lit while this is true: ${variables.find((variable) => variable.name === bound)?.description || bound}.`
-            : "Pick a true/false value, e.g. obs.recording. A tap that toggles something fills this in itself."}
+          {!bound
+            ? "A true/false value, e.g. obs.recording, or a condition: obs.studio_mode and obs.preview_scene != obs.scene. A tap that toggles something fills this in itself."
+            : isBareName(bound, known)
+              ? `Lit while this is true: ${variables.find((variable) => variable.name === bound)?.description || bound}.`
+              : "Lit while this holds."}
         </p>
       </section>
 
@@ -452,7 +456,7 @@ function SimpleLooks({ widget, variables, onBinding, onEdit, onIcon, previewStat
           value={template}
           variables={variables}
           placeholder="REC {{obs.record_time}}"
-          onCommit={(labelTemplate) => onBinding({ stateVariable: bound, labelTemplate })}
+          onCommit={(labelTemplate) => onBinding({ stateVariable: bound, labelTemplate, known })}
         />
         {template ? <TemplatePreview text={template} /> : <p className="m-0 text-[11px] text-faint">Put a value in double braces and the tablet keeps it current.</p>}
       </section>

@@ -28,6 +28,9 @@ const GLYPHS = {
   search: ["M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z", "M20 20l-3.5-3.5"],
   bolt: ["M13 2L4 14h7l-1 8 9-12h-7z"],
   shield: ["M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"],
+  info: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M12 11v5", "M12 8h.01"],
+  book: ["M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2z", "M4 19V5", "M8 7h8"],
+  sparkle: ["M12 3l1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8z", "M19 3v4", "M17 5h4"],
 } as const;
 
 export type GlyphName = keyof typeof GLYPHS;

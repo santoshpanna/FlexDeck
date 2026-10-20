@@ -57,6 +57,47 @@ class DefinitionTest(unittest.TestCase):
         )
         self.assertEqual(manifest["uses"], ["series"])
 
+    def test_a_sign_in_help_and_guide_reach_only_a_host_that_offers_setup(self):
+        plugin = Plugin(id="signing", name="Signing", version="1.0.0", guide="https://example.com/signing#setup")
+        plugin.setting("client_id", "text", "Client ID", help="From the developer portal")
+        plugin.setting("token", "text", secret=True, internal=True)
+
+        newer = plugin.handle("initialize", {"abi": 4, "hostCapabilities": ["series", "setup"]})["manifest"]
+        self.assertEqual(newer["guide"], "https://example.com/signing#setup")
+        self.assertEqual([(s.get("internal"), s.get("help")) for s in newer["settings"]], [(None, "From the developer portal"), (True, None)])
+        self.assertIn("setup", newer["uses"])
+        older = plugin.handle("initialize", {"abi": 4, "hostCapabilities": ["series"]})["manifest"]
+        self.assertNotIn("guide", older)
+        self.assertTrue(all("internal" not in s and "help" not in s for s in older["settings"]))
+        self.assertNotIn("setup", older["uses"])
+
+        with self.assertRaisesRegex(PluginError, "not an http"):
+            Plugin(id="bad", name="Bad", version="1", guide="javascript:alert(1)")
+
+    def test_a_condition_light_reaches_only_a_host_that_offers_conditions(self):
+        plugin = Plugin(id="studio", name="Studio", version="1.0.0")
+        when = "obs.studio_mode and obs.preview_scene != obs.scene"
+        plugin.action("transition", "Transition", active={"when": when})(lambda args, ctx: None)
+        newer = plugin.handle("initialize", {"abi": 4, "hostCapabilities": ["series", "conditions"]})["manifest"]
+        self.assertEqual(newer["actions"][0]["active"], {"when": when})
+        self.assertEqual(newer["uses"], ["series", "conditions"])
+        older = plugin.handle("initialize", {"abi": 4, "hostCapabilities": ["series", "toggles"]})["manifest"]
+        self.assertNotIn("active", older["actions"][0])
+        self.assertEqual(older["uses"], ["series"])
+
+    def test_a_condition_light_names_its_own_arguments_outside_quotes(self):
+        plugin = Plugin(id="bad", name="Bad", version="1")
+        args = {"a": arg("text", "x")}
+        plugin.action("ok", "", args, active={"when": "`obs.input.{{a}}.muted` or obs.scene == {{a}}"})
+        with self.assertRaisesRegex(PluginError, "not one of its arguments"):
+            plugin.action("t1", "", args, active={"when": "obs.scene == {{b}}"})
+        with self.assertRaisesRegex(PluginError, "inside quotes"):
+            plugin.action("t2", "", args, active={"when": 'obs.scene == "{{a}}"'})
+        with self.assertRaisesRegex(PluginError, "when alone"):
+            plugin.action("t3", "", args, active={"when": "obs.on", "variable": "bad.on"})
+        with self.assertRaisesRegex(PluginError, "when must be"):
+            plugin.action("t4", "", args, active={"when": " "})
+
     def test_a_toggle_light_reaches_only_a_host_that_offers_toggles(self):
         plugin = Plugin(id="lights", name="Lights", version="1.0.0")
         plugin.variable("lights.room.desk.on", "bool")

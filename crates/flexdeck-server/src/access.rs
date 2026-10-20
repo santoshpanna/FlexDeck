@@ -7,7 +7,7 @@
 //! | Channel | Who is there | Credentials it accepts |
 //! |---|---|---|
 //! | [`Channel::Lan`] | anything on the network | tablets, and the admin token |
-//! | [`Channel::Loopback`] | a browser on this very computer | browsers paired locally, and the admin token |
+//! | [`Channel::Loopback`] | a browser or coding agent on this very computer | browsers paired locally, agent tokens (only on `/mcp`), and the admin token |
 //! | [`Channel::Relay`] | a browser anywhere, through the cloud | browsers paired with a code — nothing else |
 //!
 //! The channel is a typed request **extension**, set by the listener or the
@@ -48,6 +48,7 @@ impl Channel {
             (self, kind),
             (Self::Lan, DeviceKind::Tablet)
                 | (Self::Loopback, DeviceKind::BrowserLocal)
+                | (Self::Loopback, DeviceKind::Agent)
                 | (Self::Relay, DeviceKind::BrowserRemote)
         )
     }
@@ -72,12 +73,24 @@ pub enum Authority {
     /// A paired browser — the configurator. See [`Authority::needs_approval`]
     /// for the one way a remote one is held back.
     Browser(Device),
+
+    /// A coding agent on this computer, speaking MCP. Edits the deck and
+    /// automations through `/mcp` and nothing else.
+    Agent(Device),
 }
 
 impl Authority {
     /// May rewrite the layout, automations and plugins.
     pub fn can_configure(&self) -> bool {
         matches!(self, Self::Admin | Self::Browser(_))
+    }
+
+    pub fn can_edit_deck(&self) -> bool {
+        matches!(self, Self::Admin | Self::Browser(_) | Self::Agent(_))
+    }
+
+    pub fn needs_launch_approval(&self) -> bool {
+        self.needs_approval() || matches!(self, Self::Agent(_))
     }
 
     /// Whether running something that executes code on this machine needs a
@@ -93,7 +106,7 @@ impl Authority {
     pub fn requester(&self) -> &str {
         match self {
             Self::Admin => "this computer",
-            Self::Tablet(device) | Self::Browser(device) => &device.name,
+            Self::Tablet(device) | Self::Browser(device) | Self::Agent(device) => &device.name,
         }
     }
 }
@@ -243,6 +256,22 @@ impl Approvals {
 }
 
 #[cfg(test)]
+pub(crate) fn answer_next(
+    agent: std::sync::Arc<crate::agent::Agent>,
+    allow: bool,
+) -> tokio::task::JoinHandle<ApprovalRequest> {
+    tokio::spawn(async move {
+        loop {
+            if let Some(request) = agent.approvals().pending().into_iter().next() {
+                agent.approvals().answer(request.id, allow);
+                return request;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Arc;
@@ -266,6 +295,9 @@ mod tests {
             (Channel::Loopback, Tablet, false),
             (Channel::Loopback, BrowserLocal, true),
             (Channel::Loopback, BrowserRemote, false),
+            (Channel::Loopback, Agent, true),
+            (Channel::Lan, Agent, false),
+            (Channel::Relay, Agent, false),
             (Channel::Relay, Tablet, false),
             (Channel::Relay, BrowserLocal, false),
             (Channel::Relay, BrowserRemote, true),
@@ -286,6 +318,18 @@ mod tests {
         assert!(!Authority::Browser(device(DeviceKind::BrowserLocal)).needs_approval());
         assert!(Authority::Browser(device(DeviceKind::BrowserRemote)).needs_approval());
         assert!(!Authority::Tablet(device(DeviceKind::Tablet)).can_configure());
+        assert!(!Authority::Agent(device(DeviceKind::Agent)).needs_approval());
+    }
+
+    #[test]
+    fn launches_ask_for_a_remote_browser_and_an_agent_only() {
+        assert!(!Authority::Admin.needs_launch_approval());
+        assert!(!Authority::Browser(device(DeviceKind::BrowserLocal)).needs_launch_approval());
+        assert!(Authority::Browser(device(DeviceKind::BrowserRemote)).needs_launch_approval());
+        let agent = Authority::Agent(device(DeviceKind::Agent));
+        assert!(agent.needs_launch_approval());
+        assert!(agent.can_edit_deck());
+        assert!(!agent.can_configure());
     }
 
     #[tokio::test]

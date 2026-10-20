@@ -1,0 +1,338 @@
+[
+  {
+    "name": "empty",
+    "deck": {
+      "schema": 2,
+      "profiles": [
+        {
+          "id": "p",
+          "grid": {
+            "cols": 4,
+            "rows": 3
+          },
+          "pages": [
+            {
+              "id": "home",
+              "widgets": []
+            }
+          ]
+        }
+      ]
+    },
+    "schema": 4
+  },
+  {
+    "name": "plain key",
+    "deck": {
+      "schema": 2,
+      "profiles": [
+        {
+          "id": "p",
+          "grid": {
+            "cols": 4,
+            "rows": 3
+          },
+          "pages": [
+            {
+              "id": "home",
+              "widgets": [
+                {
+                  "id": "k",
+                  "type": "WIDGET_TYPE_BUTTON",
+                  "col": 0,
+                  "row": 0,
+                  "w": 1,
+                  "h": 1,
+                  "props": {
+                    "label": "x"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "schema": 4
+  },
+  {
+    "name": "hidden dot",
+    "deck": {
+      "schema": 2,
+      "profiles": [
+        {
+          "id": "p",
+          "grid": {
+            "cols": 4,
+            "rows": 3
+          },
+          "pages": [
+            {
+              "id": "home",
+              "widgets": [
+                {
+                  "id": "k",
+                  "props": {
+                    "hideDot": true
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "schema": 5
+  },
+  {
+    "name": "no auto light",
+    "deck": {
+      "schema": 2,
+      "profiles": [
+        {
+          "id": "p",
+          "grid": {
+            "cols": 4,
+            "rows": 3
+          },
+          "pages": [
+            {
+              "id": "home",
+              "widgets": [
+                {
+                  "id": "k",
+                  "props": {
+                    "noAutoLight": true
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "schema": 5
+  },
+  {
+    "name": "gesture looks",
+    "deck": {
+      "schema": 2,
+      "profiles": [
+        {
+          "id": "p",
+          "grid": {
+            "cols": 4,
+            "rows": 3
+          },
+          "pages": [
+            {
+              "id": "home",
+              "widgets": [
+                {
+                  "id": "k",
+                  "states": {
+                    "looks": [
+                      {
+                        "id": "a"
+                      }
+                    ],
+                    "gesture": {
+                      "looks": []
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "schema": 5
+  },
+  {
+    "name": "value rule",
+    "deck": {
+      "schema": 2,
+      "profiles": [
+        {
+          "id": "p",
+          "grid": {
+            "cols": 4,
+            "rows": 3
+          },
+          "pages": [
+            {
+              "id": "home",
+              "widgets": [
+                {
+                  "id": "k",
+                  "states": {
+                    "looks": [
+                      {
+                        "id": "a"
+                      }
+                    ],
+                    "rules": [
+                      {
+                        "variable": "v",
+                        "value": "1",
+                        "state": "a"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "schema": 5
+  },
+  {
+    "name": "rule with when",
+    "deck": {
+      "schema": 2,
+      "profiles": [
+        {
+          "id": "p",
+          "grid": {
+            "cols": 4,
+            "rows": 3
+          },
+          "pages": [
+            {
+              "id": "home",
+              "widgets": [
+                {
+                  "id": "k",
+                  "states": {
+                    "looks": [
+                      {
+                        "id": "a"
+                      }
+                    ],
+                    "rules": [
+                      {
+                        "when": "v > 1",
+                        "state": "a"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "schema": 6
+  },
+  {
+    "name": "case with when",
+    "deck": {
+      "schema": 2,
+      "profiles": [
+        {
+          "id": "p",
+          "grid": {
+            "cols": 4,
+            "rows": 3
+          },
+          "pages": [
+            {
+              "id": "home",
+              "widgets": [
+                {
+                  "id": "k",
+                  "states": {
+                    "looks": [
+                      {
+                        "id": "a"
+                      }
+                    ],
+                    "variable": {
+                      "variable": "",
+                      "cases": [
+                        {
+                          "when": "v > 1",
+                          "state": "a"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "schema": 6
+  },
+  {
+    "name": "blank when",
+    "deck": {
+      "schema": 2,
+      "profiles": [
+        {
+          "id": "p",
+          "grid": {
+            "cols": 4,
+            "rows": 3
+          },
+          "pages": [
+            {
+              "id": "home",
+              "widgets": [
+                {
+                  "id": "k",
+                  "states": {
+                    "looks": [
+                      {
+                        "id": "a"
+                      }
+                    ],
+                    "variable": {
+                      "variable": "v",
+                      "cases": [
+                        {
+                          "when": "  ",
+                          "value": "1",
+                          "state": "a"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "schema": 4
+  },
+  {
+    "name": "already newer",
+    "deck": {
+      "schema": 6,
+      "profiles": [
+        {
+          "id": "p",
+          "grid": {
+            "cols": 4,
+            "rows": 3
+          },
+          "pages": [
+            {
+              "id": "home",
+              "widgets": []
+            }
+          ]
+        }
+      ]
+    },
+    "schema": 6
+  }
+]

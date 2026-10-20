@@ -9,6 +9,7 @@ import {
   addWidget,
   findWidget,
   lightActiveKeys,
+  litWhileOf,
   relightActive,
   firstFreeCell,
   limitsFor,
@@ -472,6 +473,51 @@ test("a light cleared by hand is not given back on load, and a new tap that ligh
   assert.equal(findWidget(relit, "a")?.widget.props?.noAutoLight, undefined);
   const bound = setWidgetBinding(cleared, "a", { stateVariable: "obs.recording", labelTemplate: "" });
   assert.equal(findWidget(bound, "a")?.widget.props?.noAutoLight, undefined);
+});
+
+test("lights up while takes a condition, and only a condition raises the deck to schema 6", () => {
+  const config = configWith([button("a", 0, 0)]);
+  const bare = setWidgetBinding(config, "a", { stateVariable: "obs.recording", labelTemplate: "" });
+  assert.equal(bare.schema, 2, "a plain name keeps the deck as it was");
+  assert.deepEqual(findWidget(bare, "a")?.widget.states?.variable?.cases, [{ value: "true", state: "on" }]);
+  const hyphen = setWidgetBinding(config, "a", { stateVariable: "my-plugin.on", labelTemplate: "" });
+  assert.equal(hyphen.schema, 2);
+  assert.equal(stateVariableOf(findWidget(hyphen, "a")!.widget), "my-plugin.on");
+  const listed = setWidgetBinding(config, "a", { stateVariable: "obs.input.Mic Aux.muted", labelTemplate: "" }, ["obs.input.Mic Aux.muted"]);
+  assert.equal(listed.schema, 2, "a name the catalogue lists stays a name, spaces and all");
+
+  const when = "obs.studio_mode and obs.preview_scene != obs.scene";
+  const studio = setWidgetBinding(config, "a", { stateVariable: when, labelTemplate: "" });
+  const widget = findWidget(studio, "a")!.widget;
+  assert.equal(studio.schema, 6);
+  assert.deepEqual(widget.states?.variable, { variable: "", cases: [{ when, state: "on" }], otherwise: "off" });
+  assert.equal(litWhileOf(widget), when);
+  assert.equal(stateVariableOf(widget), "");
+  assert.equal(litWhileOf(findWidget(bare, "a")!.widget), "obs.recording");
+
+  const after = setActiveLight(studio, "a", setScene, { scene: "CS2" });
+  assert.deepEqual(findWidget(after, "a")?.widget.states, widget.states, "a condition written by hand is never taken for the plugin's light");
+  assert.equal(findWidget(setWidgetBinding(studio, "a", { stateVariable: "", labelTemplate: "" }), "a")?.widget.states, undefined);
+});
+
+test("a plugin's condition light is filled from its arguments and raises the deck to schema 6", () => {
+  const preview: ActionDefinition = {
+    plugin: "obs",
+    action: "preview_scene",
+    description: "",
+    arguments: [{ name: "scene", description: "", example: "Scene" }],
+    active: { when: "obs.preview_scene == {{scene}} and obs.scene != {{scene}}" },
+  };
+  const config = setWidgetAction(configWith([button("a", 0, 0)]), "a", { plugin: "obs", action: "preview_scene", args: { scene: 'Say "hi"' } });
+  const lit = lightActiveKeys(config, [preview]);
+  const states = findWidget(lit, "a")?.widget.states;
+  assert.equal(lit.schema, 6);
+  assert.deepEqual(states?.variable, { variable: "", cases: [{ when: 'obs.preview_scene == "Say \\"hi\\"" and obs.scene != "Say \\"hi\\""', state: "on" }], otherwise: "off" });
+  assert.equal(lightActiveKeys(lit, [preview]), lit, "a lit key is left as it is");
+  const moved = setActiveLight(lit, "a", preview, { scene: "PS5" });
+  assert.equal(findWidget(moved, "a")?.widget.states?.variable?.cases?.[0]?.when, 'obs.preview_scene == "PS5" and obs.scene != "PS5"');
+  assert.equal(findWidget(setActiveLight(lit, "a", preview, { scene: " " }), "a")?.widget.states, undefined);
+  assert.equal(setActiveLight(configWith([button("b", 0, 0)]), "b", setScene, { scene: "CS2" }).schema, 2, "a value light keeps the deck as it was");
 });
 
 test("a key's corner dot can be hidden without touching its light", () => {

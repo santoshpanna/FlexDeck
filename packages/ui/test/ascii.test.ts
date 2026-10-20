@@ -64,6 +64,11 @@ test("every field draws the size it was asked for", () => {
   }
 });
 
+test("a held fader lights up, and lets go", () => {
+  const lit = (t: number) => FIELDS.faders(t).glow.replace(/[\s=]/g, "").length;
+  assert.ok(lit(1.5) > lit(5) + 10, `held ${lit(1.5)}, at rest ${lit(5)}`);
+});
+
 test("the rocket sim is stable over many frames", () => {
   let seed = 1;
   const random = () => {

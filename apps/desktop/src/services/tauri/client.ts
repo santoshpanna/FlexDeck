@@ -12,6 +12,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
+  AgentToken,
   BrowserPairing,
   Catalog,
   InstallOutcome,
@@ -56,6 +57,8 @@ const tauriShell = {
 
   /** Remove every paired tablet and browser. */
   revokeAllDevices: () => invoke<void>("revoke_all_devices"),
+
+  createAgentToken: (name: string) => invoke<AgentToken>("create_agent_token", { name }),
 
   appVersion: () => getVersion(),
 
@@ -108,6 +111,9 @@ const tauriShell = {
 
   savePluginSettings: (id: string, values: Record<string, string>) =>
     invoke<void>("plugin_settings", { id, values }),
+
+  /** Forget what the plugin keeps for itself: its sign-in. */
+  signOutPlugin: (id: string) => invoke<void>("plugin_sign_out", { id }),
 
   pluginLog: (id: string) => invoke<string[]>("plugin_log", { id }),
 

@@ -7,7 +7,7 @@ import { AsciiScene, RocketSim } from "@flexdeck/ui/ascii";
 
 import { AppLink } from "../../../../common/components/AppLink/AppLink.component.tsx";
 import { latest } from "../../../../common/release/release.ts";
-import { ASSETS } from "../../../../common/release/release.lib.ts";
+import { ASSETS, REPO_URL } from "../../../../common/release/release.lib.ts";
 import type { LandingCallToAction } from "../../view/landing.view.tsx";
 
 /** Straight to the file once there is a release; before that, the download page explains. */
@@ -69,6 +69,9 @@ export function Launch({ callToAction }: { callToAction: LandingCallToAction }) 
           <Link to="/docs" className="text-faint no-underline hover:text-ink">
             Docs
           </Link>
+          <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className="text-faint no-underline hover:text-ink">
+            GitHub
+          </a>
           <span>AGPL-3.0</span>
           <span>Made for tablets in drawers</span>
         </div>

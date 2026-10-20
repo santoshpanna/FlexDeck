@@ -1,0 +1,816 @@
+[
+  {
+    "name": "variable equals an argument",
+    "active": {
+      "variable": "obs.scene",
+      "equals": "scene"
+    },
+    "widget": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "scene": {
+                  "text": "Live"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "lit": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "scene": {
+                  "text": "Live"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "states": {
+        "looks": [
+          {
+            "id": "off"
+          },
+          {
+            "id": "on"
+          }
+        ],
+        "variable": {
+          "variable": "obs.scene",
+          "cases": [
+            {
+              "value": "Live",
+              "state": "on"
+            }
+          ],
+          "otherwise": "off"
+        }
+      }
+    }
+  },
+  {
+    "name": "placeholder in the variable",
+    "active": {
+      "variable": "media.{{app}}.playing"
+    },
+    "widget": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "app": {
+                  "text": "spotify"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "lit": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "app": {
+                  "text": "spotify"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "states": {
+        "looks": [
+          {
+            "id": "off"
+          },
+          {
+            "id": "on"
+          }
+        ],
+        "variable": {
+          "variable": "media.spotify.playing",
+          "cases": [
+            {
+              "value": "true",
+              "state": "on"
+            }
+          ],
+          "otherwise": "off"
+        }
+      }
+    }
+  },
+  {
+    "name": "doubled plugin prefix",
+    "active": {
+      "variable": "vars.{{name}}",
+      "is": "on"
+    },
+    "widget": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "name": {
+                  "text": "vars.focus"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "lit": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "name": {
+                  "text": "vars.focus"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "states": {
+        "looks": [
+          {
+            "id": "off"
+          },
+          {
+            "id": "on"
+          }
+        ],
+        "variable": {
+          "variable": "vars.focus",
+          "cases": [
+            {
+              "value": "on",
+              "state": "on"
+            }
+          ],
+          "otherwise": "off"
+        }
+      }
+    }
+  },
+  {
+    "name": "blank argument",
+    "active": {
+      "variable": "obs.scene",
+      "equals": "scene"
+    },
+    "widget": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "scene": {
+                  "text": "  "
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "lit": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "scene": {
+                  "text": "  "
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "argument read from a variable",
+    "active": {
+      "variable": "obs.scene",
+      "equals": "scene"
+    },
+    "widget": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "scene": {
+                  "variable": "x.y"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "lit": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "scene": {
+                  "variable": "x.y"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "condition",
+    "active": {
+      "when": "obs.{{input}}.muted == true"
+    },
+    "widget": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "input": {
+                  "text": "Mic"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "lit": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "input": {
+                  "text": "Mic"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "states": {
+        "looks": [
+          {
+            "id": "off"
+          },
+          {
+            "id": "on"
+          }
+        ],
+        "variable": {
+          "variable": "",
+          "cases": [
+            {
+              "when": "obs.Mic.muted == true",
+              "state": "on"
+            }
+          ],
+          "otherwise": "off"
+        }
+      }
+    }
+  },
+  {
+    "name": "condition with a spaced argument",
+    "active": {
+      "when": "{{input}}.muted"
+    },
+    "widget": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "input": {
+                  "text": "Mic 2"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "lit": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "input": {
+                  "text": "Mic 2"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "states": {
+        "looks": [
+          {
+            "id": "off"
+          },
+          {
+            "id": "on"
+          }
+        ],
+        "variable": {
+          "variable": "",
+          "cases": [
+            {
+              "when": "`Mic 2.muted`",
+              "state": "on"
+            }
+          ],
+          "otherwise": "off"
+        }
+      }
+    }
+  },
+  {
+    "name": "condition with a quoted placeholder",
+    "active": {
+      "when": "'{{input}}' == x"
+    },
+    "widget": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "input": {
+                  "text": "Mic"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "lit": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "input": {
+                  "text": "Mic"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "looks set by hand",
+    "active": {
+      "variable": "obs.scene",
+      "equals": "scene"
+    },
+    "widget": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "scene": {
+                  "text": "Live"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "states": {
+        "looks": [
+          {
+            "id": "a",
+            "bgColor": "#f00"
+          }
+        ]
+      }
+    },
+    "lit": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "scene": {
+                  "text": "Live"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "states": {
+        "looks": [
+          {
+            "id": "a",
+            "bgColor": "#f00"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "lit before, action can no longer tell",
+    "active": null,
+    "widget": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "scene": {
+                  "text": "Live"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "states": {
+        "looks": [
+          {
+            "id": "off"
+          },
+          {
+            "id": "on"
+          }
+        ],
+        "variable": {
+          "variable": "obs.scene",
+          "cases": [
+            {
+              "value": "Live",
+              "state": "on"
+            }
+          ],
+          "otherwise": "off"
+        }
+      }
+    },
+    "lit": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {
+                "scene": {
+                  "text": "Live"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "no auto light is dropped when lit",
+    "active": {
+      "variable": "obs.recording"
+    },
+    "widget": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {}
+            }
+          ]
+        }
+      ],
+      "props": {
+        "noAutoLight": true
+      }
+    },
+    "lit": {
+      "id": "k",
+      "type": "WIDGET_TYPE_BUTTON",
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1,
+      "flows": [
+        {
+          "trigger": {
+            "gesture": "GESTURE_SHORT_PRESS"
+          },
+          "blocks": [
+            {
+              "block": "doAction",
+              "plugin": "obs",
+              "action": "act",
+              "args": {}
+            }
+          ]
+        }
+      ],
+      "states": {
+        "looks": [
+          {
+            "id": "off"
+          },
+          {
+            "id": "on"
+          }
+        ],
+        "variable": {
+          "variable": "obs.recording",
+          "cases": [
+            {
+              "value": "true",
+              "state": "on"
+            }
+          ],
+          "otherwise": "off"
+        }
+      }
+    }
+  }
+]

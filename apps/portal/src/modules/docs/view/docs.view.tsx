@@ -11,6 +11,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn, ease, keyVariants } from "@flexdeck/ui";
 
 import { SiteNav } from "../../../common/components/SiteNav/SiteNav.component.tsx";
+import { SiteFooter } from "../../../common/components/SiteFooter/SiteFooter.component.tsx";
 import { REPO_URL } from "../../../common/release/release.lib.ts";
 import { useDocumentTitle } from "../../../hooks/useDocumentTitle/useDocumentTitle.hook.ts";
 import { DocsSearch } from "../components/DocsSearch/DocsSearch.component.tsx";
@@ -104,7 +105,7 @@ export function DocsView(props: Partial<DocsViewProps>) {
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-start gap-14 px-[clamp(16px,4vw,48px)] pt-12 pb-32">
         <aside
           aria-label="Docs sections"
-          className="flex flex-[1_1_240px] flex-col gap-7 min-[900px]:max-w-[260px]"
+          className="flex flex-[1_1_240px] flex-col gap-7 min-[900px]:sticky min-[900px]:top-24 min-[900px]:max-w-[260px]"
         >
           <div className="flex gap-2">
             <div className="min-w-0 flex-1">
@@ -253,6 +254,7 @@ export function DocsView(props: Partial<DocsViewProps>) {
           </nav>
         ) : null}
       </div>
+      <SiteFooter />
     </div>
   );
 }

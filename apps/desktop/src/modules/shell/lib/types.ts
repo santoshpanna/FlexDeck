@@ -32,7 +32,7 @@ export interface TunnelState {
 }
 
 /** What a paired credential is. */
-export type DeviceKind = "tablet" | "browser-local" | "browser-remote";
+export type DeviceKind = "tablet" | "browser-local" | "browser-remote" | "agent";
 
 export interface DeviceRow {
   id: string;
@@ -77,6 +77,9 @@ export interface PluginSetting {
   defaultValue: string | null;
   /** Never sent back once saved; `isSet` says whether there is one. */
   secret: boolean;
+  /** Kept by the plugin (a sign-in): not in the form, cleared by signing out. */
+  internal?: boolean;
+  help?: string | null;
   value: string | null;
   isSet: boolean;
 }
@@ -99,6 +102,8 @@ export interface InstalledPlugin {
   actions?: number;
   description?: string;
   settings?: PluginSetting[];
+  /** Where its setup is explained. */
+  guide?: string | null;
 }
 
 /** What a package says it is, before it is installed. */
@@ -198,12 +203,25 @@ export interface ServerState {
   error: string | null;
 }
 
+export interface McpState {
+  url: string;
+  error: string | null;
+}
+
+export interface AgentToken {
+  token: string;
+  deviceId: string;
+  name: string;
+  url: string;
+}
+
 export interface Status {
   fingerprint: string;
   host: string;
   port: number;
   warnings: string[];
   server: ServerState;
+  mcp: McpState;
   tunnel: TunnelState;
   devices: DeviceRow[];
   plugins: {

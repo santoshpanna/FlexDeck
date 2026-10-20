@@ -572,8 +572,9 @@ impl Shared {
 
     /// Check an `initialize` answer and, if it is acceptable, adopt it.
     fn accept(&self, result: abi::InitializeResult) -> Result<(), HostError> {
-        let manifest = result.manifest;
+        let mut manifest = result.manifest;
         manifest.validate()?;
+        drop_unreadable_conditions(&mut manifest);
         if manifest.abi != self.package.abi {
             return Err(HostError::Mismatch(format!(
                 "the package speaks plugin ABI {} but the plugin answered in {}",
@@ -1300,5 +1301,69 @@ impl Drop for SidecarPlugin {
     /// orphan process.
     fn drop(&mut self) {
         self.shared.shutdown();
+    }
+}
+
+/// Leave out an action light whose `when` the agent cannot read, rather than
+/// let a key carry a condition that never holds. A placeholder reads as a name.
+fn drop_unreadable_conditions(manifest: &mut abi::ManifestDto) {
+    for action in &mut manifest.actions {
+        let Some(when) = action.active.as_ref().and_then(|active| active.when.as_deref()) else {
+            continue;
+        };
+        let mut shape = String::with_capacity(when.len());
+        let mut rest = when;
+        while let Some((before, after)) = rest.split_once("{{") {
+            shape.push_str(before);
+            shape.push_str("_p");
+            rest = after.split_once("}}").map_or("", |(_, tail)| tail);
+        }
+        shape.push_str(rest);
+        if let Err(error) = flexdeck_expr::parse_expression(&shape) {
+            tracing::warn!(
+                "{}.{}: its light's condition does not read, so it is left out: {error}",
+                manifest.id,
+                action.action
+            );
+            action.active = None;
+        }
+    }
+}
+
+#[cfg(test)]
+mod condition_tests {
+    use super::*;
+
+    fn lit(when: &str) -> abi::ActionDto {
+        abi::ActionDto {
+            action: "transition".into(),
+            description: String::new(),
+            arguments: vec![],
+            slider: None,
+            active: Some(abi::ActiveDto {
+                variable: String::new(),
+                equals: None,
+                is: None,
+                when: Some(when.into()),
+            }),
+        }
+    }
+
+    #[test]
+    fn a_light_whose_condition_does_not_read_is_left_out() {
+        let mut manifest: abi::ManifestDto = serde_json::from_value(serde_json::json!({
+            "abi": 4, "id": "obs", "name": "OBS", "version": "1.0.0", "description": "", "author": "",
+            "actions": [], "settings": [], "events": [], "permissions": [], "uses": ["conditions"]
+        }))
+        .unwrap();
+        manifest.actions = vec![
+            lit("obs.studio_mode and obs.preview_scene != obs.scene"),
+            lit("`obs.input.{{input}}.muted` or obs.scene == {{input}}"),
+            lit("obs.scene =="),
+        ];
+        drop_unreadable_conditions(&mut manifest);
+        assert!(manifest.actions[0].active.is_some());
+        assert!(manifest.actions[1].active.is_some(), "placeholders read as names");
+        assert!(manifest.actions[2].active.is_none());
     }
 }

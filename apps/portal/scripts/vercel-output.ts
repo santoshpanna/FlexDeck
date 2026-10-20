@@ -10,7 +10,7 @@
  * `crates/flexdeck-cloud/src/portal.rs`), so `/config` redirects to the
  * editor's root and `/api` to its API. Each public page is prerendered from
  * the server build (`build:ssr`) with its own title, description, canonical URL
- * and structured data, beside `sitemap.xml` and `robots.txt`. Anything else is
+ * and structured data, beside `sitemap.xml`, `robots.txt` and `llms.txt`. Anything else is
  * a real 404, so a stray URL is never indexed as a copy of the home page.
  *
  * Security headers mirror the cloud's (`with_security_headers` in
@@ -31,6 +31,7 @@ import {
   breadcrumbs,
   headTags,
   publicPages,
+  llmsTxt,
   robots,
   sitemap,
   softwareApplication,
@@ -148,6 +149,7 @@ for (const { file, html: page } of prerendered) {
 writeFileSync(join(output, "static", "404.html"), notFound);
 writeFileSync(join(output, "static", "sitemap.xml"), sitemap(site, pages.map((page) => page.path)));
 writeFileSync(join(output, "static", "robots.txt"), robots(site));
+writeFileSync(join(output, "static", "llms.txt"), llmsTxt(site, pages));
 writeFileSync(join(output, "config.json"), `${JSON.stringify(config, null, 2)}\n`);
 console.log(
   `vercel-output: ${output} (editor at ${editor}, ${prerendered.length} prerendered page(s), ${hashes ? hashes.trim().split(" ").length : 0} inline script hash(es))`,

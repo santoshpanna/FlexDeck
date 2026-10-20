@@ -30,7 +30,7 @@ use flexdeck_store::DeviceKind;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::access::Channel;
+use crate::access::{ApprovalError, Channel, APPROVAL_TIMEOUT};
 use crate::agent::Agent;
 use crate::http::ApiError;
 
@@ -182,6 +182,8 @@ async fn hello(State(door): State<Arc<Door>>) -> Json<serde_json::Value> {
     }))
 }
 
+const CONNECT_ACTION: &str = "Let a browser on this computer edit your deck";
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ConnectRequest {
@@ -196,9 +198,9 @@ struct ConnectRequest {
 /// Issue this browser a local credential.
 ///
 /// Only for a page from an allowed origin — the guard has already refused any
-/// other origin, and this refuses a request with none, so a local program that
-/// is not a browser cannot quietly mint one. (Such a program could read the
-/// agent's files anyway; this keeps the door honest about who it is for.)
+/// other origin, and this refuses a request with none. An Origin header can be
+/// forged by a program that is not a browser, so every connect also needs a
+/// yes from the person at the desktop.
 async fn connect(
     State(door): State<Arc<Door>>,
     headers: HeaderMap,
@@ -215,6 +217,16 @@ async fn connect(
         "" => "Browser on this computer",
         trimmed => trimmed,
     };
+    door.agent
+        .approvals()
+        .ask(CONNECT_ACTION, name, "Browser on this computer", APPROVAL_TIMEOUT)
+        .await
+        .map_err(|error| match error {
+            ApprovalError::NoApprover => ApiError::forbidden(
+                "open the FlexDeck app on this computer to let this browser in, or sign in with the admin token",
+            ),
+            other => ApiError::forbidden(other.to_string()),
+        })?;
     let (token, device) = door
         .agent
         .issue_credential_for(name, DeviceKind::BrowserLocal, Some(&request.client_id))?;
@@ -309,9 +321,68 @@ mod tests {
             .all(|origin| origin.contains("5173")));
     }
 
+    fn connect_body(client: &str) -> Body {
+        Body::from(json!({ "name": "Edge", "clientId": client }).to_string())
+    }
+
+    async fn connect_as(app: &Router, origin: Option<&str>, client: &str) -> (StatusCode, Value) {
+        let mut request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/local/connect")
+            .header("host", HOST)
+            .header("content-type", "application/json");
+        if let Some(origin) = origin {
+            request = request.header("origin", origin);
+        }
+        let response = app
+            .clone()
+            .oneshot(request.body(connect_body(client)).expect("builds"))
+            .await
+            .expect("responds");
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.expect("reads");
+        (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    }
+
+    #[tokio::test]
+    async fn a_new_browser_is_refused_when_there_is_no_window_to_ask_in() {
+        let (_, app) = door();
+        let (status, body) = connect_as(&app, Some(PORTAL), "client-1").await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert!(body["error"].as_str().unwrap().contains("admin token"));
+    }
+
+    #[tokio::test]
+    async fn every_connect_waits_for_the_desktop_even_with_a_known_client_id() {
+        let (agent, app) = door();
+        agent.approvals().enable();
+        let answered = crate::access::answer_next(Arc::clone(&agent), true);
+        let (status, body) = connect_as(&app, Some(PORTAL), "client-1").await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(answered.await.expect("answers").detail, "Edge");
+
+        let answered = crate::access::answer_next(Arc::clone(&agent), false);
+        let (status, _) = connect_as(&app, Some(PORTAL), "client-1").await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "a client id is not a secret");
+        answered.await.expect("answers");
+    }
+
+    #[tokio::test]
+    async fn a_forged_origin_from_a_program_is_stopped_at_the_desktop() {
+        let (agent, app) = door();
+        agent.approvals().enable();
+        let answered = crate::access::answer_next(Arc::clone(&agent), false);
+        let (status, _) = connect_as(&app, Some(PORTAL), "").await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        answered.await.expect("answers");
+        assert!(agent.devices().unwrap().iter().all(|device| device.kind != DeviceKind::BrowserLocal));
+    }
+
     #[tokio::test]
     async fn the_portal_on_this_computer_connects_with_no_sign_in() {
-        let (_, app) = door();
+        let (agent, app) = door();
+        agent.approvals().enable();
+        let _answered = crate::access::answer_next(Arc::clone(&agent), true);
 
         let (status, headers, hello) =
             send(&app, "GET", "/api/local/hello", HOST, Some(PORTAL), None).await;

@@ -162,7 +162,7 @@ impl SourceDef {
     }
 
     /// Whether the scheduler would run this source's program.
-    fn runs_program(&self) -> bool {
+    pub(crate) fn runs_program(&self) -> bool {
         self.enabled && self.kind == SourceKind::Command
     }
 }

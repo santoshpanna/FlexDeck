@@ -37,6 +37,7 @@ import {
   type ArgumentDto,
   Capability,
   type FeedDto,
+  MAX_CONDITION_LEN,
   MAX_SERIES_POINTS,
   type PresetDto,
   type ActiveDto,
@@ -128,8 +129,13 @@ export interface ActionSpec<Args extends string = string> {
    * `discord.voice.mute` is true. `variable` may hold `{{argument}}`
    * placeholders: `"discord.user.{{user}}.muted"`. Only `equals` with a plain
    * variable reaches an agent that predates these; the rest is left out there.
+   *
+   * Or a condition over any live values, `when`: the Transition key is lit
+   * while `"obs.studio_mode and obs.preview_scene != obs.scene"`. A
+   * `{{argument}}` placeholder may be part of a name or a whole value, never
+   * inside quotes. Only an agent offering `conditions` reads it.
    */
-  active?: { variable: string; equals: Args } | { variable: string; is?: string };
+  active?: { variable: string; equals: Args } | { variable: string; is?: string } | { when: string };
   /**
    * Refuse a value before anything runs: return a reason, or nothing if it is
    * fine. Called when an automation is saved and before every press.
@@ -149,6 +155,10 @@ export interface SettingSpec {
   choices?: string[];
   /** A password or token: stored, given to the plugin, never shown again. */
   secret?: boolean;
+  /** Kept by the plugin itself with `ctx.storeSettings` (a sign-in): hidden from the form, cleared by signing out. */
+  internal?: boolean;
+  /** More than the description says, shown behind an info button. */
+  help?: string;
 }
 
 export interface VariableSpec {
@@ -203,6 +213,8 @@ export interface PluginDefinition {
   author?: string;
   permissions?: Permission[];
   settings?: Record<string, SettingSpec>;
+  /** An http(s) page explaining how to set it up, linked from its settings. */
+  guide?: string;
   /** Variables known up front, by full name (`<id>.<something>`). */
   variables?: Record<string, VariableSpec>;
   events?: Record<string, EventSpec>;
@@ -324,7 +336,15 @@ function validate(definition: PluginDefinition): void {
       check(argument in (action.arguments ?? {}), `${name}.slider: '${argument}' is not one of its arguments`);
       check(min < max && step > 0, `${name}.slider: needs min < max and step > 0`);
     }
-    if (action.active) {
+    if (action.active && "when" in action.active) {
+      const { when } = action.active;
+      check(Object.keys(action.active).length === 1, `${name}.active: takes when alone`);
+      check(when.trim() !== "" && when.length <= MAX_CONDITION_LEN, `${name}.active: when must be 1 to ${MAX_CONDITION_LEN} characters`);
+      check(!placeholderInQuotes(when), `${name}.active: a placeholder inside quotes in when; put it outside, as a whole value`);
+      for (const argument of placeholders(when)) {
+        check(argument in (action.arguments ?? {}), `${name}.active: '${argument}' is not one of its arguments`);
+      }
+    } else if (action.active) {
       const { variable } = action.active;
       const named = [...placeholders(variable), ...("equals" in action.active ? [action.active.equals] : [])];
       check(!("equals" in action.active && "is" in action.active), `${name}.active: takes equals or is, not both`);
@@ -334,18 +354,45 @@ function validate(definition: PluginDefinition): void {
       check(variable.startsWith(prefix), `${name}.active: variable '${variable}' must start with '${prefix}'`);
     }
   }
+  if (definition.guide !== undefined) {
+    check(/^https?:\/\//.test(definition.guide), `guide '${definition.guide}' is not an http(s) address`);
+  }
 }
 
 function placeholders(template: string): string[] {
   return [...template.matchAll(/\{\{\s*([^{}\s]+)\s*\}\}/g)].map((match) => match[1]!);
 }
 
-/** The wire form of `active`, and whether only an agent offering `toggles` reads it. */
-function activeDto(active: NonNullable<ActionSpec["active"]>): { dto: ActiveDto; toggles: boolean } {
-  if ("equals" in active) {
-    return { dto: { variable: active.variable, equals: active.equals }, toggles: placeholders(active.variable).length > 0 };
+function placeholderInQuotes(when: string): boolean {
+  let quote: string | null = null;
+  for (let i = 0; i < when.length; i++) {
+    const c = when[i]!;
+    if (quote === "`") {
+      if (c === "`") quote = null;
+    } else if (quote) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = null;
+      else if (c === "{" && when[i + 1] === "{") return true;
+    } else if (c === '"' || c === "'" || c === "`") {
+      quote = c;
+    }
   }
-  return { dto: active.is === undefined ? { variable: active.variable } : { variable: active.variable, is: active.is }, toggles: true };
+  return false;
+}
+
+/** The wire form of `active`, and the capability an agent must offer to read it. */
+function activeDto(active: NonNullable<ActionSpec["active"]>): { dto: ActiveDto; needs: Capability | null } {
+  if ("when" in active) return { dto: { when: active.when }, needs: Capability.conditions };
+  if ("equals" in active) {
+    return {
+      dto: { variable: active.variable, equals: active.equals },
+      needs: placeholders(active.variable).length > 0 ? Capability.toggles : null,
+    };
+  }
+  return {
+    dto: active.is === undefined ? { variable: active.variable } : { variable: active.variable, is: active.is },
+    needs: Capability.toggles,
+  };
 }
 
 function argumentDtos(args: Record<string, ArgumentSpec> | undefined): ArgumentDto[] {
@@ -364,7 +411,7 @@ function manifestOf(
   abi: number = ABI_VERSION,
   offered: readonly string[] = Object.values(Capability),
 ): ManifestDto {
-  let toggles = false;
+  const lights = new Set<Capability>();
   const actions: ActionDto[] = Object.entries(definition.actions).map(([action, spec]) => {
     const dto: ActionDto = {
       action,
@@ -388,11 +435,13 @@ function manifestOf(
     }
     if (abi >= 4 && spec.active) {
       const active = activeDto(spec.active);
-      // An agent that does not offer `toggles` refuses the whole manifest over
-      // one it cannot read, so that key goes unlit there instead.
-      if (!active.toggles || offered.includes(Capability.toggles)) {
+      // An agent that does not offer `toggles` or `conditions` refuses the
+      // whole manifest over one it cannot read, so that key goes unlit there.
+      if (!active.needs || offered.includes(active.needs)) {
         dto.active = active.dto;
-        toggles ||= active.toggles;
+        if (active.needs) lights.add(active.needs);
+      } else {
+        console.error(`plugin: this agent has no ${active.needs}, so ${action} is never lit`);
       }
     }
     return dto;
@@ -451,7 +500,20 @@ function manifestOf(
         }),
       );
     }
-    if (toggles) uses.push(Capability.toggles);
+    if (lights.has(Capability.toggles)) uses.push(Capability.toggles);
+    if (lights.has(Capability.conditions)) uses.push(Capability.conditions);
+    // An agent that does not offer `setup` refuses these fields, so it gets
+    // the plain form instead.
+    if (offered.includes(Capability.setup)) {
+      const specs = Object.values(definition.settings ?? {});
+      settings.forEach((dto, index) => {
+        const spec = specs[index]!;
+        if (spec.internal) dto.internal = true;
+        if (spec.help) dto.help = spec.help;
+      });
+      if (definition.guide) manifest.guide = definition.guide;
+      if (manifest.guide || settings.some((dto) => dto.internal || dto.help)) uses.push(Capability.setup);
+    }
     manifest.uses = uses;
   }
   return manifest;
