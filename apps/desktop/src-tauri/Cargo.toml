@@ -15,7 +15,7 @@ flexdeck-agent = { path = "../../agent" }
 flexdeck-pairing = { path = "../../../crates/flexdeck-pairing" }
 flexdeck-server = { path = "../../../crates/flexdeck-server" }
 flexdeck-store = { path = "../../../crates/flexdeck-store" }
-base64 = "0.22"
+base64 = "0.23"
 open = "5"
 serde = { workspace = true }
 serde_json = { workspace = true }
