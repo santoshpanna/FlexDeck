@@ -18,7 +18,7 @@ dependencies {
   // `api`, not `implementation`: this module's public surface exposes JsonObject,
   // so a consumer that touches a DeckSession needs the library on its compile
   // classpath. Hiding it would only move the failure to whoever tried.
-  api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+  api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
 
   testImplementation(kotlin("test"))
 }
