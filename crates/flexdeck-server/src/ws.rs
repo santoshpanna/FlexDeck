@@ -193,7 +193,13 @@ fn prepare_catch_up(
     agent: &Agent,
     from: Option<u64>,
 ) -> Option<(Option<ServerMessage>, Option<u64>)> {
-    catch_up_message(agent.catch_up(from).ok()?).ok()
+    let outcome = agent
+        .catch_up(from)
+        .map_err(|error| tracing::warn!(%error, ?from, "catch-up failed"))
+        .ok()?;
+    catch_up_message(outcome)
+        .map_err(|error| tracing::warn!(%error, ?from, "catch-up message failed"))
+        .ok()
 }
 
 /// Decode a client frame, ignoring anything unrecognisable.
@@ -553,6 +559,8 @@ async fn connection(agent: Arc<Agent>, mut socket: WebSocket) {
             }
         }
     }
+
+    tracing::info!(device = %device.name, rev = ?client_rev, "tablet socket closed");
 
     // Whatever this tablet was still holding is let go, as if the finger had
     // lifted. Done after the loop, so every way out of it is covered.

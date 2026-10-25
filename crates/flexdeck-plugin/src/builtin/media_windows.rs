@@ -69,6 +69,25 @@ fn seconds(ticks: i64) -> f64 {
     ticks as f64 / 10_000_000.0
 }
 
+/// A timeline's `(position, duration)` in seconds, `now` in seconds since 1601.
+fn timeline_seconds(start: i64, end: i64, at: i64, updated: i64, playing: bool, now: f64) -> (f64, f64) {
+    // Browsers sometimes report an empty timeline; there is nothing to count from.
+    if end <= start {
+        return (0.0, 0.0);
+    }
+    let duration = seconds(end - start);
+    // Players report the position only now and then; while playing
+    // it has moved on since, by however long ago that was.
+    let mut position = seconds(at - start);
+    if playing && updated > 0 {
+        let since = now - seconds(updated);
+        if (0.0..3600.0).contains(&since) {
+            position += since;
+        }
+    }
+    (position.clamp(0.0, duration), duration)
+}
+
 impl MediaSessions for WindowsSessions {
     fn sessions(&mut self) -> Result<Vec<String>, PluginError> {
         let sessions = manager()?
@@ -103,34 +122,22 @@ impl MediaSessions for WindowsSessions {
             }
             .to_string()
         });
-        let (mut position, duration) = match session.GetTimelineProperties() {
+        let (position, duration) = match session.GetTimelineProperties() {
             Ok(timeline) => {
                 let start = timeline.StartTime().map(|time| time.Duration).unwrap_or(0);
                 let end = timeline.EndTime().map(|time| time.Duration).unwrap_or(0);
                 let at = timeline.Position().map(|time| time.Duration).unwrap_or(0);
                 let updated = timeline.LastUpdatedTime().map(|time| time.UniversalTime).unwrap_or(0);
-                // Players report the position only now and then; while playing
-                // it has moved on since, by however long ago that was.
-                let mut position = seconds(at - start);
-                if playing && updated > 0 {
-                    // DateTime ticks count from 1601; the Unix epoch is 11644473600 s later.
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|elapsed| elapsed.as_secs_f64())
-                        .unwrap_or(0.0)
-                        + 11_644_473_600.0;
-                    let since = now - seconds(updated);
-                    if (0.0..3600.0).contains(&since) {
-                        position += since;
-                    }
-                }
-                (position, seconds(end - start).max(0.0))
+                // DateTime ticks count from 1601; the Unix epoch is 11644473600 s later.
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|elapsed| elapsed.as_secs_f64())
+                    .unwrap_or(0.0)
+                    + 11_644_473_600.0;
+                timeline_seconds(start, end, at, updated, playing, now)
             }
             Err(_) => (0.0, 0.0),
         };
-        if duration > 0.0 {
-            position = position.clamp(0.0, duration);
-        }
         Ok(Some(NowPlaying {
             app: id,
             title: text(properties.Title()),
@@ -228,6 +235,22 @@ impl MediaSessions for WindowsSessions {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const TICKS: i64 = 10_000_000;
+
+    #[test]
+    fn an_empty_timeline_does_not_count_up() {
+        let updated = 1_000 * TICKS;
+        assert_eq!(timeline_seconds(0, 0, 0, updated, true, 1_019.0), (0.0, 0.0));
+    }
+
+    #[test]
+    fn a_playing_timeline_moves_on_since_its_last_update() {
+        let updated = 1_000 * TICKS;
+        assert_eq!(timeline_seconds(0, 300 * TICKS, 100 * TICKS, updated, true, 1_010.0), (110.0, 300.0));
+        assert_eq!(timeline_seconds(0, 300 * TICKS, 100 * TICKS, updated, false, 1_010.0), (100.0, 300.0));
+        assert_eq!(timeline_seconds(0, 300 * TICKS, 295 * TICKS, updated, true, 1_010.0), (300.0, 300.0), "clamped at the end");
+    }
 
     #[test]
     #[ignore = "reads the real players; run by hand on Windows"]

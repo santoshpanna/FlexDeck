@@ -95,14 +95,28 @@ pub fn catch_up(store: &ConfigStore, from_rev: Option<u64>) -> Result<SyncOutcom
     // exists. A client that is ahead (the agent undid something) or that names a
     // revision which has been discarded cannot be patched from. Sending it a
     // patch anyway would corrupt it silently, so it gets the whole document.
-    if from < current && store.snapshot_at(from)?.is_some() {
-        return Ok(SyncOutcome::Patch {
-            rev: current,
-            patch: store.diff(from, current)?,
-        });
+    if from < current {
+        if let Some(before) = store
+            .snapshot_at(from)?
+            .and_then(|json| wire_form(&json).ok())
+        {
+            let after = store
+                .snapshot_at(current)?
+                .ok_or(SyncError::NoConfiguration)?;
+            let patch = json_patch::diff(&before, &wire_form(&after)?);
+            return Ok(SyncOutcome::Patch {
+                rev: current,
+                patch: serde_json::to_string(&patch)?,
+            });
+        }
     }
 
     snapshot(store, current)
+}
+
+fn wire_form(json: &str) -> Result<Value, SyncError> {
+    let typed: flexdeck_protocol::Config = serde_json::from_str(json)?;
+    Ok(serde_json::to_value(&typed)?)
 }
 
 fn snapshot(store: &ConfigStore, rev: u64) -> Result<SyncOutcome, SyncError> {
@@ -363,6 +377,37 @@ mod tests {
         let carried = welcome.config.expect("a welcome carries a config");
         assert_eq!(carried.rev, 3, "the nested config is a real document");
         assert_eq!(carried.profiles.len(), 2);
+    }
+
+    fn widget_at(rev: u64, col: u32) -> String {
+        format!(
+            r#"{{"schema":5,"rev":{rev},"profiles":[{{"id":"default","name":"Default","grid":{{"cols":4,"rows":2}},"pages":[{{"id":"p1","name":"One","widgets":[{{"id":"w1","type":"WIDGET_TYPE_BUTTON","col":{col},"row":0,"w":1,"h":1}}]}}]}}]}}"#
+        )
+    }
+
+    fn welcomed_config(store: &ConfigStore, rev: u64) -> Value {
+        let json = store.snapshot_at(rev).expect("reads").expect("exists");
+        let wire = encode(&welcome_message(rev, "", &json).expect("builds")).expect("encodes");
+        let welcome: Value = serde_json::from_str(&wire).expect("parses");
+        welcome["welcome"]["config"].clone()
+    }
+
+    #[test]
+    fn a_patch_applies_to_the_document_a_client_was_welcomed_with() {
+        let store = store_with(&[&widget_at(1, 0), &widget_at(2, 1), &widget_at(3, 0)]);
+
+        for from in 1..3 {
+            let SyncOutcome::Patch { patch, .. } = catch_up(&store, Some(from)).expect("decides")
+            else {
+                panic!("expected a patch");
+            };
+            let held = welcomed_config(&store, from).to_string();
+            let rebuilt: Value = serde_json::from_str(
+                &apply_patch(&held, &patch).expect("applies to the welcomed document"),
+            )
+            .expect("parses");
+            assert_eq!(rebuilt, welcomed_config(&store, 3));
+        }
     }
 
     #[test]

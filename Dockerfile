@@ -10,7 +10,7 @@
 
 # The editor alone, at `/`: the public pages are the static site's job.
 # `SITE_URL` is where the editor's wordmark leads back to.
-FROM node:24-bookworm-slim AS portal
+FROM node:24.22.1-bookworm-slim AS portal
 ARG SITE_URL=https://flex-deck.com
 ENV VITE_EDITOR_ONLY=true VITE_SITE_URL=$SITE_URL
 WORKDIR /src
