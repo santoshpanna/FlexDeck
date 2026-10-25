@@ -2,6 +2,27 @@
   "next": [],
   "releases": [
     {
+      "version": "v0.1.0-rc.13",
+      "platforms": [
+        "android"
+      ],
+      "hash": "4642e37a3992b1970d11fefc27636bcd38e27a2d",
+      "date": "2026-10-25",
+      "title": "Keep scrolling titles moving on the tablet",
+      "blurb": "",
+      "groups": [
+        {
+          "name": "Fixed",
+          "items": [
+            {
+              "area": "ANDROID",
+              "text": "Long titles on a key scroll smoothly again instead of standing still."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.1.0-rc.12",
       "platforms": [
         "desktop",

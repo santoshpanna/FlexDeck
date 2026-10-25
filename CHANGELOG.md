@@ -2,6 +2,14 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
+## v0.1.0-rc.13 — 2026-10-25
+
+**Keep scrolling titles moving on the tablet**
+
+### Fixed
+
+- **android** Long titles on a key scroll smoothly again instead of standing still.
+
 ## v0.1.0-rc.12 — 2026-10-25
 
 **Fix Windows media progress and tablet resync, pin patched Node**
