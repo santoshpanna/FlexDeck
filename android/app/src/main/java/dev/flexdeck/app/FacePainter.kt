@@ -485,7 +485,7 @@ internal class FacePainter(
         text.textAlign = Paint.Align.LEFT
         val gap = box.width() * 0.35f
         val period = wide + gap
-        val offset = ((nowMs * MARQUEE_PX_PER_S * unit / 1000f) % period)
+        val offset = dev.flexdeck.client.Clock.scrolled(nowMs, (MARQUEE_PX_PER_S * unit).toDouble(), period.toDouble()).toFloat()
         val metrics = text.fontMetrics
         val baseline = box.centerY() - (metrics.descent + metrics.ascent) / 2f
         canvas.save()

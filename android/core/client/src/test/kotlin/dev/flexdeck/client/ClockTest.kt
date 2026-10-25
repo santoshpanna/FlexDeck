@@ -21,6 +21,15 @@ class ClockTest {
     }
 
     @Test
+    fun `a marquee keeps moving at today's time`() {
+        val at = Clock.scrolled(now, 36.0, 500.0)
+        assertEquals(1.2, Clock.scrolled(now + 33, 36.0, 500.0) - at, 0.05)
+        assertEquals(360.0, Clock.scrolled(10_000, 36.0, 500.0), 1e-9)
+        assertEquals(220.0, Clock.scrolled(20_000, 36.0, 500.0), 1e-9, "comes round again")
+        assertEquals(0.0, Clock.scrolled(now, 36.0, 0.0))
+    }
+
+    @Test
     fun `a clock reads the time in its zone`() {
         assertEquals("21:05", Clock.text(now, "", utc, seconds = false, Locale.US))
         assertEquals("21:05:09", Clock.text(now, "", utc, seconds = true, Locale.US))

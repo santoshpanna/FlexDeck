@@ -30,6 +30,14 @@ object Clock {
     fun timerLeft(left: Double?, running: Boolean, sentAtMs: Long, nowMs: Long): Double? =
         left?.let { if (running) kotlin.math.max(0.0, it - (nowMs - sentAtMs) / 1000.0) else it }
 
+    /**
+     * How far a marquee moving at `pxPerS` has scrolled by `nowMs`, wrapped to
+     * `period`. In doubles: a float holds today's milliseconds only to the
+     * nearest two minutes, and the words would stand still.
+     */
+    fun scrolled(nowMs: Long, pxPerS: Double, period: Double): Double =
+        if (period > 0.0) (nowMs * pxPerS / 1000.0) % period else 0.0
+
     /** `%H:%M` → `HH:mm`. Literal text is quoted; an unknown `%x` is kept as text. */
     fun pattern(strftime: String): String {
         val out = StringBuilder()
