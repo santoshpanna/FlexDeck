@@ -1404,7 +1404,7 @@ name = "flexdeck-cloud"
 version = "0.0.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "flexdeck-pairing",
  "flexdeck-protocol",
  "flexdeck-tunnel",
@@ -1425,7 +1425,7 @@ dependencies = [
 name = "flexdeck-desktop"
 version = "0.0.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "flexdeck-actions",
  "flexdeck-agent",
  "flexdeck-pairing",
@@ -1507,7 +1507,7 @@ dependencies = [
 name = "flexdeck-plugin-host"
 version = "0.0.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "flexdeck-actions",
  "flexdeck-expr",
  "flexdeck-plugin",
@@ -1526,7 +1526,7 @@ dependencies = [
 name = "flexdeck-plugin-sdk"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "flexdeck-plugin-abi",
  "serde",
  "serde_json",
@@ -1553,7 +1553,7 @@ version = "0.0.0"
 dependencies = [
  "axum",
  "axum-server",
- "base64 0.22.1",
+ "base64 0.23.1",
  "chrono",
  "flexdeck-actions",
  "flexdeck-automation",
