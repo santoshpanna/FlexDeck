@@ -2,6 +2,19 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
+## v0.1.0-rc.12 — 2026-10-25
+
+**Fix Windows media progress and tablet resync, pin patched Node**
+
+### Added
+
+- **desktop** The log records when a tablet's catch-up fails and when a tablet disconnects.
+
+### Fixed
+
+- **desktop** The Windows now-playing position no longer counts up for players that report no timeline, and keeps moving while a track plays.
+- **desktop** A tablet that reconnects after a change gets an update that applies cleanly to the config it already has.
+
 ## v0.1.0-rc.11 — 2026-10-21
 
 **Add coding-agent deck editing, deck files, and SDK conditions**

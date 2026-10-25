@@ -2,6 +2,41 @@
   "next": [],
   "releases": [
     {
+      "version": "v0.1.0-rc.12",
+      "platforms": [
+        "desktop",
+        "server"
+      ],
+      "hash": "643763c33d7ace9853cb4f4f1b48b26e4d3383a7",
+      "date": "2026-10-25",
+      "title": "Fix Windows media progress and tablet resync, pin patched Node",
+      "blurb": "",
+      "groups": [
+        {
+          "name": "Added",
+          "items": [
+            {
+              "area": "DESKTOP",
+              "text": "The log records when a tablet's catch-up fails and when a tablet disconnects."
+            }
+          ]
+        },
+        {
+          "name": "Fixed",
+          "items": [
+            {
+              "area": "DESKTOP",
+              "text": "The Windows now-playing position no longer counts up for players that report no timeline, and keeps moving while a track plays."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "A tablet that reconnects after a change gets an update that applies cleanly to the config it already has."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.1.0-rc.11",
       "platforms": [
         "desktop",
