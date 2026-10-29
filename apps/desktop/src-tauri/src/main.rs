@@ -41,6 +41,7 @@ const RETRY_EVERY: Duration = Duration::from_secs(5);
 
 fn main() {
     attach_parent_console();
+    report_startup_panics();
     // `flexdeck verify-plugin …`: the plugin SDKs ask the installed app whether
     // a plugin will work in it. No window for that.
     let raw: Vec<String> = std::env::args().skip(1).collect();
@@ -54,6 +55,7 @@ fn main() {
         Ok(options) => options,
         Err(message) => {
             eprintln!("{message}");
+            show_error(&message);
             std::process::exit(2);
         }
     };
@@ -319,6 +321,11 @@ fn options() -> Result<Options, String> {
     let mut options = Options::default();
     if DEV_BUILD {
         options.port = Some(DEV_PORT);
+    } else if let Some(dir) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(PathBuf::from))
+    {
+        options.data_dir = dir.join(&options.data_dir);
     }
     let mut args = std::env::args().skip(1);
 
@@ -429,3 +436,44 @@ fn attach_parent_console() {
 
 #[cfg(not(all(windows, not(debug_assertions))))]
 fn attach_parent_console() {}
+
+/// Tauri panics when `setup` fails, and a GUI process started at sign-in has
+/// no console to print that on, so it would vanish without a word. A panic on
+/// the main thread is that kind of failure: it is logged when the log is open
+/// and always put in front of the person. Worker threads keep the default.
+fn report_startup_panics() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        default(info);
+        if std::thread::current().name() != Some("main") {
+            return;
+        }
+        let reason = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|reason| (*reason).to_string())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "an unknown error".to_string());
+        tracing::error!("the window could not start: {reason}");
+        show_error(&format!("flexdeck could not start.\n\n{reason}"));
+    }));
+}
+
+#[cfg(all(windows, not(debug_assertions)))]
+fn show_error(message: &str) {
+    const MB_ICONERROR: u32 = 0x10;
+    #[link(name = "user32")]
+    extern "system" {
+        fn MessageBoxW(window: isize, text: *const u16, caption: *const u16, kind: u32) -> i32;
+    }
+    let wide = |text: &str| text.encode_utf16().chain(Some(0)).collect::<Vec<u16>>();
+    let (text, caption) = (wide(message), wide(APP_NAME));
+    // SAFETY: both strings are NUL-terminated UTF-16 that outlive the call, and
+    // a null owner window is allowed.
+    unsafe {
+        MessageBoxW(0, text.as_ptr(), caption.as_ptr(), MB_ICONERROR);
+    }
+}
+
+#[cfg(not(all(windows, not(debug_assertions))))]
+fn show_error(_message: &str) {}
