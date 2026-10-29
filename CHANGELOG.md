@@ -2,6 +2,15 @@
 
 Generated from commit history by `pnpm changelog`. Do not edit by hand.
 
+## v0.1.0-rc.14 — 2026-10-29
+
+**Start flexdeck with Windows again**
+
+### Fixed
+
+- **desktop** Start with this computer works again; flexdeck now opens at sign-in instead of quietly failing.
+- **desktop** When flexdeck can't start, it shows a message saying why instead of closing without a word.
+
 ## v0.1.0-rc.13 — 2026-10-25
 
 **Keep scrolling titles moving on the tablet**

@@ -2,6 +2,31 @@
   "next": [],
   "releases": [
     {
+      "version": "v0.1.0-rc.14",
+      "platforms": [
+        "desktop"
+      ],
+      "hash": "6da722917dab32a5692cd36120742a3ecab56dfb",
+      "date": "2026-10-29",
+      "title": "Start flexdeck with Windows again",
+      "blurb": "",
+      "groups": [
+        {
+          "name": "Fixed",
+          "items": [
+            {
+              "area": "DESKTOP",
+              "text": "Start with this computer works again; flexdeck now opens at sign-in instead of quietly failing."
+            },
+            {
+              "area": "DESKTOP",
+              "text": "When flexdeck can't start, it shows a message saying why instead of closing without a word."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.1.0-rc.13",
       "platforms": [
         "android"
